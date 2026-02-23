@@ -1,0 +1,1337 @@
+{
+    "version": "0.1.20260223",
+    "status_code": 20000,
+    "status_message": "Ok.",
+    "time": "0.0934 sec.",
+    "cost": 0.0109,
+    "tasks_count": 1,
+    "tasks_error": 0,
+    "tasks": [
+        {
+            "id": "02232335-1327-0387-0000-4de6316e997c",
+            "status_code": 20000,
+            "status_message": "Ok.",
+            "time": "0.0407 sec.",
+            "cost": 0.0109,
+            "result_count": 1,
+            "path": [
+                "v3",
+                "dataforseo_labs",
+                "google",
+                "related_keywords",
+                "live"
+            ],
+            "data": {
+                "api": "dataforseo_labs",
+                "function": "related_keywords",
+                "se_type": "google",
+                "keyword": "seo agency boise",
+                "location_code": 2840,
+                "language_code": "en",
+                "limit": 1000
+            },
+            "result": [
+                {
+                    "se_type": "google",
+                    "seed_keyword": "seo agency boise",
+                    "seed_keyword_data": null,
+                    "location_code": 2840,
+                    "language_code": "en",
+                    "total_count": 9,
+                    "items_count": 9,
+                    "items": [
+                        {
+                            "se_type": "google",
+                            "keyword_data": {
+                                "se_type": "google",
+                                "keyword": "seo agency los angeles",
+                                "location_code": 2840,
+                                "language_code": "en",
+                                "keyword_info": {
+                                    "se_type": "google",
+                                    "last_updated_time": "2026-01-29 17:13:52 +00:00",
+                                    "competition": 0.06,
+                                    "competition_level": "LOW",
+                                    "cpc": 35.41,
+                                    "search_volume": 4400,
+                                    "low_top_of_page_bid": 6.79,
+                                    "high_top_of_page_bid": 35.6,
+                                    "categories": [
+                                        10004,
+                                        10007,
+                                        10276,
+                                        11088,
+                                        11493,
+                                        12376,
+                                        13152,
+                                        13316,
+                                        13418
+                                    ],
+                                    "monthly_searches": [
+                                        {
+                                            "year": 2025,
+                                            "month": 12,
+                                            "search_volume": 1900
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 11,
+                                            "search_volume": 1600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 10,
+                                            "search_volume": 1600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 9,
+                                            "search_volume": 4400
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 8,
+                                            "search_volume": 3600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 7,
+                                            "search_volume": 3600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 6,
+                                            "search_volume": 3600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 5,
+                                            "search_volume": 6600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 4,
+                                            "search_volume": 6600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 3,
+                                            "search_volume": 5400
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 2,
+                                            "search_volume": 4400
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 1,
+                                            "search_volume": 5400
+                                        }
+                                    ],
+                                    "search_volume_trend": {
+                                        "monthly": 19,
+                                        "quarterly": 19,
+                                        "yearly": -71
+                                    }
+                                },
+                                "keyword_info_normalized_with_bing": null,
+                                "keyword_info_normalized_with_clickstream": null,
+                                "clickstream_keyword_info": null,
+                                "keyword_properties": {
+                                    "se_type": "google",
+                                    "core_keyword": null,
+                                    "synonym_clustering_algorithm": "text_processing",
+                                    "keyword_difficulty": 30,
+                                    "detected_language": "en",
+                                    "is_another_language": false
+                                },
+                                "serp_info": {
+                                    "se_type": "google",
+                                    "check_url": "https:\/\/www.google.com\/search?q=seo%20agency%20los%20angeles&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                                    "serp_item_types": [
+                                        "local_pack",
+                                        "organic",
+                                        "related_searches"
+                                    ],
+                                    "se_results_count": 46100000,
+                                    "last_updated_time": "2026-01-12 07:34:38 +00:00",
+                                    "previous_updated_time": "2025-11-29 02:59:29 +00:00"
+                                },
+                                "avg_backlinks_info": {
+                                    "se_type": "google",
+                                    "backlinks": 4009.6,
+                                    "dofollow": 3564.5,
+                                    "referring_pages": 3991.9,
+                                    "referring_domains": 95.2,
+                                    "referring_main_domains": 91,
+                                    "rank": 188.4,
+                                    "main_domain_rank": 401.9,
+                                    "last_updated_time": "2026-01-12 05:34:38 +00:00"
+                                },
+                                "search_intent_info": {
+                                    "se_type": "google",
+                                    "main_intent": "navigational",
+                                    "foreign_intent": null,
+                                    "last_updated_time": "2023-03-02 01:42:21 +00:00"
+                                }
+                            },
+                            "depth": 1,
+                            "related_keywords": [
+                                "best seo agency los angeles",
+                                "seo agency los angeles address",
+                                "top seo agency los angeles",
+                                "free seo agency los angeles",
+                                "seo agency los angeles hiring",
+                                "seo agency los angeles reviews",
+                                "hire a geek seo los angeles",
+                                "seo services in california"
+                            ]
+                        },
+                        {
+                            "se_type": "google",
+                            "keyword_data": {
+                                "se_type": "google",
+                                "keyword": "seo agency nyc",
+                                "location_code": 2840,
+                                "language_code": "en",
+                                "keyword_info": {
+                                    "se_type": "google",
+                                    "last_updated_time": "2026-01-30 07:18:53 +00:00",
+                                    "competition": 0.22,
+                                    "competition_level": "LOW",
+                                    "cpc": 20.67,
+                                    "search_volume": 3600,
+                                    "low_top_of_page_bid": 6.65,
+                                    "high_top_of_page_bid": 22.17,
+                                    "categories": [
+                                        10004,
+                                        10276,
+                                        11088,
+                                        12376,
+                                        13152,
+                                        13316
+                                    ],
+                                    "monthly_searches": [
+                                        {
+                                            "year": 2025,
+                                            "month": 12,
+                                            "search_volume": 880
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 11,
+                                            "search_volume": 720
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 10,
+                                            "search_volume": 1000
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 9,
+                                            "search_volume": 2400
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 8,
+                                            "search_volume": 2400
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 7,
+                                            "search_volume": 2400
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 6,
+                                            "search_volume": 3600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 5,
+                                            "search_volume": 5400
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 4,
+                                            "search_volume": 6600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 3,
+                                            "search_volume": 5400
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 2,
+                                            "search_volume": 3600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 1,
+                                            "search_volume": 5400
+                                        }
+                                    ],
+                                    "search_volume_trend": {
+                                        "monthly": 22,
+                                        "quarterly": -12,
+                                        "yearly": -76
+                                    }
+                                },
+                                "keyword_info_normalized_with_bing": null,
+                                "keyword_info_normalized_with_clickstream": null,
+                                "clickstream_keyword_info": null,
+                                "keyword_properties": {
+                                    "se_type": "google",
+                                    "core_keyword": "nyc seo agency",
+                                    "synonym_clustering_algorithm": "text_processing",
+                                    "keyword_difficulty": 28,
+                                    "detected_language": "en",
+                                    "is_another_language": false
+                                },
+                                "serp_info": {
+                                    "se_type": "google",
+                                    "check_url": "https:\/\/www.google.com\/search?q=seo%20agency%20nyc&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                                    "serp_item_types": [
+                                        "local_pack",
+                                        "organic",
+                                        "paid",
+                                        "related_searches"
+                                    ],
+                                    "se_results_count": 29700000,
+                                    "last_updated_time": "2026-01-12 10:47:55 +00:00",
+                                    "previous_updated_time": "2025-11-04 01:49:08 +00:00"
+                                },
+                                "avg_backlinks_info": {
+                                    "se_type": "google",
+                                    "backlinks": 1671.5,
+                                    "dofollow": 1484.1,
+                                    "referring_pages": 1655.9,
+                                    "referring_domains": 97.6,
+                                    "referring_main_domains": 87.5,
+                                    "rank": 194.1,
+                                    "main_domain_rank": 399.3,
+                                    "last_updated_time": "2026-01-12 08:48:01 +00:00"
+                                },
+                                "search_intent_info": {
+                                    "se_type": "google",
+                                    "main_intent": "navigational",
+                                    "foreign_intent": null,
+                                    "last_updated_time": "2023-03-02 01:42:22 +00:00"
+                                }
+                            },
+                            "depth": 1,
+                            "related_keywords": [
+                                "best seo agency nyc",
+                                "top seo agency nyc",
+                                "seo company in new york coalition",
+                                "seo agency nyc reviews",
+                                "long island seo",
+                                "seo firms near me",
+                                "best seo near me",
+                                "digital seo company"
+                            ]
+                        },
+                        {
+                            "se_type": "google",
+                            "keyword_data": {
+                                "se_type": "google",
+                                "keyword": "boston seo company",
+                                "location_code": 2840,
+                                "language_code": "en",
+                                "keyword_info": {
+                                    "se_type": "google",
+                                    "last_updated_time": "2026-01-30 02:13:59 +00:00",
+                                    "competition": 0.1,
+                                    "competition_level": "LOW",
+                                    "cpc": 35.6,
+                                    "search_volume": 1300,
+                                    "low_top_of_page_bid": 12,
+                                    "high_top_of_page_bid": 96.32,
+                                    "categories": [
+                                        10004,
+                                        10276,
+                                        11088,
+                                        12376,
+                                        13152,
+                                        13316
+                                    ],
+                                    "monthly_searches": [
+                                        {
+                                            "year": 2025,
+                                            "month": 12,
+                                            "search_volume": 390
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 11,
+                                            "search_volume": 880
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 10,
+                                            "search_volume": 880
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 9,
+                                            "search_volume": 1900
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 8,
+                                            "search_volume": 880
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 7,
+                                            "search_volume": 1000
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 6,
+                                            "search_volume": 1600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 5,
+                                            "search_volume": 1300
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 4,
+                                            "search_volume": 1600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 3,
+                                            "search_volume": 1600
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 2,
+                                            "search_volume": 1900
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 1,
+                                            "search_volume": 2400
+                                        }
+                                    ],
+                                    "search_volume_trend": {
+                                        "monthly": -56,
+                                        "quarterly": -56,
+                                        "yearly": -70
+                                    }
+                                },
+                                "keyword_info_normalized_with_bing": null,
+                                "keyword_info_normalized_with_clickstream": null,
+                                "clickstream_keyword_info": null,
+                                "keyword_properties": {
+                                    "se_type": "google",
+                                    "core_keyword": null,
+                                    "synonym_clustering_algorithm": "text_processing",
+                                    "keyword_difficulty": 15,
+                                    "detected_language": "en",
+                                    "is_another_language": false
+                                },
+                                "serp_info": {
+                                    "se_type": "google",
+                                    "check_url": "https:\/\/www.google.com\/search?q=boston%20seo%20company&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                                    "serp_item_types": [
+                                        "local_pack",
+                                        "organic",
+                                        "related_searches"
+                                    ],
+                                    "se_results_count": 11700000,
+                                    "last_updated_time": "2026-01-21 03:13:57 +00:00",
+                                    "previous_updated_time": "2025-12-05 21:29:54 +00:00"
+                                },
+                                "avg_backlinks_info": {
+                                    "se_type": "google",
+                                    "backlinks": 1833.1,
+                                    "dofollow": 1748,
+                                    "referring_pages": 1815.3,
+                                    "referring_domains": 61.3,
+                                    "referring_main_domains": 59.6,
+                                    "rank": 129.9,
+                                    "main_domain_rank": 470.7,
+                                    "last_updated_time": "2026-01-21 01:14:04 +00:00"
+                                },
+                                "search_intent_info": {
+                                    "se_type": "google",
+                                    "main_intent": "navigational",
+                                    "foreign_intent": [
+                                        "commercial"
+                                    ],
+                                    "last_updated_time": "2023-03-04 17:57:35 +00:00"
+                                }
+                            },
+                            "depth": 1,
+                            "related_keywords": [
+                                "boston seo company reviews",
+                                "boston seo company clients",
+                                "raleigh seo company",
+                                "tampa seo company",
+                                "all seo agency in boston",
+                                "seo agency new york",
+                                "omaha seo company",
+                                "seo agency los angeles"
+                            ]
+                        },
+                        {
+                            "se_type": "google",
+                            "keyword_data": {
+                                "se_type": "google",
+                                "keyword": "boise web design",
+                                "location_code": 2840,
+                                "language_code": "en",
+                                "keyword_info": {
+                                    "se_type": "google",
+                                    "last_updated_time": "2026-01-27 23:23:12 +00:00",
+                                    "competition": 0.18,
+                                    "competition_level": "LOW",
+                                    "cpc": 20.04,
+                                    "search_volume": 1000,
+                                    "low_top_of_page_bid": 7.87,
+                                    "high_top_of_page_bid": 25.46,
+                                    "categories": [
+                                        10007,
+                                        11493,
+                                        13418
+                                    ],
+                                    "monthly_searches": [
+                                        {
+                                            "year": 2025,
+                                            "month": 12,
+                                            "search_volume": 210
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 11,
+                                            "search_volume": 260
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 10,
+                                            "search_volume": 390
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 9,
+                                            "search_volume": 1300
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 8,
+                                            "search_volume": 1000
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 7,
+                                            "search_volume": 880
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 6,
+                                            "search_volume": 1000
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 5,
+                                            "search_volume": 880
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 4,
+                                            "search_volume": 1300
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 3,
+                                            "search_volume": 1300
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 2,
+                                            "search_volume": 1900
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 1,
+                                            "search_volume": 1000
+                                        }
+                                    ],
+                                    "search_volume_trend": {
+                                        "monthly": -19,
+                                        "quarterly": -46,
+                                        "yearly": -76
+                                    }
+                                },
+                                "keyword_info_normalized_with_bing": null,
+                                "keyword_info_normalized_with_clickstream": null,
+                                "clickstream_keyword_info": null,
+                                "keyword_properties": {
+                                    "se_type": "google",
+                                    "core_keyword": "web design in boise",
+                                    "synonym_clustering_algorithm": "text_processing",
+                                    "keyword_difficulty": 32,
+                                    "detected_language": "en",
+                                    "is_another_language": false
+                                },
+                                "serp_info": {
+                                    "se_type": "google",
+                                    "check_url": "https:\/\/www.google.com\/search?q=boise%20web%20design&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                                    "serp_item_types": [
+                                        "local_pack",
+                                        "organic",
+                                        "discussions_and_forums",
+                                        "people_also_search",
+                                        "related_searches"
+                                    ],
+                                    "se_results_count": 7600000,
+                                    "last_updated_time": "2026-02-09 23:56:41 +00:00",
+                                    "previous_updated_time": "2025-12-27 05:55:53 +00:00"
+                                },
+                                "avg_backlinks_info": {
+                                    "se_type": "google",
+                                    "backlinks": 29327,
+                                    "dofollow": 29110.7,
+                                    "referring_pages": 29153.5,
+                                    "referring_domains": 141.2,
+                                    "referring_main_domains": 136.4,
+                                    "rank": 202.5,
+                                    "main_domain_rank": 476.5,
+                                    "last_updated_time": "2026-02-09 21:56:45 +00:00"
+                                },
+                                "search_intent_info": {
+                                    "se_type": "google",
+                                    "main_intent": "navigational",
+                                    "foreign_intent": [
+                                        "commercial"
+                                    ],
+                                    "last_updated_time": "2023-03-04 17:08:37 +00:00"
+                                }
+                            },
+                            "depth": 1,
+                            "related_keywords": [
+                                "boise web design templates",
+                                "boise web design examples",
+                                "boise web design free",
+                                "boise web design app",
+                                "boise seo",
+                                "landmark web design",
+                                "surge web design",
+                                "boise logo design"
+                            ]
+                        },
+                        {
+                            "se_type": "google",
+                            "keyword_data": {
+                                "se_type": "google",
+                                "keyword": "seo agency boise",
+                                "location_code": 2840,
+                                "language_code": "en",
+                                "keyword_info": {
+                                    "se_type": "google",
+                                    "last_updated_time": "2026-02-01 23:18:16 +00:00",
+                                    "competition": 0,
+                                    "competition_level": "LOW",
+                                    "cpc": null,
+                                    "search_volume": 320,
+                                    "low_top_of_page_bid": null,
+                                    "high_top_of_page_bid": null,
+                                    "categories": [
+                                        10004,
+                                        10276,
+                                        11088,
+                                        12376,
+                                        13152,
+                                        13316
+                                    ],
+                                    "monthly_searches": [
+                                        {
+                                            "year": 2025,
+                                            "month": 12,
+                                            "search_volume": 210
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 11,
+                                            "search_volume": 2400
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 10,
+                                            "search_volume": 10
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 9,
+                                            "search_volume": 260
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 8,
+                                            "search_volume": 70
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 7,
+                                            "search_volume": 170
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 6,
+                                            "search_volume": 70
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 5,
+                                            "search_volume": 110
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 4,
+                                            "search_volume": 170
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 3,
+                                            "search_volume": 260
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 2,
+                                            "search_volume": 210
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 1,
+                                            "search_volume": 140
+                                        }
+                                    ],
+                                    "search_volume_trend": {
+                                        "monthly": -91,
+                                        "quarterly": 2000,
+                                        "yearly": 91
+                                    }
+                                },
+                                "keyword_info_normalized_with_bing": null,
+                                "keyword_info_normalized_with_clickstream": null,
+                                "clickstream_keyword_info": null,
+                                "keyword_properties": {
+                                    "se_type": "google",
+                                    "core_keyword": "boise seo agency",
+                                    "synonym_clustering_algorithm": "text_processing",
+                                    "keyword_difficulty": 16,
+                                    "detected_language": "en",
+                                    "is_another_language": false
+                                },
+                                "serp_info": {
+                                    "se_type": "google",
+                                    "check_url": "https:\/\/www.google.com\/search?q=seo%20agency%20boise&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                                    "serp_item_types": [
+                                        "local_pack",
+                                        "organic",
+                                        "related_searches"
+                                    ],
+                                    "se_results_count": 330000,
+                                    "last_updated_time": "2026-02-11 21:48:17 +00:00",
+                                    "previous_updated_time": "2025-12-29 00:52:19 +00:00"
+                                },
+                                "avg_backlinks_info": {
+                                    "se_type": "google",
+                                    "backlinks": 1461.8,
+                                    "dofollow": 1415.1,
+                                    "referring_pages": 1434.1,
+                                    "referring_domains": 30.8,
+                                    "referring_main_domains": 28.9,
+                                    "rank": 139,
+                                    "main_domain_rank": 411.7,
+                                    "last_updated_time": "2026-02-11 19:48:18 +00:00"
+                                },
+                                "search_intent_info": {
+                                    "se_type": "google",
+                                    "main_intent": "navigational",
+                                    "foreign_intent": null,
+                                    "last_updated_time": "2024-06-06 22:31:28 +00:00"
+                                }
+                            },
+                            "depth": 0,
+                            "related_keywords": [
+                                "best seo agency boise",
+                                "seo agency los angeles",
+                                "seo agency nyc",
+                                "naples seo company",
+                                "marketing agency boise",
+                                "digital marketing boise",
+                                "boise web design",
+                                "boston seo company"
+                            ]
+                        },
+                        {
+                            "se_type": "google",
+                            "keyword_data": {
+                                "se_type": "google",
+                                "keyword": "naples seo company",
+                                "location_code": 2840,
+                                "language_code": "en",
+                                "keyword_info": {
+                                    "se_type": "google",
+                                    "last_updated_time": "2026-01-24 18:15:14 +00:00",
+                                    "competition": 0.02,
+                                    "competition_level": "LOW",
+                                    "cpc": null,
+                                    "search_volume": 320,
+                                    "low_top_of_page_bid": null,
+                                    "high_top_of_page_bid": null,
+                                    "categories": [
+                                        10004,
+                                        10276,
+                                        11088,
+                                        12376,
+                                        13152,
+                                        13316
+                                    ],
+                                    "monthly_searches": [
+                                        {
+                                            "year": 2025,
+                                            "month": 12,
+                                            "search_volume": 110
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 11,
+                                            "search_volume": 70
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 10,
+                                            "search_volume": 70
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 9,
+                                            "search_volume": 390
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 8,
+                                            "search_volume": 170
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 7,
+                                            "search_volume": 210
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 6,
+                                            "search_volume": 390
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 5,
+                                            "search_volume": 720
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 4,
+                                            "search_volume": 590
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 3,
+                                            "search_volume": 480
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 2,
+                                            "search_volume": 260
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 1,
+                                            "search_volume": 170
+                                        }
+                                    ],
+                                    "search_volume_trend": {
+                                        "monthly": 57,
+                                        "quarterly": 57,
+                                        "yearly": -48
+                                    }
+                                },
+                                "keyword_info_normalized_with_bing": null,
+                                "keyword_info_normalized_with_clickstream": null,
+                                "clickstream_keyword_info": null,
+                                "keyword_properties": {
+                                    "se_type": "google",
+                                    "core_keyword": "seo company naples",
+                                    "synonym_clustering_algorithm": "text_processing",
+                                    "keyword_difficulty": 24,
+                                    "detected_language": "en",
+                                    "is_another_language": false
+                                },
+                                "serp_info": {
+                                    "se_type": "google",
+                                    "check_url": "https:\/\/www.google.com\/search?q=naples%20seo%20company&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                                    "serp_item_types": [
+                                        "organic",
+                                        "people_also_ask",
+                                        "related_searches",
+                                        "knowledge_graph",
+                                        "google_reviews",
+                                        "third_party_reviews"
+                                    ],
+                                    "se_results_count": 969000,
+                                    "last_updated_time": "2026-02-12 00:48:50 +00:00",
+                                    "previous_updated_time": "2025-12-29 02:29:47 +00:00"
+                                },
+                                "avg_backlinks_info": {
+                                    "se_type": "google",
+                                    "backlinks": 7058.4,
+                                    "dofollow": 7015.8,
+                                    "referring_pages": 7019.8,
+                                    "referring_domains": 8.3,
+                                    "referring_main_domains": 8.1,
+                                    "rank": 164.3,
+                                    "main_domain_rank": 499.5,
+                                    "last_updated_time": "2026-02-11 22:48:52 +00:00"
+                                },
+                                "search_intent_info": {
+                                    "se_type": "google",
+                                    "main_intent": "navigational",
+                                    "foreign_intent": null,
+                                    "last_updated_time": "2023-03-04 03:36:06 +00:00"
+                                }
+                            },
+                            "depth": 1,
+                            "related_keywords": [
+                                "naples seo company reviews",
+                                "naples seo company clients",
+                                "la seo company",
+                                "tampa seo company",
+                                "seo services new york",
+                                "omaha seo company",
+                                "seo company near me",
+                                "seo company oc"
+                            ]
+                        },
+                        {
+                            "se_type": "google",
+                            "keyword_data": {
+                                "se_type": "google",
+                                "keyword": "digital marketing boise",
+                                "location_code": 2840,
+                                "language_code": "en",
+                                "keyword_info": {
+                                    "se_type": "google",
+                                    "last_updated_time": "2026-01-22 14:39:46 +00:00",
+                                    "competition": 0.1,
+                                    "competition_level": "LOW",
+                                    "cpc": 19.84,
+                                    "search_volume": 260,
+                                    "low_top_of_page_bid": 3.01,
+                                    "high_top_of_page_bid": 22.58,
+                                    "categories": [
+                                        10004,
+                                        10276,
+                                        11088,
+                                        12379
+                                    ],
+                                    "monthly_searches": [
+                                        {
+                                            "year": 2025,
+                                            "month": 12,
+                                            "search_volume": 70
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 11,
+                                            "search_volume": 170
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 10,
+                                            "search_volume": 260
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 9,
+                                            "search_volume": 720
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 8,
+                                            "search_volume": 140
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 7,
+                                            "search_volume": 260
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 6,
+                                            "search_volume": 260
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 5,
+                                            "search_volume": 260
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 4,
+                                            "search_volume": 320
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 3,
+                                            "search_volume": 210
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 2,
+                                            "search_volume": 260
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 1,
+                                            "search_volume": 170
+                                        }
+                                    ],
+                                    "search_volume_trend": {
+                                        "monthly": -59,
+                                        "quarterly": -73,
+                                        "yearly": -59
+                                    }
+                                },
+                                "keyword_info_normalized_with_bing": null,
+                                "keyword_info_normalized_with_clickstream": null,
+                                "clickstream_keyword_info": null,
+                                "keyword_properties": {
+                                    "se_type": "google",
+                                    "core_keyword": null,
+                                    "synonym_clustering_algorithm": "text_processing",
+                                    "keyword_difficulty": 69,
+                                    "detected_language": "en",
+                                    "is_another_language": false
+                                },
+                                "serp_info": {
+                                    "se_type": "google",
+                                    "check_url": "https:\/\/www.google.com\/search?q=digital%20marketing%20boise&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                                    "serp_item_types": [
+                                        "local_pack",
+                                        "organic",
+                                        "people_also_search",
+                                        "related_searches"
+                                    ],
+                                    "se_results_count": 3970000,
+                                    "last_updated_time": "2026-02-13 05:47:17 +00:00",
+                                    "previous_updated_time": "2025-12-30 01:54:24 +00:00"
+                                },
+                                "avg_backlinks_info": {
+                                    "se_type": "google",
+                                    "backlinks": 1993.2,
+                                    "dofollow": 1646.8,
+                                    "referring_pages": 1933.9,
+                                    "referring_domains": 150,
+                                    "referring_main_domains": 144.5,
+                                    "rank": 289.4,
+                                    "main_domain_rank": 360.6,
+                                    "last_updated_time": "2026-02-13 03:47:17 +00:00"
+                                },
+                                "search_intent_info": {
+                                    "se_type": "google",
+                                    "main_intent": "commercial",
+                                    "foreign_intent": [
+                                        "transactional"
+                                    ],
+                                    "last_updated_time": "2023-03-03 04:38:01 +00:00"
+                                }
+                            },
+                            "depth": 1,
+                            "related_keywords": [
+                                "digital marketing boise jobs",
+                                "free digital marketing boise",
+                                "best digital marketing boise",
+                                "digital marketing boise reviews",
+                                "210 digital marketing",
+                                "performance digital marketing",
+                                "marketing agencies in boise",
+                                "twiss digital marketing"
+                            ]
+                        },
+                        {
+                            "se_type": "google",
+                            "keyword_data": {
+                                "se_type": "google",
+                                "keyword": "marketing agency boise",
+                                "location_code": 2840,
+                                "language_code": "en",
+                                "keyword_info": {
+                                    "se_type": "google",
+                                    "last_updated_time": "2026-02-01 09:09:54 +00:00",
+                                    "competition": 0.61,
+                                    "competition_level": "MEDIUM",
+                                    "cpc": 12.79,
+                                    "search_volume": 140,
+                                    "low_top_of_page_bid": 2.87,
+                                    "high_top_of_page_bid": 15.15,
+                                    "categories": [
+                                        10004,
+                                        10276,
+                                        11088,
+                                        12379
+                                    ],
+                                    "monthly_searches": [
+                                        {
+                                            "year": 2025,
+                                            "month": 12,
+                                            "search_volume": 50
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 11,
+                                            "search_volume": 90
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 10,
+                                            "search_volume": 70
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 9,
+                                            "search_volume": 140
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 8,
+                                            "search_volume": 70
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 7,
+                                            "search_volume": 140
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 6,
+                                            "search_volume": 170
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 5,
+                                            "search_volume": 210
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 4,
+                                            "search_volume": 210
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 3,
+                                            "search_volume": 210
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 2,
+                                            "search_volume": 170
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 1,
+                                            "search_volume": 170
+                                        }
+                                    ],
+                                    "search_volume_trend": {
+                                        "monthly": -44,
+                                        "quarterly": -29,
+                                        "yearly": -55
+                                    }
+                                },
+                                "keyword_info_normalized_with_bing": null,
+                                "keyword_info_normalized_with_clickstream": null,
+                                "clickstream_keyword_info": null,
+                                "keyword_properties": {
+                                    "se_type": "google",
+                                    "core_keyword": "boise marketing agency",
+                                    "synonym_clustering_algorithm": "text_processing",
+                                    "keyword_difficulty": 37,
+                                    "detected_language": "en",
+                                    "is_another_language": false
+                                },
+                                "serp_info": {
+                                    "se_type": "google",
+                                    "check_url": "https:\/\/www.google.com\/search?q=marketing%20agency%20boise&hl=en&gl=US&ie=UTF-8&uule=w+CAIQIFISCQs2MuSEtepUEUK33kOSuTsc",
+                                    "serp_item_types": [
+                                        "local_pack",
+                                        "organic",
+                                        "people_also_search",
+                                        "related_searches"
+                                    ],
+                                    "se_results_count": 3330000,
+                                    "last_updated_time": "2026-02-17 02:13:33 +00:00",
+                                    "previous_updated_time": "2026-01-01 06:50:07 +00:00"
+                                },
+                                "avg_backlinks_info": {
+                                    "se_type": "google",
+                                    "backlinks": 357.4,
+                                    "dofollow": 252.7,
+                                    "referring_pages": 302.3,
+                                    "referring_domains": 114.8,
+                                    "referring_main_domains": 111.1,
+                                    "rank": 224.4,
+                                    "main_domain_rank": 243.2,
+                                    "last_updated_time": "2026-02-17 00:13:35 +00:00"
+                                },
+                                "search_intent_info": {
+                                    "se_type": "google",
+                                    "main_intent": "navigational",
+                                    "foreign_intent": [
+                                        "commercial"
+                                    ],
+                                    "last_updated_time": "2023-03-06 04:17:09 +00:00"
+                                }
+                            },
+                            "depth": 1,
+                            "related_keywords": [
+                                "best marketing agency boise",
+                                "small marketing agency boise",
+                                "marketing boise",
+                                "mitchell+palmer boise",
+                                "against boise",
+                                "sovrn boise",
+                                "digital marketing boise",
+                                "drake cooper boise"
+                            ]
+                        },
+                        {
+                            "se_type": "google",
+                            "keyword_data": {
+                                "se_type": "google",
+                                "keyword": "best seo agency boise",
+                                "location_code": 2840,
+                                "language_code": "en",
+                                "keyword_info": {
+                                    "se_type": "google",
+                                    "last_updated_time": "2026-01-26 07:56:27 +00:00",
+                                    "competition": null,
+                                    "competition_level": null,
+                                    "cpc": null,
+                                    "search_volume": 20,
+                                    "low_top_of_page_bid": null,
+                                    "high_top_of_page_bid": null,
+                                    "categories": [
+                                        10004,
+                                        10276,
+                                        11088,
+                                        12376,
+                                        13152,
+                                        13316
+                                    ],
+                                    "monthly_searches": [
+                                        {
+                                            "year": 2025,
+                                            "month": 12,
+                                            "search_volume": 0
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 11,
+                                            "search_volume": 0
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 10,
+                                            "search_volume": 10
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 9,
+                                            "search_volume": 10
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 8,
+                                            "search_volume": 20
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 7,
+                                            "search_volume": 10
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 6,
+                                            "search_volume": 30
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 5,
+                                            "search_volume": 30
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 4,
+                                            "search_volume": 30
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 3,
+                                            "search_volume": 30
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 2,
+                                            "search_volume": 30
+                                        },
+                                        {
+                                            "year": 2025,
+                                            "month": 1,
+                                            "search_volume": 50
+                                        }
+                                    ],
+                                    "search_volume_trend": {
+                                        "monthly": 0,
+                                        "quarterly": -100,
+                                        "yearly": -100
+                                    }
+                                },
+                                "keyword_info_normalized_with_bing": null,
+                                "keyword_info_normalized_with_clickstream": null,
+                                "clickstream_keyword_info": null,
+                                "keyword_properties": {
+                                    "se_type": "google",
+                                    "core_keyword": null,
+                                    "synonym_clustering_algorithm": null,
+                                    "keyword_difficulty": null,
+                                    "detected_language": "en",
+                                    "is_another_language": false
+                                },
+                                "serp_info": null,
+                                "avg_backlinks_info": null,
+                                "search_intent_info": {
+                                    "se_type": "google",
+                                    "main_intent": "commercial",
+                                    "foreign_intent": [
+                                        "navigational"
+                                    ],
+                                    "last_updated_time": "2024-06-09 10:19:55 +00:00"
+                                }
+                            },
+                            "depth": 1,
+                            "related_keywords": null
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

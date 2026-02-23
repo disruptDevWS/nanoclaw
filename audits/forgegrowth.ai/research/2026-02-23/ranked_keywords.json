@@ -1,0 +1,48 @@
+{
+    "version": "0.1.20260223",
+    "status_code": 20000,
+    "status_message": "Ok.",
+    "time": "0.2076 sec.",
+    "cost": 0.01,
+    "tasks_count": 1,
+    "tasks_error": 0,
+    "tasks": [
+        {
+            "id": "02232334-1327-0381-0000-67ea2e770256",
+            "status_code": 20000,
+            "status_message": "Ok.",
+            "time": "0.1802 sec.",
+            "cost": 0.01,
+            "result_count": 1,
+            "path": [
+                "v3",
+                "dataforseo_labs",
+                "google",
+                "ranked_keywords",
+                "live"
+            ],
+            "data": {
+                "api": "dataforseo_labs",
+                "function": "ranked_keywords",
+                "se_type": "google",
+                "target": "forgegrowth.ai",
+                "location_code": 2840,
+                "language_code": "en",
+                "limit": 1000
+            },
+            "result": [
+                {
+                    "se_type": "google",
+                    "target": "forgegrowth.ai",
+                    "location_code": 2840,
+                    "language_code": "en",
+                    "total_count": null,
+                    "items_count": 0,
+                    "metrics": null,
+                    "metrics_absolute": null,
+                    "items": null
+                }
+            ]
+        }
+    ]
+}

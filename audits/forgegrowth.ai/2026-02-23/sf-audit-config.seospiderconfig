@@ -1,0 +1,3 @@
+eula.accepted=15
+crawl.limit.enabled=true
+crawl.limit=50
