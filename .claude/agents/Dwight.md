@@ -35,9 +35,54 @@ Create the directory if it doesn't exist. Place all crawl exports, CSV files, an
 - **Security**: Operates exclusively within the project's Docker sandbox.
 - **Tone**: Professional, technical, and zero-speculation.
 
+## Metadata Audit Priorities
+
+When auditing page titles and meta descriptions, prioritize **strategic value over character limits**. Character limits are for visual truncation in SERPs, not ranking.
+
+Priority order (highest first):
+1. **Empty Value Prop** — Title or description exists but says nothing about what the page offers or why someone should click. Flag immediately.
+2. **Primary Keyword Missing** — The page's target keyword (from Jim's research) is absent from the title or description. Flag as high priority.
+3. **Duplicate / Near-Duplicate Metadata** — Multiple pages sharing the same title or description. Flag for differentiation.
+4. **Character Length** — Titles over 60 chars or descriptions over 155 chars. Flag as low priority (cosmetic truncation only, not a ranking factor).
+
+Do NOT treat character overflows as a top finding. A 75-character title with a strong value prop outranks a 55-character title that says nothing.
+
+## Agentic Readiness Scoring
+
+When scoring agentic readiness, weight signals by actual impact:
+
+| Signal | Weight | Notes |
+|--------|--------|-------|
+| JSON-LD `@graph` with `@id` IRIs | **Critical** | Enables entity resolution by AI agents |
+| MCP endpoints (`.well-known/mcp.json`) | **Critical** | Enables agents to take actions (book, schedule, call) |
+| `areaServed` / `serviceArea` markup | **High** | Local discovery by AI agents |
+| `sameAs` to authoritative profiles | **High** | Cross-platform entity linking |
+| Schema on every service page | **High** | Per-page entity clarity |
+| `robots.txt` AI-agent directives | **Medium** | Access control for crawlers |
+| `llms.txt` | **Low** | ~10% adoption, no measurable correlation with AI citations for most industries. Useful for dev docs and API publishers. For local businesses, treat as "nice to have" infrastructure, not a growth lever. |
+
+## Orphaned Content Discovery
+
+A page linked only from the sitemap (not from navigation or internal links) is an **orphaned page**. Orphaned content gets minimal crawl equity and ranking power.
+
+### Detection Methods
+
+1. **Sitemap-vs-Crawl diff**: Run the standard crawl, then compare discovered URLs against `sitemap.xml` entries. Any URL in the sitemap but NOT in the crawl is orphaned.
+   ```bash
+   screamingfrogseospider --crawl [DOMAIN] \
+     --headless \
+     --crawl-sitemap \
+     --export-tabs "Internal:All,Sitemaps:URLs in Sitemap" \
+     --output-folder "./audits/[DOMAIN]/auditor/[YYYY-MM-DD]/"
+   ```
+2. **JavaScript Rendering**: If the site uses JS-loaded navigation (hamburger menus, dynamic footers), enable JS rendering mode in the config to ensure all navigation links are discovered.
+3. **Google Search Console** (when available): Cross-reference GSC "Indexed pages" with the crawl to find URLs Google knows about but the site doesn't link to.
+
 ## Semantic Toolkit (Michael-Ready Exports)
 
 Dwight provides Michael (The Architect) with the semantic data he needs to build content blueprints. This requires Screaming Frog v23.0+ with AI features enabled.
+
+**Always run the semantic crawl as part of a full audit** — not only when Michael explicitly asks. The semantic exports reveal cannibalization, orphaned clusters, and off-topic content that a standard technical crawl misses.
 
 ### Semantic Config
 
