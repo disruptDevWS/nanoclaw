@@ -205,6 +205,288 @@ function round2(n: number): number {
 }
 
 // ============================================================
+// Jim research_summary.md parser
+// ============================================================
+
+interface ParsedResearchSummary {
+  keywordOverview: {
+    total_keywords: number;
+    total_volume: number;
+    avg_position: number;
+    etv: number;
+    paid_traffic_equivalent: number;
+    top_10_count: number;
+    near_miss_count: number;
+    api_cost: number;
+  };
+  positionDistribution: Array<{ range: string; count: number; pct: number }>;
+  brandedSplit: {
+    branded: { count: number; volume: number; avg_position: number };
+    non_branded: { count: number; volume: number; avg_position: number };
+  };
+  intentBreakdown: Array<{ intent: string; count: number; volume: number; pct_volume: number }>;
+  topRankingUrls: Array<{ url: string; keywords: number; volume: number }>;
+  competitorAnalysis: Array<{
+    rank: number;
+    domain: string;
+    overlap_pct: number;
+    shared_keywords: number;
+    total_keywords: number;
+    avg_position: number;
+    etv: number;
+  }>;
+  competitorSummary: {
+    veterans_keywords: number;
+    veterans_avg_position: number;
+    veterans_etv: number;
+    competitor_avg_keywords: number;
+    competitor_avg_position: number;
+    competitor_avg_etv: number;
+  };
+  strikingDistance: Array<{
+    keyword: string;
+    volume: number;
+    position: number;
+    cpc: number | null;
+    intent: string;
+  }>;
+  contentGapObservations: string[];
+  keyTakeaways: Array<{ section: string; takeaway: string }>;
+}
+
+function parseResearchSummary(filePath: string): ParsedResearchSummary {
+  const md = fs.readFileSync(filePath, 'utf-8');
+
+  const result: ParsedResearchSummary = {
+    keywordOverview: {
+      total_keywords: 0, total_volume: 0, avg_position: 0,
+      etv: 0, paid_traffic_equivalent: 0, top_10_count: 0,
+      near_miss_count: 0, api_cost: 0,
+    },
+    positionDistribution: [],
+    brandedSplit: {
+      branded: { count: 0, volume: 0, avg_position: 0 },
+      non_branded: { count: 0, volume: 0, avg_position: 0 },
+    },
+    intentBreakdown: [],
+    topRankingUrls: [],
+    competitorAnalysis: [],
+    competitorSummary: {
+      veterans_keywords: 0, veterans_avg_position: 0, veterans_etv: 0,
+      competitor_avg_keywords: 0, competitor_avg_position: 0, competitor_avg_etv: 0,
+    },
+    strikingDistance: [],
+    contentGapObservations: [],
+    keyTakeaways: [],
+  };
+
+  // --- Keyword Overview ---
+  const overviewTable = md.match(
+    /##\s*1\.\s*Keyword\s+Overview[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n###|\n##\s|$)/i
+  );
+  if (overviewTable) {
+    const rows = overviewTable[1];
+    const extract = (label: string): number => {
+      const m = rows.match(new RegExp(`\\|\\s*${label}\\s*\\|\\s*([\\d,./$]+)`, 'i'));
+      if (!m) return 0;
+      return parseFloat(m[1].replace(/[$,/mo]/g, '')) || 0;
+    };
+    result.keywordOverview.total_keywords = extract('Total ranked keywords');
+    result.keywordOverview.total_volume = extract('Total search volume');
+    result.keywordOverview.avg_position = extract('Average position');
+    result.keywordOverview.etv = extract('Estimated traffic value');
+    result.keywordOverview.paid_traffic_equivalent = extract('Estimated paid traffic');
+  }
+
+  const costMatch = md.match(/\*\*API Cost:\*\*\s*\$([\d.]+)/i);
+  if (costMatch) result.keywordOverview.api_cost = parseFloat(costMatch[1]);
+
+  // --- Position Distribution ---
+  const posDist = md.match(
+    /###\s*Position\s+Distribution[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n\*\*|\n###|\n##\s|$)/i
+  );
+  if (posDist) {
+    const rows = posDist[1].matchAll(
+      /\|\s*([\d\-+]+)\s*\|\s*(\d+)\s*\|\s*([\d.]+)%\s*\|/g
+    );
+    for (const row of rows) {
+      result.positionDistribution.push({
+        range: row[1].trim(),
+        count: parseInt(row[2], 10),
+        pct: parseFloat(row[3]),
+      });
+    }
+  }
+
+  // --- Branded vs Non-Branded ---
+  const brandedTable = md.match(
+    /###\s*Branded\s+vs\s+Non-Branded[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n\*\*|\n###|\n##\s|$)/i
+  );
+  if (brandedTable) {
+    const bMatch = brandedTable[1].match(
+      /\|\s*Branded[^|]*\|\s*(\d+)\s*\|\s*([\d,]+)\/mo\s*\|\s*([\d.]+)\s*\|/i
+    );
+    if (bMatch) {
+      result.brandedSplit.branded = {
+        count: parseInt(bMatch[1], 10),
+        volume: parseInt(bMatch[2].replace(/,/g, ''), 10),
+        avg_position: parseFloat(bMatch[3]),
+      };
+    }
+    const nbMatch = brandedTable[1].match(
+      /\|\s*Non-branded\s*\|\s*(\d+)\s*\|\s*([\d,]+)\/mo\s*\|\s*([\d.]+)\s*\|/i
+    );
+    if (nbMatch) {
+      result.brandedSplit.non_branded = {
+        count: parseInt(nbMatch[1], 10),
+        volume: parseInt(nbMatch[2].replace(/,/g, ''), 10),
+        avg_position: parseFloat(nbMatch[3]),
+      };
+    }
+  }
+
+  // --- Intent Breakdown ---
+  const intentTable = md.match(
+    /##\s*3\.\s*Intent\s+Breakdown[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n\*\*|\n###|\n##\s|$)/i
+  );
+  if (intentTable) {
+    const rows = intentTable[1].matchAll(
+      /\|\s*(Navigational|Commercial|Transactional|Informational)\s*\|\s*(\d+)\s*\|\s*([\d,]+)\s*\|\s*([\d.]+)%\s*\|/gi
+    );
+    for (const row of rows) {
+      result.intentBreakdown.push({
+        intent: row[1],
+        count: parseInt(row[2], 10),
+        volume: parseInt(row[3].replace(/,/g, ''), 10),
+        pct_volume: parseFloat(row[4]),
+      });
+    }
+  }
+
+  // --- Top Ranking URLs ---
+  const urlTable = md.match(
+    /##\s*4\.\s*Top\s+Ranking\s+URLs[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n\*\*|\n###|\n##\s|$)/i
+  );
+  if (urlTable) {
+    const rows = urlTable[1].matchAll(
+      /\|\s*(.+?)\s*\|\s*(\d+)\s*\|\s*([\d,]+)\s*\|/g
+    );
+    for (const row of rows) {
+      const url = row[1].trim();
+      if (url.startsWith('URL') || url.includes('---')) continue;
+      result.topRankingUrls.push({
+        url,
+        keywords: parseInt(row[2], 10),
+        volume: parseInt(row[3].replace(/,/g, ''), 10),
+      });
+    }
+  }
+
+  // --- Competitor Analysis ---
+  const compTable = md.match(
+    /###\s*Direct\s+Local[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n###|\n##\s|$)/i
+  );
+  if (compTable) {
+    const rows = compTable[1].matchAll(
+      /\|\s*(\d+)\s*\|\s*(\S+)\s*\|\s*([\d.]+)%\s*\|\s*(\d+)\s*\|\s*([\d,]+)\s*\|\s*([\d.]+)\s*\|\s*\$([\d,]+)\s*\|/g
+    );
+    for (const row of rows) {
+      result.competitorAnalysis.push({
+        rank: parseInt(row[1], 10),
+        domain: row[2].trim(),
+        overlap_pct: parseFloat(row[3]),
+        shared_keywords: parseInt(row[4], 10),
+        total_keywords: parseInt(row[5].replace(/,/g, ''), 10),
+        avg_position: parseFloat(row[6]),
+        etv: parseInt(row[7].replace(/,/g, ''), 10),
+      });
+    }
+  }
+
+  // Competitor summary table
+  const summaryTable = md.match(
+    /###\s*Veterans\s+Plumbing\s+Position[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n###|\n##\s|\nThe site|$)/i
+  );
+  if (summaryTable) {
+    const vetMatch = summaryTable[1].match(
+      /\|\s*Veterans\s+Plumbing\s*\|\s*(\d+)\s*\|\s*([\d.]+)\s*\|\s*\$([\d,]+)\s*\|/i
+    );
+    if (vetMatch) {
+      result.competitorSummary.veterans_keywords = parseInt(vetMatch[1], 10);
+      result.competitorSummary.veterans_avg_position = parseFloat(vetMatch[2]);
+      result.competitorSummary.veterans_etv = parseInt(vetMatch[3].replace(/,/g, ''), 10);
+    }
+    const compAvg = summaryTable[1].match(
+      /\|\s*Competitor\s+Avg[^|]*\|\s*~?([\d,]+)\s*\|\s*~?([\d.]+)\s*\|\s*~?\$([\d,]+)\s*\|/i
+    );
+    if (compAvg) {
+      result.competitorSummary.competitor_avg_keywords = parseInt(compAvg[1].replace(/,/g, ''), 10);
+      result.competitorSummary.competitor_avg_position = parseFloat(compAvg[2]);
+      result.competitorSummary.competitor_avg_etv = parseInt(compAvg[3].replace(/,/g, ''), 10);
+    }
+  }
+
+  // --- Striking Distance ---
+  const sdTable = md.match(
+    /##\s*6\.\s*Striking\s+Distance[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n\*\*|\n###|\n##\s|$)/i
+  );
+  if (sdTable) {
+    const rows = sdTable[1].matchAll(
+      /\|\s*(.+?)\s*\|\s*([\d,]+)\s*\|\s*(\d+)\s*\|\s*\$?([\d.]+|N\/A)\s*\|\s*(\w+)\s*\|/g
+    );
+    for (const row of rows) {
+      const kw = row[1].trim();
+      if (kw.startsWith('Keyword') || kw.includes('---')) continue;
+      result.strikingDistance.push({
+        keyword: kw,
+        volume: parseInt(row[2].replace(/,/g, ''), 10),
+        position: parseInt(row[3], 10),
+        cpc: row[4] === 'N/A' ? null : parseFloat(row[4]),
+        intent: row[5].trim(),
+      });
+    }
+  }
+
+  // --- Content Gap Observations ---
+  const gapSection = md.match(
+    /##\s*8\.\s*Content\s+Gap\s+Observations[\s\S]*?(?=\n##\s|$)/i
+  );
+  if (gapSection) {
+    const observations = gapSection[0].matchAll(
+      /\d+\.\s*\*\*(.+?)\*\*\s*(.+?)(?=\n\d+\.|$)/gs
+    );
+    for (const obs of observations) {
+      const title = obs[1].replace(/[:.]$/, '').trim();
+      const body = obs[2].trim().split('\n')[0].trim();
+      result.contentGapObservations.push(`${title}: ${body}`);
+    }
+  }
+
+  // --- Key Takeaways ---
+  const takeaways = md.matchAll(
+    /(?:###?\s*[\d.]*\s*)?(.+?)(?:\n[\s\S]*?)??\*\*Key\s+takeaway:\*\*\s*(.+?)(?=\n\n|\n##|\n\*\*|$)/gi
+  );
+  for (const t of takeaways) {
+    const sectionMatch = t[0].match(/###?\s*([\d.]*\s*.+?)(?:\n|$)/);
+    const section = sectionMatch ? sectionMatch[1].replace(/^[\d.]+\s*/, '').trim() : 'General';
+    result.keyTakeaways.push({
+      section: section.substring(0, 50),
+      takeaway: t[2].trim(),
+    });
+  }
+
+  // Count top-10 keywords
+  const top10Section = md.match(
+    /###\s*Keywords\s+Currently\s+in\s+the\s+Top\s+10\s*\(only\s+(\d+)\)/i
+  );
+  if (top10Section) {
+    result.keywordOverview.top_10_count = parseInt(top10Section[1], 10);
+  }
+
+  return result;
+}
+
+// ============================================================
 // Jim sync — ranked_keywords.json → audit_keywords + clusters + rollups
 // ============================================================
 
@@ -302,18 +584,39 @@ async function syncJim(
   await sb.from('audit_clusters').delete().eq('audit_id', auditId);
   await sb.from('audit_rollups').delete().eq('audit_id', auditId);
 
-  // Insert keyword records
-  const keywordRecords = nearMiss.map((kw) => {
-    const opp = calculateKeywordOpportunity(
-      kw,
-      assumptions.target_ctr,
-      ctrBuckets,
-      assumptions.floor_ctr_over30,
-      assumptions.cr_used_min,
-      assumptions.cr_used_max,
-      assumptions.acv_used_min,
-      assumptions.acv_used_max
-    );
+  // Insert ALL keyword records with segment flags
+  const allKeywordRecords = keywords.map((kw) => {
+    const isNearMiss =
+      kw.rank_pos >= assumptions.near_miss_min_pos &&
+      kw.rank_pos <= assumptions.near_miss_max_pos &&
+      kw.search_volume >= assumptions.min_volume;
+    const isTop10 = kw.rank_pos >= 1 && kw.rank_pos <= 10;
+    const isStrikingDistance = kw.rank_pos >= 11 && kw.rank_pos <= 20;
+
+    // Only calculate revenue opportunity for near-miss keywords
+    const opp = isNearMiss
+      ? calculateKeywordOpportunity(
+          kw,
+          assumptions.target_ctr,
+          ctrBuckets,
+          assumptions.floor_ctr_over30,
+          assumptions.cr_used_min,
+          assumptions.cr_used_max,
+          assumptions.acv_used_min,
+          assumptions.acv_used_max
+        )
+      : {
+          current_ctr: getCtrForPosition(kw.rank_pos, ctrBuckets, assumptions.floor_ctr_over30),
+          current_traffic: kw.search_volume * getCtrForPosition(kw.rank_pos, ctrBuckets, assumptions.floor_ctr_over30),
+          target_ctr: assumptions.target_ctr,
+          target_traffic: 0,
+          delta_traffic: 0,
+          delta_leads_low: 0,
+          delta_leads_high: 0,
+          delta_revenue_low: 0,
+          delta_revenue_high: 0,
+        };
+
     return {
       audit_id: auditId,
       keyword: kw.keyword,
@@ -321,19 +624,23 @@ async function syncJim(
       search_volume: kw.search_volume,
       cpc: kw.cpc,
       ranking_url: kw.ranking_url,
+      intent: kw.intent,
       topic: extractTopic(kw.keyword),
+      is_near_miss: isNearMiss,
+      is_top_10: isTop10,
+      is_striking_distance: isStrikingDistance,
       ...opp,
     };
   });
 
-  if (keywordRecords.length > 0) {
+  if (allKeywordRecords.length > 0) {
     // Batch insert (Supabase limit is ~1000 per call)
-    for (let i = 0; i < keywordRecords.length; i += 500) {
-      const batch = keywordRecords.slice(i, i + 500);
+    for (let i = 0; i < allKeywordRecords.length; i += 500) {
+      const batch = allKeywordRecords.slice(i, i + 500);
       const { error } = await sb.from('audit_keywords').insert(batch);
       if (error) throw new Error(`keyword insert failed: ${error.message}`);
     }
-    console.log(`  [jim] Inserted ${keywordRecords.length} keywords`);
+    console.log(`  [jim] Inserted ${allKeywordRecords.length} keywords (${nearMiss.length} near-miss)`);
   }
 
   // Canonicalize keywords (uses DB function)
@@ -342,11 +649,12 @@ async function syncJim(
     console.log(`  [jim] Canonicalization RPC failed: ${canonErr.message} — using legacy topics`);
   }
 
-  // Pull back keywords for clustering
+  // Pull back keywords for clustering (only near-miss for revenue calculations)
   const { data: kwRows } = await sb
     .from('audit_keywords')
-    .select('keyword, rank_pos, search_volume, cpc, delta_traffic, delta_revenue_low, delta_revenue_high, delta_leads_low, delta_leads_high, canonical_key, canonical_topic, intent_type, is_brand, topic')
-    .eq('audit_id', auditId);
+    .select('keyword, rank_pos, search_volume, cpc, delta_traffic, delta_revenue_low, delta_revenue_high, delta_leads_low, delta_leads_high, canonical_key, canonical_topic, intent_type, intent, is_brand, is_near_miss, topic')
+    .eq('audit_id', auditId)
+    .eq('is_near_miss', true);
 
   // Cluster by canonical_key (or fall back to legacy topic)
   const CONSERVATIVE_CR = 0.15;
@@ -373,7 +681,7 @@ async function syncJim(
     const topic = r.canonical_topic ?? r.topic ?? key;
     const vol = Number(r.search_volume ?? 0);
     const pos = Number(r.rank_pos ?? 0);
-    const intent = String(r.intent_type ?? r.topic ?? '').toLowerCase();
+    const intent = String(r.intent_type ?? r.intent ?? r.topic ?? '').toLowerCase();
     const isBrand = r.is_brand === true;
     const eligible = !isBrand && (intent === 'commercial' || intent === 'transactional');
     const deltaTraffic = Number(r.delta_traffic ?? 0);
@@ -452,6 +760,17 @@ async function syncJim(
 
   console.log(`  [jim] Revenue range: $${round2(totalRevLow)} – $${round2(totalRevHigh)}/mo`);
 
+  // Parse research_summary.md for site-level findings
+  const summaryFile = path.join(dir, 'research_summary.md');
+  let parsedSummary: ParsedResearchSummary | null = null;
+  if (fs.existsSync(summaryFile)) {
+    console.log(`  [jim] Parsing ${summaryFile} for site-level findings`);
+    parsedSummary = parseResearchSummary(summaryFile);
+    console.log(`  [jim] Extracted: ${parsedSummary.keywordOverview.total_keywords} total keywords, ${parsedSummary.competitorAnalysis.length} competitors, ${parsedSummary.strikingDistance.length} striking distance, ${parsedSummary.contentGapObservations.length} content gaps`);
+  } else {
+    console.log(`  [jim] No research_summary.md found — site-level findings will be empty`);
+  }
+
   // Snapshot versioning
   const snapshotVersion = await getNextSnapshotVersion(sb, auditId, 'jim');
 
@@ -469,8 +788,26 @@ async function syncJim(
 
   const agentRunId = run?.id ?? null;
 
-  // Record snapshot
-  await recordSnapshot(sb, auditId, 'jim', snapshotVersion, agentRunId, keywordRecords.length);
+  // Record snapshot with site-level findings (direct insert, same pattern as Dwight)
+  await sb.from('audit_snapshots').insert({
+    audit_id: auditId,
+    agent_name: 'jim',
+    snapshot_version: snapshotVersion,
+    agent_run_id: agentRunId,
+    row_count: allKeywordRecords.length,
+    // Site-level findings from research_summary.md
+    research_summary_markdown: parsedSummary ? fs.readFileSync(summaryFile, 'utf-8') : null,
+    keyword_overview: parsedSummary?.keywordOverview ?? {},
+    position_distribution: parsedSummary?.positionDistribution ?? [],
+    branded_split: parsedSummary?.brandedSplit ?? {},
+    intent_breakdown: parsedSummary?.intentBreakdown ?? [],
+    top_ranking_urls: parsedSummary?.topRankingUrls ?? [],
+    competitor_analysis: parsedSummary?.competitorAnalysis ?? [],
+    competitor_summary: parsedSummary?.competitorSummary ?? {},
+    striking_distance: parsedSummary?.strikingDistance ?? [],
+    content_gap_observations: parsedSummary?.contentGapObservations ?? [],
+    key_takeaways: parsedSummary?.keyTakeaways ?? [],
+  });
 
   // Update staleness timestamp
   await updateStalenessTimestamp(sb, auditId, 'jim');
