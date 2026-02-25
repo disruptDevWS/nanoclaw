@@ -499,6 +499,227 @@ async function syncJim(
 }
 
 // ============================================================
+// Dwight AUDIT_REPORT.md parser
+// ============================================================
+
+interface ParsedAuditReport {
+  executiveSummary: string;
+  prioritizedFixes: Array<{
+    number: number;
+    issue: string;
+    affected_pages: string;
+    fix: string;
+    priority_tier: number;
+    priority_label: string;
+  }>;
+  agenticReadiness: Array<{
+    signal: string;
+    status: string;
+    weight: string;
+  }>;
+  structuredDataIssues: Array<{
+    issue: string;
+    description: string;
+    severity: string;
+  }>;
+  headingIssues: Array<{
+    url: string;
+    issue_type: string;
+    details: string;
+  }>;
+  securityIssues: Array<{
+    issue: string;
+    affected_pages: string;
+    fix: string;
+  }>;
+  platformNotes: string;
+  siteMetadata: Record<string, string>;
+}
+
+function parseAuditReport(filePath: string): ParsedAuditReport {
+  const md = fs.readFileSync(filePath, 'utf-8');
+
+  const result: ParsedAuditReport = {
+    executiveSummary: '',
+    prioritizedFixes: [],
+    agenticReadiness: [],
+    structuredDataIssues: [],
+    headingIssues: [],
+    securityIssues: [],
+    platformNotes: '',
+    siteMetadata: {},
+  };
+
+  // --- Executive Summary ---
+  const execMatch = md.match(/##\s*Executive\s+Summary\s*\n([\s\S]*?)(?=\n---|\n##\s)/i);
+  if (execMatch) {
+    result.executiveSummary = execMatch[1].trim();
+  }
+
+  // --- Prioritized Fix List ---
+  const prioritySections = md.matchAll(
+    /###\s*Priority\s*(\d+)\s*[—–-]\s*(.+?)(?:\n|\r\n)([\s\S]*?)(?=###\s*Priority|\n##\s|$)/gi
+  );
+  for (const section of prioritySections) {
+    const tier = parseInt(section[1], 10);
+    const label = section[2].trim().replace(/\(.+\)/, '').trim();
+    const body = section[3];
+
+    const tableRows = body.matchAll(
+      /\|\s*(\d+)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|/g
+    );
+    for (const row of tableRows) {
+      const num = parseInt(row[1], 10);
+      if (isNaN(num)) continue;
+      result.prioritizedFixes.push({
+        number: num,
+        issue: row[2].trim(),
+        affected_pages: row[3].trim(),
+        fix: row[4].trim(),
+        priority_tier: tier,
+        priority_label: label,
+      });
+    }
+  }
+
+  // --- Agentic Readiness Scorecard ---
+  const agenticMatch = md.match(
+    /###\s*10\.4\s*Agentic\s+Readiness\s+Score[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n\*\*|\n---|\n##\s|$)/i
+  );
+  if (agenticMatch) {
+    const tableBlock = agenticMatch[1];
+    const rows = tableBlock.matchAll(
+      /\|\s*(.+?)\s*\|\s*(PASS|FAIL)\s*\|\s*(.+?)\s*\|/gi
+    );
+    for (const row of rows) {
+      result.agenticReadiness.push({
+        signal: row[1].trim(),
+        status: row[2].trim().toUpperCase(),
+        weight: row[3].trim(),
+      });
+    }
+  }
+
+  // --- Structured Data Issues ---
+  const schemaSection = md.match(
+    /##\s*Section\s*6:\s*Structured\s+Data[\s\S]*?(?=\n##\s)/i
+  );
+  if (schemaSection) {
+    const issueBlocks = schemaSection[0].matchAll(
+      /\*\*Issue\s*(\d+):\s*(.+?)\*\*\s*\n([\s\S]*?)(?=\*\*Issue|\n---|\n##|$)/gi
+    );
+    for (const block of issueBlocks) {
+      const desc = block[3].trim().split('\n')[0].trim();
+      result.structuredDataIssues.push({
+        issue: block[2].trim(),
+        description: desc,
+        severity: 'critical',
+      });
+    }
+  }
+
+  // --- Heading Issues ---
+  const missingH1Match = md.match(
+    /###\s*5\.1\s*Missing\s+H1[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n###|\n##\s|$)/i
+  );
+  if (missingH1Match) {
+    const rows = missingH1Match[1].matchAll(/\|\s*(\/.+?)\s*\|\s*(.+?)\s*\|/g);
+    for (const row of rows) {
+      if (row[1].includes('---')) continue;
+      result.headingIssues.push({
+        url: row[1].trim(),
+        issue_type: 'missing_h1',
+        details: row[2].trim(),
+      });
+    }
+  }
+
+  const multiH1Match = md.match(
+    /###\s*5\.2\s*Multiple\s+H1[\s\S]*?\n(\|.+\|[\s\S]*?)(?=\n###|\n##\s|$)/i
+  );
+  if (multiH1Match) {
+    const rows = multiH1Match[1].matchAll(
+      /\|\s*(\/.+?)\s*\|\s*"?(.+?)"?\s*\|\s*"?(.+?)"?\s*\|/g
+    );
+    for (const row of rows) {
+      if (row[1].includes('---')) continue;
+      result.headingIssues.push({
+        url: row[1].trim(),
+        issue_type: 'multiple_h1',
+        details: `H1-1: ${row[2].trim()}, H1-2: ${row[3].trim()}`,
+      });
+    }
+  }
+
+  // --- Security Issues ---
+  const secSection = md.match(
+    /##\s*Section\s*9:\s*Security[\s\S]*?(?=\n##\s)/i
+  );
+  if (secSection) {
+    const crossOrigin = secSection[0].match(
+      /###\s*9\.1[\s\S]*?\*\*Fix:\*\*\s*(.+?)(?:\n|$)/i
+    );
+    if (crossOrigin) {
+      result.securityIssues.push({
+        issue: 'Unsafe cross-origin HTTP link without rel="noopener"',
+        affected_pages: 'Sitewide (all pages)',
+        fix: crossOrigin[1].trim(),
+      });
+    }
+
+    const refPolicy = secSection[0].match(
+      /###\s*9\.2[\s\S]*?Recommendation:\s*(.+?)(?:\n|$)/i
+    );
+    if (refPolicy) {
+      result.securityIssues.push({
+        issue: 'Missing Referrer-Policy header',
+        affected_pages: 'Sitewide (all pages)',
+        fix: refPolicy[1].trim(),
+      });
+    }
+
+    const ext4xx = secSection[0].match(/###\s*9\.3[\s\S]*?(?=\n###|\n##|$)/i);
+    if (ext4xx && ext4xx[0].includes('406')) {
+      result.securityIssues.push({
+        issue: 'Broken external link (406 Not Acceptable)',
+        affected_pages: '/privacy-policy',
+        fix: 'Update or remove the link to support.mozilla.org',
+      });
+    }
+  }
+
+  // --- Platform Notes ---
+  const platformMatch = md.match(
+    /##\s*Section\s*11:\s*Platform[\s\S]*?(?=\n##\s|\n---\s*\n##|$)/i
+  );
+  if (platformMatch) {
+    result.platformNotes = platformMatch[0]
+      .replace(/##\s*Section\s*11:\s*Platform\s*Observations\s*\n*/i, '')
+      .trim();
+  }
+
+  // --- Site Metadata ---
+  const toolMatch = md.match(/\*\*Tool:\*\*\s*(.+)/i);
+  const dateMatch = md.match(/\*\*Audit Date:\*\*\s*(.+)/i);
+  const scopeMatch = md.match(/\*\*Crawl Scope:\*\*\s*(.+)/i);
+
+  result.siteMetadata = {
+    crawl_tool: toolMatch?.[1]?.trim() ?? '',
+    crawl_date: dateMatch?.[1]?.trim() ?? '',
+    crawl_scope: scopeMatch?.[1]?.trim() ?? '',
+    platform_detected: result.platformNotes.includes('DudaSite') ? 'DudaSite' : '',
+  };
+
+  const passing = result.agenticReadiness.filter((a) => a.status === 'PASS').length;
+  const total = result.agenticReadiness.length;
+  if (total > 0) {
+    result.siteMetadata.agentic_readiness_score = `${passing}/${total}`;
+  }
+
+  return result;
+}
+
+// ============================================================
 // Dwight sync — internal_all.csv → agent_technical_pages
 // ============================================================
 
@@ -634,10 +855,37 @@ async function syncDwight(
   const flagged = pageRecords.filter((p) => p.semantic_flag);
   console.log(`  [dwight] ${flagged.length} pages with semantic flags`);
 
-  // Record snapshot and update staleness
+  // Parse AUDIT_REPORT.md for site-level findings
+  const reportFile = path.join(dir, 'AUDIT_REPORT.md');
+  let parsedReport: ParsedAuditReport | null = null;
+  if (fs.existsSync(reportFile)) {
+    console.log(`  [dwight] Parsing ${reportFile} for site-level findings`);
+    parsedReport = parseAuditReport(reportFile);
+    console.log(`  [dwight] Extracted: ${parsedReport.prioritizedFixes.length} fixes, ${parsedReport.agenticReadiness.length} agentic signals, ${parsedReport.structuredDataIssues.length} schema issues, ${parsedReport.headingIssues.length} heading issues, ${parsedReport.securityIssues.length} security issues`);
+  } else {
+    console.log(`  [dwight] No AUDIT_REPORT.md found — site-level findings will be empty`);
+  }
+
+  // Record snapshot with site-level findings and update staleness
   const snapshotVersion = await getNextSnapshotVersion(sb, auditId, 'dwight');
   await sb.from('agent_runs').update({ snapshot_version: snapshotVersion }).eq('id', agentRunId);
-  await recordSnapshot(sb, auditId, 'dwight', snapshotVersion, agentRunId, pageRecords.length);
+
+  await sb.from('audit_snapshots').insert({
+    audit_id: auditId,
+    agent_name: 'dwight',
+    snapshot_version: snapshotVersion,
+    agent_run_id: agentRunId,
+    row_count: pageRecords.length,
+    executive_summary: parsedReport?.executiveSummary ?? null,
+    prioritized_fixes: parsedReport?.prioritizedFixes ?? [],
+    agentic_readiness: parsedReport?.agenticReadiness ?? [],
+    structured_data_issues: parsedReport?.structuredDataIssues ?? [],
+    heading_issues: parsedReport?.headingIssues ?? [],
+    security_issues: parsedReport?.securityIssues ?? [],
+    platform_notes: parsedReport?.platformNotes ?? null,
+    site_metadata: parsedReport?.siteMetadata ?? {},
+  });
+
   await updateStalenessTimestamp(sb, auditId, 'dwight');
 
   return agentRunId;
