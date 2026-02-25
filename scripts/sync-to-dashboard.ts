@@ -104,6 +104,51 @@ function agentDir(domain: string, agentRole: string, date?: string): string | nu
 }
 
 // ============================================================
+// Snapshot versioning helpers
+// ============================================================
+
+async function getNextSnapshotVersion(sb: SupabaseClient, auditId: string, agentName: string): Promise<number> {
+  const { data } = await sb
+    .from('audit_snapshots')
+    .select('snapshot_version')
+    .eq('audit_id', auditId)
+    .eq('agent_name', agentName)
+    .order('snapshot_version', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return ((data as any)?.snapshot_version ?? 0) + 1;
+}
+
+async function recordSnapshot(
+  sb: SupabaseClient,
+  auditId: string,
+  agentName: string,
+  snapshotVersion: number,
+  agentRunId: string | null,
+  rowCount: number
+): Promise<void> {
+  await sb.from('audit_snapshots').insert({
+    audit_id: auditId,
+    agent_name: agentName,
+    snapshot_version: snapshotVersion,
+    agent_run_id: agentRunId,
+    row_count: rowCount,
+  });
+}
+
+async function updateStalenessTimestamp(sb: SupabaseClient, auditId: string, agentName: string): Promise<void> {
+  const columnMap: Record<string, string> = {
+    jim: 'research_snapshot_at',
+    dwight: 'audit_snapshot_at',
+    michael: 'strategy_snapshot_at',
+    pam: 'execution_snapshot_at',
+  };
+  const col = columnMap[agentName];
+  if (!col) return;
+  await sb.from('audits').update({ [col]: new Date().toISOString() }).eq('id', auditId);
+}
+
+// ============================================================
 // CTR + Revenue formula (ported from run-audit/index.ts)
 // ============================================================
 
@@ -407,6 +452,9 @@ async function syncJim(
 
   console.log(`  [jim] Revenue range: $${round2(totalRevLow)} – $${round2(totalRevHigh)}/mo`);
 
+  // Snapshot versioning
+  const snapshotVersion = await getNextSnapshotVersion(sb, auditId, 'jim');
+
   // Create agent_runs record
   const runDate = date ?? getLatestDateDir(path.join(AUDITS_BASE, domain, 'research')) ?? new Date().toISOString().slice(0, 10);
   const { data: run } = await sb.from('agent_runs').insert({
@@ -415,10 +463,39 @@ async function syncJim(
     run_date: runDate,
     status: 'completed',
     source_path: path.relative(AUDITS_BASE, dir),
+    snapshot_version: snapshotVersion,
     metadata: { keyword_count: keywords.length, near_miss_count: nearMiss.length },
   }).select('id').single();
 
-  return run?.id ?? null;
+  const agentRunId = run?.id ?? null;
+
+  // Record snapshot
+  await recordSnapshot(sb, auditId, 'jim', snapshotVersion, agentRunId, keywordRecords.length);
+
+  // Update staleness timestamp
+  await updateStalenessTimestamp(sb, auditId, 'jim');
+
+  // Baseline snapshot capture (first sync only)
+  const { count: baselineCount } = await sb
+    .from('baseline_snapshots')
+    .select('id', { count: 'exact', head: true })
+    .eq('audit_id', auditId);
+
+  if ((baselineCount ?? 0) === 0 && nearMiss.length > 0) {
+    const baselineRecords = nearMiss.map((kw) => ({
+      audit_id: auditId,
+      keyword: kw.keyword,
+      baseline_rank: kw.rank_pos,
+      baseline_volume: kw.search_volume,
+    }));
+    for (let i = 0; i < baselineRecords.length; i += 500) {
+      const batch = baselineRecords.slice(i, i + 500);
+      await sb.from('baseline_snapshots').upsert(batch, { onConflict: 'audit_id,keyword' });
+    }
+    console.log(`  [jim] Captured ${baselineRecords.length} baseline snapshots`);
+  }
+
+  return agentRunId;
 }
 
 // ============================================================
@@ -557,6 +634,12 @@ async function syncDwight(
   const flagged = pageRecords.filter((p) => p.semantic_flag);
   console.log(`  [dwight] ${flagged.length} pages with semantic flags`);
 
+  // Record snapshot and update staleness
+  const snapshotVersion = await getNextSnapshotVersion(sb, auditId, 'dwight');
+  await sb.from('agent_runs').update({ snapshot_version: snapshotVersion }).eq('id', agentRunId);
+  await recordSnapshot(sb, auditId, 'dwight', snapshotVersion, agentRunId, pageRecords.length);
+  await updateStalenessTimestamp(sb, auditId, 'dwight');
+
   return agentRunId;
 }
 
@@ -686,14 +769,63 @@ async function syncMichael(
   }
 
   // Insert blueprint
+  const snapshotVersion = await getNextSnapshotVersion(sb, auditId, 'michael');
   const { error: bpErr } = await sb.from('agent_architecture_blueprint').insert({
     audit_id: auditId,
     agent_run_id: agentRunId,
     blueprint_markdown: markdown,
     executive_summary: summary || null,
+    snapshot_version: snapshotVersion,
   });
   if (bpErr) throw new Error(`blueprint insert failed: ${bpErr.message}`);
   console.log(`  [michael] Inserted blueprint (${Math.round(markdown.length / 1024)}KB)`);
+
+  // Seed execution_pages with page_brief from architecture pages
+  if (pages.length > 0) {
+    const execRecords = pages.map((p) => ({
+      audit_id: auditId,
+      url_slug: p.url_slug,
+      silo: p.silo_name || null,
+      priority: p.action_required === 'create' ? 1 : p.action_required === 'optimize' ? 2 : p.action_required === 'differentiate' ? 3 : 4,
+      status: 'brief_ready',
+      page_brief: {
+        silo_name: p.silo_name,
+        role: p.role,
+        primary_keyword: p.primary_keyword,
+        primary_keyword_volume: p.primary_keyword_volume,
+        action_required: p.action_required,
+        page_status: p.page_status,
+      },
+      snapshot_version: snapshotVersion,
+    }));
+
+    // Upsert: if page exists, update page_brief but preserve status and Pam fields
+    for (const rec of execRecords) {
+      const { data: existing } = await sb
+        .from('execution_pages')
+        .select('id')
+        .eq('audit_id', auditId)
+        .eq('url_slug', rec.url_slug)
+        .maybeSingle();
+
+      if (existing) {
+        await sb.from('execution_pages').update({
+          page_brief: rec.page_brief,
+          silo: rec.silo,
+          priority: rec.priority,
+          snapshot_version: rec.snapshot_version,
+        }).eq('id', (existing as any).id);
+      } else {
+        await sb.from('execution_pages').insert(rec);
+      }
+    }
+    console.log(`  [michael] Seeded ${execRecords.length} execution page briefs`);
+  }
+
+  // Record snapshot and update staleness
+  await sb.from('agent_runs').update({ snapshot_version: snapshotVersion }).eq('id', agentRunId);
+  await recordSnapshot(sb, auditId, 'michael', snapshotVersion, agentRunId, pages.length);
+  await updateStalenessTimestamp(sb, auditId, 'michael');
 
   return agentRunId;
 }
@@ -770,7 +902,9 @@ async function syncPam(
 
   console.log(`  [pam] Found ${slugDirs.length} page slugs: ${slugDirs.join(', ')}`);
 
-  // Clear prior implementation pages
+  const snapshotVersion = await getNextSnapshotVersion(sb, auditId, 'pam');
+
+  // Also write to legacy table for backward compat
   await sb.from('agent_implementation_pages').delete().eq('audit_id', auditId);
 
   const runDate = dateStr;
@@ -780,6 +914,7 @@ async function syncPam(
     run_date: runDate,
     status: 'completed',
     source_path: path.relative(AUDITS_BASE, contentDir),
+    snapshot_version: snapshotVersion,
     metadata: { page_count: slugDirs.length },
   }).select('id').single();
 
@@ -826,11 +961,53 @@ async function syncPam(
     });
   }
 
+  // Write to legacy agent_implementation_pages (backward compat)
   if (pageRecords.length > 0) {
     const { error } = await sb.from('agent_implementation_pages').insert(pageRecords);
     if (error) throw new Error(`implementation pages insert failed: ${error.message}`);
-    console.log(`  [pam] Inserted ${pageRecords.length} implementation pages`);
+    console.log(`  [pam] Inserted ${pageRecords.length} legacy implementation pages`);
   }
+
+  // Upsert into execution_pages: update Pam fields, preserve page_brief and status
+  for (const rec of pageRecords) {
+    const { data: existing } = await sb
+      .from('execution_pages')
+      .select('id, status')
+      .eq('audit_id', auditId)
+      .eq('url_slug', rec.url_slug)
+      .maybeSingle();
+
+    const pamFields = {
+      meta_title: rec.meta_title,
+      meta_description: rec.meta_description,
+      h1_recommendation: rec.h1_recommendation,
+      intent_classification: rec.intent_classification,
+      metadata_markdown: rec.metadata_markdown,
+      schema_json: rec.schema_json,
+      content_outline_markdown: rec.content_outline_markdown,
+      target_word_count: rec.target_word_count,
+      agent_run_id: agentRunId,
+      snapshot_version: snapshotVersion,
+    };
+
+    if (existing) {
+      // Preserve existing status and page_brief
+      await sb.from('execution_pages').update(pamFields).eq('id', (existing as any).id);
+    } else {
+      // New page — insert with brief_ready status
+      await sb.from('execution_pages').insert({
+        audit_id: auditId,
+        url_slug: rec.url_slug,
+        status: 'brief_ready',
+        ...pamFields,
+      });
+    }
+  }
+  console.log(`  [pam] Upserted ${pageRecords.length} execution pages`);
+
+  // Record snapshot and update staleness
+  await recordSnapshot(sb, auditId, 'pam', snapshotVersion, agentRunId, pageRecords.length);
+  await updateStalenessTimestamp(sb, auditId, 'pam');
 
   return agentRunId;
 }

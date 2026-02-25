@@ -60,6 +60,15 @@ When the target domain's brand name contains a common/generic word (e.g., "veter
 - "express plumbing repair" → has "plumbing" + "repair" → keep
 - "express delivery" → no service word → branded noise → exclude
 
+### D. Scope Boundary
+
+Your role is data discovery — surface keywords, clusters, and competitive landscape. Do NOT include:
+- "Quick Wins" or action-item lists (Michael handles strategy)
+- "Recommendations" or implementation steps (Pam handles execution)
+- Architecture or content structure advice
+
+End your synthesis at Content Gap Observations. If you notice strategic opportunities, note them as data observations (e.g., "3 competitors rank for X but client does not") rather than prescriptive advice.
+
 ## Tooling Usage
 
 ### `scripts/foundational_scout.sh`
