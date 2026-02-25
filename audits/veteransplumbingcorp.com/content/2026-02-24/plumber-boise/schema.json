@@ -1,0 +1,327 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": ["Plumber", "LocalBusiness"],
+      "@id": "https://www.veteransplumbingcorp.com/#organization",
+      "name": "Veterans Plumbing Corp",
+      "url": "https://www.veteransplumbingcorp.com",
+      "telephone": "+1-208-REPLACE",
+      "description": "Veteran-owned plumbing company serving Boise, Idaho and the Treasure Valley. Licensed and insured residential plumbing, water heater, and water softener services.",
+      "image": "https://www.veteransplumbingcorp.com/REPLACE-logo.png",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "REPLACE WITH STREET ADDRESS",
+        "addressLocality": "Boise",
+        "addressRegion": "ID",
+        "postalCode": "REPLACE",
+        "addressCountry": "US"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": "43.6150",
+        "longitude": "-116.2023"
+      },
+      "areaServed": [
+        {
+          "@type": "City",
+          "name": "Boise",
+          "sameAs": "https://en.wikipedia.org/wiki/Boise,_Idaho"
+        },
+        {
+          "@type": "City",
+          "name": "Meridian",
+          "sameAs": "https://en.wikipedia.org/wiki/Meridian,_Idaho"
+        },
+        {
+          "@type": "City",
+          "name": "Nampa",
+          "sameAs": "https://en.wikipedia.org/wiki/Nampa,_Idaho"
+        },
+        {
+          "@type": "City",
+          "name": "Kuna",
+          "sameAs": "https://en.wikipedia.org/wiki/Kuna,_Idaho"
+        },
+        {
+          "@type": "City",
+          "name": "Eagle",
+          "sameAs": "https://en.wikipedia.org/wiki/Eagle,_Idaho"
+        }
+      ],
+      "sameAs": [
+        "REPLACE_WITH_GOOGLE_BUSINESS_PROFILE_URL",
+        "REPLACE_WITH_FACEBOOK_URL",
+        "REPLACE_WITH_YELP_URL"
+      ],
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "REPLACE",
+        "reviewCount": "REPLACE",
+        "bestRating": "5",
+        "worstRating": "1"
+      },
+      "priceRange": "$$",
+      "openingHoursSpecification": [
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+          "opens": "08:00",
+          "closes": "17:00"
+        }
+      ],
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Plumbing Services",
+        "itemListElement": [
+          {
+            "@type": "OfferCatalog",
+            "name": "Residential Plumbing",
+            "itemListElement": [
+              {
+                "@type": "Offer",
+                "itemOffered": {
+                  "@type": "Service",
+                  "name": "Plumbing Repairs"
+                }
+              },
+              {
+                "@type": "Offer",
+                "itemOffered": {
+                  "@type": "Service",
+                  "name": "Emergency Plumbing"
+                }
+              },
+              {
+                "@type": "Offer",
+                "itemOffered": {
+                  "@type": "Service",
+                  "name": "Water Heater Installation and Repair"
+                }
+              },
+              {
+                "@type": "Offer",
+                "itemOffered": {
+                  "@type": "Service",
+                  "name": "Water Softener Systems"
+                }
+              },
+              {
+                "@type": "Offer",
+                "itemOffered": {
+                  "@type": "Service",
+                  "name": "Drain Cleaning"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://www.veteransplumbingcorp.com/#website",
+      "name": "Veterans Plumbing Corp",
+      "url": "https://www.veteransplumbingcorp.com",
+      "publisher": {
+        "@id": "https://www.veteransplumbingcorp.com/#organization"
+      },
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://www.veteransplumbingcorp.com/?s={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://www.veteransplumbingcorp.com/plumber-boise/#webpage",
+      "name": "Plumbers in Boise, ID | Veteran-Owned | Veterans Plumbing",
+      "description": "Licensed plumbers in Boise serving the Treasure Valley. Fast repairs, water heaters, and drain cleaning. Veteran-owned with 5-star Google reviews. Call today.",
+      "url": "https://www.veteransplumbingcorp.com/plumber-boise",
+      "isPartOf": {
+        "@id": "https://www.veteransplumbingcorp.com/#website"
+      },
+      "about": {
+        "@id": "https://www.veteransplumbingcorp.com/#organization"
+      },
+      "primaryImageOfPage": {
+        "@type": "ImageObject",
+        "url": "REPLACE_WITH_HERO_IMAGE_URL",
+        "width": 1200,
+        "height": 630
+      },
+      "breadcrumb": {
+        "@type": "BreadcrumbList",
+        "@id": "https://www.veteransplumbingcorp.com/plumber-boise/#breadcrumb",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://www.veteransplumbingcorp.com/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Plumbers in Boise",
+            "item": "https://www.veteransplumbingcorp.com/plumber-boise"
+          }
+        ]
+      },
+      "inLanguage": "en-US",
+      "datePublished": "2026-02-24",
+      "dateModified": "2026-02-24"
+    },
+    {
+      "@type": "Service",
+      "@id": "https://www.veteransplumbingcorp.com/plumber-boise/#service",
+      "name": "Plumbing Services in Boise",
+      "description": "Full-service residential plumbing in Boise, Idaho. Veterans Plumbing Corp provides repairs, installations, water heater service, water softener systems, drain cleaning, and emergency plumbing for homes across the Treasure Valley.",
+      "provider": {
+        "@id": "https://www.veteransplumbingcorp.com/#organization"
+      },
+      "serviceType": "Plumbing",
+      "areaServed": [
+        {
+          "@type": "City",
+          "name": "Boise",
+          "sameAs": "https://en.wikipedia.org/wiki/Boise,_Idaho"
+        },
+        {
+          "@type": "City",
+          "name": "Meridian",
+          "sameAs": "https://en.wikipedia.org/wiki/Meridian,_Idaho"
+        },
+        {
+          "@type": "City",
+          "name": "Nampa",
+          "sameAs": "https://en.wikipedia.org/wiki/Nampa,_Idaho"
+        },
+        {
+          "@type": "City",
+          "name": "Kuna",
+          "sameAs": "https://en.wikipedia.org/wiki/Kuna,_Idaho"
+        },
+        {
+          "@type": "City",
+          "name": "Eagle",
+          "sameAs": "https://en.wikipedia.org/wiki/Eagle,_Idaho"
+        },
+        {
+          "@type": "City",
+          "name": "Star"
+        },
+        {
+          "@type": "City",
+          "name": "Garden City"
+        }
+      ],
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Boise Plumbing Services",
+        "itemListElement": [
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Residential Plumbing Repairs",
+              "description": "Leak repair, pipe replacement, fixture installation, and general plumbing repairs for Boise homes."
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Water Heater Installation and Repair",
+              "description": "Tank and tankless water heater installation, repair, and replacement in Boise, Idaho."
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Water Softener Systems",
+              "description": "Water softener installation and maintenance for Boise homes dealing with hard water."
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Drain Cleaning",
+              "description": "Professional drain cleaning and clog removal for residential plumbing systems in Boise."
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Emergency Plumbing",
+              "description": "Same-day emergency plumbing service for burst pipes, severe leaks, and water heater failures in Boise."
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "New Construction and Remodel Plumbing",
+              "description": "Rough-in plumbing for new home construction and bathroom or kitchen remodel projects in Boise."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://www.veteransplumbingcorp.com/plumber-boise/#faqpage",
+      "mainEntityOfPage": {
+        "@id": "https://www.veteransplumbingcorp.com/plumber-boise/#webpage"
+      },
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How much does a plumber cost in Boise, Idaho?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Most plumbing service calls in Boise range from $150 to $500 depending on the complexity of the job. Simple repairs like fixing a leaky faucet tend to be on the lower end, while water heater replacements or sewer line work can cost more. Veterans Plumbing Corp provides upfront pricing with no hidden fees — we give you a written quote before any work begins so you know exactly what to expect."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What plumbing services do you offer in Boise?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Veterans Plumbing Corp provides a full range of residential plumbing services in Boise, including leak and pipe repair, water heater installation and repair, water softener systems, drain cleaning, fixture installation, and new construction or remodel plumbing. We also offer emergency plumbing service for urgent issues like burst pipes or water heater failures."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do you offer emergency plumbing in Boise?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, Veterans Plumbing Corp offers same-day emergency plumbing service throughout Boise and the Treasure Valley. If you have a burst pipe, major leak, sewer backup, or water heater failure, call us and we will dispatch a licensed plumber to your home as quickly as possible. We understand that plumbing emergencies do not wait for business hours."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I choose the best plumber in Boise?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Look for a plumber who is licensed and insured in the state of Idaho, has strong Google reviews from verified customers, provides upfront pricing before starting work, and offers a warranty on their labor. Veterans Plumbing Corp checks every one of these boxes — we are a veteran-owned company with 5-star reviews and a commitment to honest, transparent service."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What areas near Boise do you serve?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Veterans Plumbing Corp serves the entire Treasure Valley, including Boise, Meridian, Nampa, Kuna, Eagle, Star, and Garden City. Whether you are in downtown Boise or the newer subdivisions in Meridian and Star, our licensed plumbers provide the same fast, reliable service across the region."
+          }
+        }
+      ]
+    }
+  ]
+}
