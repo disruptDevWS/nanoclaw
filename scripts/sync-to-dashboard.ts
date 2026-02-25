@@ -446,7 +446,11 @@ async function syncDwight(
   }
 
   console.log(`  [dwight] Parsing ${csvFile}`);
-  const csvContent = fs.readFileSync(csvFile, 'utf-8');
+  let csvContent = fs.readFileSync(csvFile, 'utf-8');
+  // Strip UTF-8 BOM if present (Screaming Frog exports include it)
+  if (csvContent.charCodeAt(0) === 0xfeff) {
+    csvContent = csvContent.slice(1);
+  }
   const rows: Record<string, string>[] = csvParse(csvContent, {
     columns: true,
     skip_empty_lines: true,
@@ -470,6 +474,24 @@ async function syncDwight(
 
   const agentRunId = run?.id ?? null;
 
+  // Load semantically_similar_report.csv if it exists (supplements internal_all.csv)
+  const semReportFile = path.join(dir, 'semantically_similar_report.csv');
+  const semMap = new Map<string, { closestUrl: string; score: number }>();
+  if (fs.existsSync(semReportFile)) {
+    let semCsv = fs.readFileSync(semReportFile, 'utf-8');
+    if (semCsv.charCodeAt(0) === 0xfeff) semCsv = semCsv.slice(1);
+    const semRows: Record<string, string>[] = csvParse(semCsv, { columns: true, skip_empty_lines: true, relax_column_count: true });
+    for (const sr of semRows) {
+      const addr = sr['Address'] || '';
+      const closest = sr['Closest Semantically Similar Address'] || '';
+      const score = parseFloat(sr['Semantic Similarity Score'] || '0') || 0;
+      if (addr && score > 0) {
+        semMap.set(addr, { closestUrl: closest, score });
+      }
+    }
+    if (semMap.size > 0) console.log(`  [dwight] Loaded ${semMap.size} semantic pairs from report`);
+  }
+
   // Filter to HTML pages only
   const htmlRows = rows.filter((r) => {
     const ct = r['Content Type'] ?? '';
@@ -477,8 +499,15 @@ async function syncDwight(
   });
 
   const pageRecords = htmlRows.map((r) => {
-    const semScore = parseFloat(r['Semantic Similarity Score'] || '0') || null;
-    const semUrl = r['Closest Semantically Similar Address'] || null;
+    const url = r['Address'] ?? '';
+    // Try inline columns first, fall back to semantic report
+    let semScore = parseFloat(r['Semantic Similarity Score'] || '0') || null;
+    let semUrl = r['Closest Semantically Similar Address'] || null;
+    if (!semScore && semMap.has(url)) {
+      const entry = semMap.get(url)!;
+      semScore = entry.score;
+      semUrl = entry.closestUrl;
+    }
     let semanticFlag: string | null = null;
     if (semScore && semScore >= NEAR_DUP_THRESHOLD) {
       semanticFlag = 'NEAR-DUP';
