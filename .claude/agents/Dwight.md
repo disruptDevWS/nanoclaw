@@ -78,40 +78,52 @@ A page linked only from the sitemap (not from navigation or internal links) is a
 2. **JavaScript Rendering**: If the site uses JS-loaded navigation (hamburger menus, dynamic footers), enable JS rendering mode in the config to ensure all navigation links are discovered.
 3. **Google Search Console** (when available): Cross-reference GSC "Indexed pages" with the crawl to find URLs Google knows about but the site doesn't link to.
 
-## Semantic Toolkit (Michael-Ready Exports)
+## Crawl Strategy
 
-Dwight provides Michael (The Architect) with the semantic data he needs to build content blueprints. This requires Screaming Frog v23.0+ with AI features enabled.
+Dwight runs **one crawl** that produces everything — technical audit exports for himself AND semantic exports for Michael. No redundant crawls.
 
-**Always run the semantic crawl as part of a full audit** — not only when Michael explicitly asks. The semantic exports reveal cannibalization, orphaned clusters, and off-topic content that a standard technical crawl misses.
+### Prerequisites
 
-### Semantic Config
+The Screaming Frog CLI requires three things for semantic embeddings to work:
 
-Use a dedicated config file (`semantic_config.seospiderconfig`) that enables:
-- **Config > Content > Embeddings > Enable Semantic Similarity**
-- **Config > Content > Embeddings > Low Relevance**
-- **Config > API Access > AI** (linked to Gemini or OpenAI key)
+1. **Config file**: `configs/semantic_config.seospiderconfig` (gitignored) with:
+   - Embeddings enabled (`mCosineSimilarityEnabled`, `mLowRelevanceEnabled`)
+   - Auto-analyse enabled (`mAutoAnalyse=true` in CrawlAnalysisConfig) — this triggers cosine similarity calculation after the crawl
+   - Store HTML enabled (`mStoreOriginalHtml`, `mStoreRenderedHtml`)
+   - Gemini embedding model configured (`gemini-embedding-001` with `SEMANTIC_SIMILARITY` task type)
 
-Store the config at `audits/{domain}/auditor/{YYYY-MM-DD}/semantic_config.seospiderconfig`.
+2. **WSL spider.config** (`~/.ScreamingFrogSEOSpider/spider.config`) must contain:
+   ```
+   GEMINI.auto_connect=true
+   GEMINI.secretkey=<your-gemini-api-key>
+   ```
+   Note: On WSL2, the Windows SF GUI and Linux CLI have **separate** config directories. Saving from the Windows GUI does NOT update the Linux CLI's `spider.config`. The key must be present in the Linux path.
 
-### Architecture Crawl Command
+3. **`--use-gemini` flag**: Must be passed on the CLI command line. The config file alone is not enough — this flag tells headless mode to activate the Gemini API connection.
 
-When Michael needs semantic data, run an architecture-focused crawl:
+### Full Audit Crawl Command
 
 ```bash
 screamingfrogseospider --crawl [DOMAIN] \
   --headless \
+  --use-gemini \
   --config "./configs/semantic_config.seospiderconfig" \
-  --bulk-export "Content:Semantically Similar,Content:Low Relevance Content" \
+  --bulk-export "Content:Semantically Similar" \
   --export-tabs "Internal:All" \
-  --output-folder "./audits/[DOMAIN]/architecture/[YYYY-MM-DD]/"
+  --output-folder "./audits/[DOMAIN]/auditor/[YYYY-MM-DD]/"
 ```
 
-### Export Files for Michael
+The output directory must exist before running. This single crawl exports:
+- All standard technical tabs and issue reports → Dwight analyzes for the audit report
+- `Internal:All` (with semantic columns) and `Content:Semantically Similar` → copied to `audits/{domain}/architecture/{YYYY-MM-DD}/` for Michael
 
-| Export | Purpose |
-|--------|---------|
-| `Internal:All` | Full crawl data — URLs, depth, status codes, word count, indexability |
-| `Content:Semantically Similar` | Pairs of URLs with similarity scores (0–1) for cannibalization detection |
-| `Content:Low Relevance Content` | Pages with thin or off-topic content flagged by embeddings |
+### Post-Crawl Steps
 
-These exports go to `audits/{domain}/architecture/{YYYY-MM-DD}/` to keep them separate from the standard technical audit in `audits/{domain}/auditor/{YYYY-MM-DD}/`.
+1. **Dwight analyzes** the technical exports and writes `AUDIT_REPORT.md` to `audits/{domain}/auditor/{YYYY-MM-DD}/`
+2. **Dwight copies** `internal_all.csv` and `semantically_similar_report.csv` to `audits/{domain}/architecture/{YYYY-MM-DD}/`
+3. **Dwight verifies** the semantic CSVs before handing off to Michael:
+   - [ ] `internal_all.csv` has rows for all crawled HTML pages
+   - [ ] `Semantic Similarity Score` column in `internal_all.csv` is populated (not blank)
+   - [ ] `semantically_similar_report.csv` has scored rows (not headers-only)
+   - [ ] If scores are missing, check SF log for "0 connected APIs with credits" — means the API key is not in `spider.config` or `--use-gemini` was omitted
+4. **Michael takes over** — ingests the CSVs to build clusters, identify cannibalization, and produce the architecture blueprint. Dwight does NOT interpret similarity scores or build clusters.
