@@ -617,6 +617,7 @@ async function syncJim(
           delta_revenue_high: 0,
         };
 
+    const topic = extractTopic(kw.keyword);
     return {
       audit_id: auditId,
       keyword: kw.keyword,
@@ -625,7 +626,8 @@ async function syncJim(
       cpc: kw.cpc,
       ranking_url: kw.ranking_url,
       intent: kw.intent,
-      topic: extractTopic(kw.keyword),
+      topic,
+      cluster: topic, // initial cluster from extracted topic; refined after canonicalization
       is_near_miss: isNearMiss,
       is_top_10: isTop10,
       is_striking_distance: isStrikingDistance,
@@ -647,6 +649,24 @@ async function syncJim(
   const { error: canonErr } = await sb.rpc('fn_canonicalize_audit_keywords', { p_audit_id: auditId });
   if (canonErr) {
     console.log(`  [jim] Canonicalization RPC failed: ${canonErr.message} — using legacy topics`);
+  } else {
+    // Refine cluster field from canonical_topic (better grouping than extractTopic)
+    const { data: canonRows } = await sb
+      .from('audit_keywords')
+      .select('id, canonical_topic')
+      .eq('audit_id', auditId)
+      .not('canonical_topic', 'is', null);
+    let clusterUpdated = 0;
+    for (const row of (canonRows ?? []) as any[]) {
+      const ct = String(row.canonical_topic).trim();
+      if (ct) {
+        await sb.from('audit_keywords').update({ cluster: ct }).eq('id', row.id);
+        clusterUpdated++;
+      }
+    }
+    if (clusterUpdated > 0) {
+      console.log(`  [jim] Refined cluster from canonical_topic for ${clusterUpdated} keywords`);
+    }
   }
 
   // Pull back keywords for clustering (only near-miss for revenue calculations)
@@ -1571,6 +1591,63 @@ async function syncMichael(
       }
     }
     console.log(`  [michael] Seeded ${execRecords.length} execution page briefs`);
+  }
+
+  // Backfill audit_keywords.cluster from silo assignments
+  // Strategy: match keywords to silos via (1) primary_keyword, (2) ranking_url → page slug
+  const pagesWithSilo = pages.filter((p) => p.silo_name);
+  if (pagesWithSilo.length > 0) {
+    // Build slug → silo map (normalize slugs for matching)
+    const siloBySlug = new Map<string, string>();
+    const siloByKeyword = new Map<string, string>();
+    for (const p of pagesWithSilo) {
+      const slug = p.url_slug.replace(/^\/+/, '').toLowerCase();
+      if (slug) siloBySlug.set(slug, p.silo_name);
+      const kw = (p.primary_keyword ?? '').toLowerCase().trim();
+      if (kw) siloByKeyword.set(kw, p.silo_name);
+    }
+
+    // Fetch all keywords with their ranking_url
+    const { data: allKw } = await sb
+      .from('audit_keywords')
+      .select('id, keyword, ranking_url')
+      .eq('audit_id', auditId);
+
+    let siloUpdated = 0;
+    for (const row of (allKw ?? []) as any[]) {
+      const kwLower = String(row.keyword).toLowerCase().trim();
+      let silo: string | undefined;
+
+      // (1) Exact primary_keyword match
+      silo = siloByKeyword.get(kwLower);
+
+      // (2) Substring match on primary_keyword
+      if (!silo && siloByKeyword.size > 0) {
+        for (const [pk, siloName] of siloByKeyword) {
+          if (kwLower.includes(pk) || pk.includes(kwLower)) {
+            silo = siloName;
+            break;
+          }
+        }
+      }
+
+      // (3) Match ranking_url against page slugs
+      if (!silo && row.ranking_url) {
+        const urlLower = String(row.ranking_url).toLowerCase();
+        for (const [slug, siloName] of siloBySlug) {
+          if (urlLower.includes(slug)) {
+            silo = siloName;
+            break;
+          }
+        }
+      }
+
+      if (silo) {
+        await sb.from('audit_keywords').update({ cluster: silo }).eq('id', row.id);
+        siloUpdated++;
+      }
+    }
+    console.log(`  [michael] Backfilled cluster (silo) for ${siloUpdated} of ${(allKw ?? []).length} keywords`);
   }
 
   // Record snapshot and update staleness
