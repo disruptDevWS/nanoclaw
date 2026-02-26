@@ -372,7 +372,7 @@ function parseResearchSummary(filePath: string): ParsedResearchSummary {
       /\|\s*(.+?)\s*\|\s*(\d+)\s*\|\s*([\d,]+)\s*\|/g
     );
     for (const row of rows) {
-      const url = row[1].trim();
+      const url = row[1].trim().replace(/^\|+\s*/, '');
       if (url.startsWith('URL') || url.includes('---')) continue;
       result.topRankingUrls.push({
         url,
@@ -435,7 +435,7 @@ function parseResearchSummary(filePath: string): ParsedResearchSummary {
       /\|\s*(.+?)\s*\|\s*([\d,]+)\s*\|\s*(\d+)\s*\|\s*\$?([\d.]+|N\/A)\s*\|\s*(\w+)\s*\|/g
     );
     for (const row of rows) {
-      const kw = row[1].trim();
+      const kw = row[1].trim().replace(/^\|+\s*/, '');
       if (kw.startsWith('Keyword') || kw.includes('---')) continue;
       result.strikingDistance.push({
         keyword: kw,
@@ -930,9 +930,9 @@ function parseAuditReport(filePath: string): ParsedAuditReport {
     );
     for (const row of rows) {
       result.agenticReadiness.push({
-        signal: row[1].trim(),
+        signal: row[1].trim().replace(/^\|+\s*/, ''),
         status: row[2].trim().toUpperCase(),
-        weight: row[3].trim(),
+        weight: row[3].trim().replace(/^\|+\s*/, ''),
       });
     }
   }
@@ -1035,6 +1035,80 @@ function parseAuditReport(filePath: string): ParsedAuditReport {
       .trim();
   }
 
+  // --- URL Identity Issues (Section 2) ---
+  const urlIdentityIssues: Array<{ url: string; behavior: string }> = [];
+  const urlIdSection = md.match(
+    /##\s*Section\s*2:\s*URL\s+Identity[\s\S]*?(?=\n---|\n##\s)/i
+  );
+  if (urlIdSection) {
+    const rows = urlIdSection[0].matchAll(
+      /\|\s*`?(\/.+?)`?\s*\|\s*(.+?)\s*\|/g
+    );
+    for (const row of rows) {
+      if (row[1].includes('---') || row[1].includes('Uppercase')) continue;
+      urlIdentityIssues.push({
+        url: row[1].trim(),
+        behavior: row[2].trim(),
+      });
+    }
+  }
+
+  // --- Metadata Quality (Section 4) ---
+  const metadataOverLengthTitles: Array<{ url: string; title: string; length: number; status: string }> = [];
+  const metadataOverLengthDescs: Array<{ url: string; length: number }> = [];
+  let metadataDeprecatedKeywords = false;
+
+  const titleSection = md.match(
+    /###\s*4\.1\s*Page\s+Titles[\s\S]*?(?=\n###\s*4\.2|\n##\s)/i
+  );
+  if (titleSection) {
+    const rows = titleSection[0].matchAll(
+      /\|\s*(\/.+?)\s*\|\s*(.+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\w+)\s*\|/g
+    );
+    for (const row of rows) {
+      if (row[1].includes('---') || row[1].includes('URL')) continue;
+      metadataOverLengthTitles.push({
+        url: row[1].trim(),
+        title: row[2].trim(),
+        length: parseInt(row[3], 10),
+        status: row[5].trim(),
+      });
+    }
+  }
+
+  const descSection = md.match(
+    /###\s*4\.2\s*Meta\s+Descriptions[\s\S]*?(?=\n##\s)/i
+  );
+  if (descSection) {
+    const rows = descSection[0].matchAll(
+      /\|\s*(\/.+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|/g
+    );
+    for (const row of rows) {
+      if (row[1].includes('---') || row[1].includes('URL')) continue;
+      metadataOverLengthDescs.push({
+        url: row[1].trim(),
+        length: parseInt(row[2], 10),
+      });
+    }
+    metadataDeprecatedKeywords = /meta\s+keywords.*deprecated/i.test(descSection[0]);
+  }
+
+  // --- Image Health (Section 8) ---
+  const imageIssues: { missing_alt: number; oversized: number; missing_size: number } = {
+    missing_alt: 0, oversized: 0, missing_size: 0,
+  };
+  const imgSection = md.match(
+    /##\s*Section\s*8:\s*Image\s+Health[\s\S]*?(?=\n---|\n##\s)/i
+  );
+  if (imgSection) {
+    const altMatch = imgSection[0].match(/(\d+)\s*image.*missing\s+alt/i);
+    if (altMatch) imageIssues.missing_alt = parseInt(altMatch[1], 10);
+    const oversizeMatch = imgSection[0].match(/(\d+)\s*images?\s+exceed\s+100/i);
+    if (oversizeMatch) imageIssues.oversized = parseInt(oversizeMatch[1], 10);
+    const sizeAttrMatch = imgSection[0].match(/(\d+)\s*image.*missing.*(?:width|height|size\s+attributes)/i);
+    if (sizeAttrMatch) imageIssues.missing_size = parseInt(sizeAttrMatch[1], 10);
+  }
+
   // --- Site Metadata ---
   const toolMatch = md.match(/\*\*Tool:\*\*\s*(.+)/i);
   const dateMatch = md.match(/\*\*Audit Date:\*\*\s*(.+)/i);
@@ -1045,6 +1119,13 @@ function parseAuditReport(filePath: string): ParsedAuditReport {
     crawl_date: dateMatch?.[1]?.trim() ?? '',
     crawl_scope: scopeMatch?.[1]?.trim() ?? '',
     platform_detected: result.platformNotes.includes('DudaSite') ? 'DudaSite' : '',
+    url_identity_issues: JSON.stringify(urlIdentityIssues),
+    metadata_over_length_titles: JSON.stringify(metadataOverLengthTitles),
+    metadata_over_length_descs: JSON.stringify(metadataOverLengthDescs),
+    metadata_deprecated_keywords: metadataDeprecatedKeywords ? 'true' : 'false',
+    image_missing_alt: String(imageIssues.missing_alt),
+    image_oversized: String(imageIssues.oversized),
+    image_missing_size: String(imageIssues.missing_size),
   };
 
   const passing = result.agenticReadiness.filter((a) => a.status === 'PASS').length;
@@ -1214,15 +1295,25 @@ async function syncDwight(
   const flagged = pageRecords.filter((p) => p.semantic_flag);
   console.log(`  [dwight] ${flagged.length} pages with semantic flags`);
 
-  // Parse AUDIT_REPORT.md for site-level findings
-  const reportFile = path.join(dir, 'AUDIT_REPORT.md');
+  // Parse AUDIT_REPORT.md for site-level findings — check current dir, then other date dirs
+  let reportFile = path.join(dir, 'AUDIT_REPORT.md');
+  if (!fs.existsSync(reportFile)) {
+    const auditorBase = path.join(AUDITS_BASE, domain, 'auditor');
+    if (fs.existsSync(auditorBase)) {
+      const dateDirs = fs.readdirSync(auditorBase).filter((e: string) => /^\d{4}-\d{2}-\d{2}$/.test(e)).sort().reverse();
+      for (const d of dateDirs) {
+        const candidate = path.join(auditorBase, d, 'AUDIT_REPORT.md');
+        if (fs.existsSync(candidate)) { reportFile = candidate; break; }
+      }
+    }
+  }
   let parsedReport: ParsedAuditReport | null = null;
   if (fs.existsSync(reportFile)) {
     console.log(`  [dwight] Parsing ${reportFile} for site-level findings`);
     parsedReport = parseAuditReport(reportFile);
-    console.log(`  [dwight] Extracted: ${parsedReport.prioritizedFixes.length} fixes, ${parsedReport.agenticReadiness.length} agentic signals, ${parsedReport.structuredDataIssues.length} schema issues, ${parsedReport.headingIssues.length} heading issues, ${parsedReport.securityIssues.length} security issues`);
+    console.log(`  [dwight] Extracted: ${parsedReport.prioritizedFixes.length} fixes, ${parsedReport.agenticReadiness.length} agentic signals, ${parsedReport.structuredDataIssues.length} schema issues, ${parsedReport.headingIssues.length} heading issues, ${parsedReport.securityIssues.length} security issues, ${JSON.parse(parsedReport.siteMetadata.url_identity_issues || '[]').length} URL identity issues, ${JSON.parse(parsedReport.siteMetadata.metadata_over_length_titles || '[]').length} over-length titles`);
   } else {
-    console.log(`  [dwight] No AUDIT_REPORT.md found — site-level findings will be empty`);
+    console.log(`  [dwight] No AUDIT_REPORT.md found in any auditor directory — site-level findings will be empty`);
   }
 
   // Record snapshot with site-level findings and update staleness
