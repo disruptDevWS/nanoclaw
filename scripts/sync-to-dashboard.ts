@@ -1535,7 +1535,7 @@ async function syncMichael(
       url_slug: p.url_slug,
       silo: p.silo_name || null,
       priority: p.action_required === 'create' ? 1 : p.action_required === 'optimize' ? 2 : p.action_required === 'differentiate' ? 3 : 4,
-      status: 'brief_ready',
+      status: 'not_started',
       page_brief: {
         silo_name: p.silo_name,
         role: p.role,
@@ -1549,22 +1549,25 @@ async function syncMichael(
 
     // Upsert: if page exists, update page_brief but preserve status and Pam fields
     for (const rec of execRecords) {
+      // Match existing record by slug (handle legacy leading-slash variants)
+      const slug = rec.url_slug.replace(/^\/+/, '');
       const { data: existing } = await sb
         .from('execution_pages')
         .select('id')
         .eq('audit_id', auditId)
-        .eq('url_slug', rec.url_slug)
+        .or(`url_slug.eq.${slug},url_slug.eq./${slug}`)
         .maybeSingle();
 
       if (existing) {
         await sb.from('execution_pages').update({
+          url_slug: slug, // normalize
           page_brief: rec.page_brief,
           silo: rec.silo,
           priority: rec.priority,
           snapshot_version: rec.snapshot_version,
         }).eq('id', (existing as any).id);
       } else {
-        await sb.from('execution_pages').insert(rec);
+        await sb.from('execution_pages').insert({ ...rec, url_slug: slug });
       }
     }
     console.log(`  [michael] Seeded ${execRecords.length} execution page briefs`);
@@ -1718,14 +1721,17 @@ async function syncPam(
 
   // Upsert into execution_pages: update Pam fields, preserve page_brief and status
   for (const rec of pageRecords) {
+    // Match existing record by slug (handle legacy leading-slash variants)
+    const slug = rec.url_slug.replace(/^\/+/, '');
     const { data: existing } = await sb
       .from('execution_pages')
       .select('id, status')
       .eq('audit_id', auditId)
-      .eq('url_slug', rec.url_slug)
+      .or(`url_slug.eq.${slug},url_slug.eq./${slug}`)
       .maybeSingle();
 
     const pamFields = {
+      url_slug: slug, // normalize
       meta_title: rec.meta_title,
       meta_description: rec.meta_description,
       h1_recommendation: rec.h1_recommendation,
@@ -1739,13 +1745,13 @@ async function syncPam(
     };
 
     if (existing) {
-      // Preserve existing status and page_brief
-      await sb.from('execution_pages').update(pamFields).eq('id', (existing as any).id);
+      // Promote not_started → brief_ready now that Pam has content; preserve other statuses
+      const statusUpdate = (existing as any).status === 'not_started' ? { status: 'brief_ready' as const } : {};
+      await sb.from('execution_pages').update({ ...pamFields, ...statusUpdate }).eq('id', (existing as any).id);
     } else {
-      // New page — insert with brief_ready status
+      // New page from Pam — brief_ready since content already exists
       await sb.from('execution_pages').insert({
         audit_id: auditId,
-        url_slug: rec.url_slug,
         status: 'brief_ready',
         ...pamFields,
       });
