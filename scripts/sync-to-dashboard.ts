@@ -1050,7 +1050,17 @@ function parseAuditReport(filePath: string): ParsedAuditReport {
   const passing = result.agenticReadiness.filter((a) => a.status === 'PASS').length;
   const total = result.agenticReadiness.length;
   if (total > 0) {
-    result.siteMetadata.agentic_readiness_score = `${passing}/${total}`;
+    const WEIGHT_POINTS: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
+    let earned = 0, maxPts = 0;
+    for (const a of result.agenticReadiness) {
+      const pts = WEIGHT_POINTS[a.weight] ?? 1;
+      maxPts += pts;
+      if (a.status === 'PASS') earned += pts;
+    }
+    const pct = maxPts > 0 ? Math.round((earned / maxPts) * 100) : 0;
+    result.siteMetadata.agentic_readiness_score = `${pct}%`;
+    result.siteMetadata.agentic_readiness_raw = `${passing}/${total}`;
+    result.siteMetadata.agentic_readiness_points = `${earned}/${maxPts}`;
   }
 
   return result;
