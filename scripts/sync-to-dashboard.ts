@@ -1120,9 +1120,18 @@ async function syncDwight(
   const agentRunId = run?.id ?? null;
 
   // Load semantically_similar_report.csv if it exists (supplements internal_all.csv)
-  const semReportFile = path.join(dir, 'semantically_similar_report.csv');
+  // Also check the architecture directory as a fallback — semantic analysis may live there
+  const semCandidates = [
+    path.join(dir, 'semantically_similar_report.csv'),
+  ];
+  const archDir = agentDir(domain, 'architecture', date);
+  if (archDir) {
+    semCandidates.push(path.join(archDir, 'semantically_similar_report.csv'));
+  }
+
   const semMap = new Map<string, { closestUrl: string; score: number }>();
-  if (fs.existsSync(semReportFile)) {
+  for (const semReportFile of semCandidates) {
+    if (!fs.existsSync(semReportFile)) continue;
     let semCsv = fs.readFileSync(semReportFile, 'utf-8');
     if (semCsv.charCodeAt(0) === 0xfeff) semCsv = semCsv.slice(1);
     const semRows: Record<string, string>[] = csvParse(semCsv, { columns: true, skip_empty_lines: true, relax_column_count: true });
@@ -1130,11 +1139,14 @@ async function syncDwight(
       const addr = sr['Address'] || '';
       const closest = sr['Closest Semantically Similar Address'] || '';
       const score = parseFloat(sr['Semantic Similarity Score'] || '0') || 0;
-      if (addr && score > 0) {
+      if (addr && score > 0 && !semMap.has(addr)) {
         semMap.set(addr, { closestUrl: closest, score });
       }
     }
-    if (semMap.size > 0) console.log(`  [dwight] Loaded ${semMap.size} semantic pairs from report`);
+    if (semMap.size > 0) {
+      console.log(`  [dwight] Loaded ${semMap.size} semantic pairs from ${path.basename(path.dirname(semReportFile))} report`);
+      break; // first source with data wins
+    }
   }
 
   // Filter to HTML pages only
@@ -1262,22 +1274,67 @@ function parseArchitectureBlueprint(filePath: string): { pages: ArchPage[]; mark
     summary = summaryMatch[1].trim();
   }
 
-  // Parse markdown tables for page assignments
-  // Look for tables with columns like: Slug/URL, Status, Silo, Role, Keyword, Volume, Action
+  // Parse silo page assignments from markdown tables under "### Silo" headings.
+  // Tables outside silo sections (cannibalization, metadata, schema, etc.) are skipped.
   const pages: ArchPage[] = [];
+  const seenSlugs = new Set<string>();
+
+  // Build a map of character offsets → silo names from "### Silo N: Name" headings
+  const siloHeadings: Array<{ offset: number; name: string }> = [];
+  const siloHeadingRegex = /^###\s+Silo\s+\d+:\s*(.+)$/gm;
+  let siloMatch: RegExpExecArray | null;
+  while ((siloMatch = siloHeadingRegex.exec(markdown)) !== null) {
+    siloHeadings.push({ offset: siloMatch.index, name: siloMatch[1].trim() });
+  }
+
+  // Find the next heading after each silo to bound its range
+  const allHeadingOffsets: number[] = [];
+  const headingBoundaryRegex = /^#{2,3}\s/gm;
+  let hm: RegExpExecArray | null;
+  while ((hm = headingBoundaryRegex.exec(markdown)) !== null) {
+    allHeadingOffsets.push(hm.index);
+  }
+
+  // Build offsets for ## headings (Part boundaries) to limit silo scope
+  const partHeadingOffsets: number[] = [];
+  const partHeadingRegex = /^##\s/gm;
+  let pm: RegExpExecArray | null;
+  while ((pm = partHeadingRegex.exec(markdown)) !== null) {
+    partHeadingOffsets.push(pm.index);
+  }
+
+  function getSiloForOffset(offset: number): string | null {
+    for (let i = siloHeadings.length - 1; i >= 0; i--) {
+      if (offset >= siloHeadings[i].offset) {
+        // Bound at: next silo heading, or next ## heading after this silo, whichever is first
+        const nextSiloOffset = i + 1 < siloHeadings.length ? siloHeadings[i + 1].offset : Infinity;
+        const nextPartOffset = partHeadingOffsets.find((o) => o > siloHeadings[i].offset) ?? Infinity;
+        const bound = Math.min(nextSiloOffset, nextPartOffset);
+        if (offset < bound) return siloHeadings[i].name;
+        return null;
+      }
+    }
+    return null;
+  }
+
   const tableRegex = /\|(.+)\|\n\|[-\s|:]+\|\n((?:\|.+\|\n?)*)/g;
   let match: RegExpExecArray | null;
 
   while ((match = tableRegex.exec(markdown)) !== null) {
+    // Only process tables inside silo sections
+    const siloName = getSiloForOffset(match.index);
+    if (!siloName) continue;
+
     const headerLine = match[1];
     const headers = headerLine.split('|').map((h) => h.trim().toLowerCase());
 
-    // Check if this table has page-related columns
-    const slugIdx = headers.findIndex((h) => h.includes('slug') || h.includes('url') || h.includes('page') || h.includes('path'));
-    const siloIdx = headers.findIndex((h) => h.includes('silo') || h.includes('cluster') || h.includes('topic'));
+    // Check if this table has page-related columns — prefer url/slug/path over generic 'page'
+    let slugIdx = headers.findIndex((h) => h.includes('slug') || h.includes('url') || h.includes('path'));
+    if (slugIdx < 0) slugIdx = headers.findIndex((h) => h.includes('page'));
     if (slugIdx < 0) continue;
 
     const statusIdx = headers.findIndex((h) => h.includes('status') || h.includes('exists') || h.includes('new'));
+    const siloColIdx = headers.findIndex((h) => h.includes('silo') || h.includes('cluster'));
     const roleIdx = headers.findIndex((h) => h.includes('role') || h.includes('type'));
     const kwIdx = headers.findIndex((h) => h.includes('keyword') || h.includes('target'));
     const volIdx = headers.findIndex((h) => h.includes('volume') || h.includes('vol'));
@@ -1291,10 +1348,15 @@ function parseArchitectureBlueprint(filePath: string): { pages: ArchPage[]; mark
       const slug = cells[slugIdx] ?? '';
       if (!slug || slug.startsWith('-')) continue;
 
+      const cleanSlug = slug.replace(/^\//, '').replace(/`/g, '');
+      // Deduplicate: first silo assignment wins
+      if (seenSlugs.has(cleanSlug.toLowerCase())) continue;
+      seenSlugs.add(cleanSlug.toLowerCase());
+
       pages.push({
-        url_slug: slug.replace(/^\//, '').replace(/`/g, ''),
+        url_slug: cleanSlug,
         page_status: statusIdx >= 0 ? (cells[statusIdx] ?? '').toLowerCase().replace(/[*`]/g, '') : 'unknown',
-        silo_name: siloIdx >= 0 ? (cells[siloIdx] ?? '').replace(/[*`]/g, '') : '',
+        silo_name: siloColIdx >= 0 ? (cells[siloColIdx] ?? '').replace(/[*`]/g, '') : siloName,
         role: roleIdx >= 0 ? (cells[roleIdx] ?? '').replace(/[*`]/g, '') : '',
         primary_keyword: kwIdx >= 0 ? (cells[kwIdx] ?? '').replace(/[*`]/g, '') : '',
         primary_keyword_volume: volIdx >= 0 ? parseInt(cells[volIdx] ?? '0', 10) || 0 : 0,
