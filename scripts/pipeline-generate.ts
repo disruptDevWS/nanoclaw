@@ -94,14 +94,19 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function callClaude(prompt: string, model = 'sonnet'): string {
+function callClaude(prompt: string, model = 'sonnet', timeoutMs = 600_000): string {
   const claudeBin = process.env.CLAUDE_BIN || '/home/forgegrowth/.local/share/fnm/node-versions/v22.22.0/installation/bin/claude';
   const childEnv = { ...process.env };
   delete childEnv.CLAUDECODE;
   return child_process.execSync(
     `${claudeBin} --print --max-turns 1 --model ${model}`,
-    { input: prompt, encoding: 'utf-8', timeout: 300_000, maxBuffer: 10 * 1024 * 1024, env: childEnv },
+    { input: prompt, encoding: 'utf-8', timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024, env: childEnv },
   );
+}
+
+function stripCodeFences(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  return fenced ? fenced[1].trim() : text.trim();
 }
 
 async function resolveAudit(sb: SupabaseClient, domain: string, userEmail: string) {
@@ -305,13 +310,13 @@ async function runJim(sb: SupabaseClient, auditId: string, domain: string) {
 - Striking distance (pos 11-20): ${strikingDistance.slice(0, 10).map((s) => `"${s.keyword}" vol=${s.volume} pos=${s.position}`).join('; ')}
 - Top competitors: ${competitorAnalysis.slice(0, 5).map((c) => `${c.domain} (${c.shared_keywords} shared)`).join('; ')}
 
-Respond with ONLY valid JSON, no markdown fences.`;
+CRITICAL: Respond with raw JSON only. Do NOT wrap in markdown code fences. No \`\`\`json blocks. Just the bare JSON object starting with {.`;
 
   let contentGapObservations: string[] = [];
   let keyTakeaways: Array<{ section: string; takeaway: string }> = [];
   try {
     const narrativeResult = callClaude(narrativePrompt, 'haiku');
-    const parsed = JSON.parse(narrativeResult.trim());
+    const parsed = JSON.parse(stripCodeFences(narrativeResult));
     contentGapObservations = parsed.content_gap_observations ?? [];
     keyTakeaways = parsed.key_takeaways ?? [];
     console.log(`  Narrative: ${contentGapObservations.length} observations, ${keyTakeaways.length} takeaways`);
