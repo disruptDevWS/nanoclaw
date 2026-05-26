@@ -376,6 +376,11 @@ if should_run_phase 6c; then
 echo ""
 echo "--- Phase 6c: Sync Dwight → Supabase ---"
 npx tsx scripts/sync-to-dashboard.ts --domain "$DOMAIN" --user-email "$EMAIL" --agents dwight${START_FROM:+ --start-from "$START_FROM"}
+elif should_run_phase 1; then
+# Auto-sync: Phase 1 (Dwight) ran but Phase 6c was outside --stop-after range
+echo ""
+echo "--- Auto-sync: Dwight → Supabase (Phase 1 ran, 6c was out of range) ---"
+npx tsx scripts/sync-to-dashboard.ts --domain "$DOMAIN" --user-email "$EMAIL" --agents dwight
 else echo "  [SKIP] Phase 6c: Sync Dwight"; fi
 
 # ─── Phase 6d: Local Presence Diagnostic (GBP + Citations) ────

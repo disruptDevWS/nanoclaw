@@ -674,6 +674,7 @@ function buildCorrections(
     const sitemapFlagged =
       /no\s+(xml\s+)?sitemap/i.test(reportContent) ||
       /sitemap.*missing/i.test(reportContent) ||
+      /sitemap.*absent/i.test(reportContent) ||
       /sitemap.*0%/i.test(reportContent) ||
       /in\s+sitemap:\s*no/i.test(reportContent);
     if (sitemapFlagged) {
