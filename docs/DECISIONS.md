@@ -1108,3 +1108,21 @@ Key choices:
 - **Hardcoded event names**: filtered to 4 known conversion events (`registration_complete`, `contact_form_submit`, `click_phone`, `purchase`) rather than fetching all events — keeps data focused and avoids noise from standard GA4 events like `page_view`
 - **Same 28-day window**: consistent with page-level fetch for comparable date ranges
 - **Non-fatal**: wrapped in the same try/catch as step 9 — GA4 failures don't block ranking tracking
+
+---
+
+**2026-05-27: Report access control — in-code registry, not DB table**
+
+Reports are gated behind auth using a `REPORT_REGISTRY` array in `src/constants/report-registry.ts` rather than a Supabase table. Each entry maps a slug to audit IDs. Access is checked by comparing the user's RLS-visible audits against the report's `auditIds` list; `super_admin` bypasses.
+
+Why not a DB table:
+- Only 5 reports currently — no migration overhead justified
+- Report metadata (title, category, date) is static and tightly coupled to the component code
+- Adding a report means adding a component file anyway, so adding a registry entry at the same time is natural
+- Zero-migration, zero-RLS-policy complexity
+
+If the report count exceeds ~15 or clients need self-service report management, migrate to a `reports` table with FK to `audits`.
+
+**2026-05-27: Intelligence brief HTML conversion — dangerouslySetInnerHTML, not full JSX**
+
+The IMA and SMA intelligence brief HTML files (1004 and 1275 lines) were too large for full JSX conversion (exceeded 32k output token limits in agents). Used scoped CSS + `dangerouslySetInnerHTML` for the body content. This is safe because: (1) content is static, pre-authored by Forge Growth — not user input, (2) reports are behind auth, (3) base64 inline images were replaced with `/public/brand/` asset references. The smaller IMA/SMA proposal (515 lines) got full JSX conversion. If briefs need interactive elements in the future, convert individual sections to JSX incrementally.
