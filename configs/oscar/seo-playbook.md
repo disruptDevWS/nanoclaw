@@ -7,7 +7,6 @@ These rules are embedded by construction — they should emerge naturally from g
 - `<h2>` for major sections — keyword-aware but descriptive, not abstract
 - `<h3>` for subsections — never skip heading levels
 - `<section id="...">` for each major content area — ids should be descriptive slugs
-- FAQ: `<h3>` for the question, `<p>` for the answer — first sentence of the answer directly responds to the question. This structure makes answers extractable by LLMs, voice search, and featured snippets.
 
 ## 2. On-Page SEO — Natural Integration
 - Primary keyword in H1 and in the first 100 words — not forced, reads naturally
@@ -177,7 +176,6 @@ dimensions column indicates additional emphasis per page type.
 | Core service page | HIGH | Dimensions 1, 2 |
 | Location service page | HIGH | Dimension 3 |
 | Informational / how-to | HIGH | Dimensions 2, 4 |
-| FAQ cluster page | MEDIUM-HIGH | Dimensions 1, 4 |
 | Silo hub / category page | MEDIUM | Specificity of sub-topic framing |
 | About / Contact / Legal | N/A | Effort dimensions not applicable |
 

@@ -16,7 +16,6 @@
 #   audit_rollups       — Phase 3b (preliminary), Phase 3d (canonical, authoritative)
 #   audit_topic_competitors — Phase 4
 #   audit_topic_dominance   — Phase 4
-#   audit_coverage_validation — Phase 6.5
 #   agent_architecture_pages  — Phase 6b
 #   agent_architecture_blueprint — Phase 6b
 #   execution_pages     — Phase 6b (UPSERT)
@@ -41,7 +40,6 @@
 # Phase 4:  Competitors — DataForSEO SERP per topic → audit_topic_competitors/dominance
 # Phase 5:  Gap — Competitive gap synthesis → content_gap_analysis.md + audit_snapshots
 # Phase 6:  Michael — Reads ALL disk artifacts → architecture_blueprint.md
-# Phase 6.5: Validator — Coverage validation (gap vs blueprint cross-check)
 # Phase 6b: sync michael — architecture_blueprint.md → Supabase
 # Phase 6c: sync dwight — internal_all.csv + AUDIT_REPORT.md → Supabase
 # Phase 6d: local presence — GBP lookup + SERP citation scan → gbp_snapshots, citation_snapshots
@@ -64,12 +62,11 @@ SEED_MATRIX="${3:-}"
 COMPETITOR_URLS="${4:-}"
 DATE=$(date +%Y-%m-%d)
 
-# Parse --mode, --prospect-config, --start-from, --stop-after, and --canonicalize-mode flags from any position
+# Parse --mode, --prospect-config, --start-from, --stop-after flags from any position
 MODE="full"
 PROSPECT_CONFIG=""
 START_FROM=""
 STOP_AFTER=""
-CANONICALIZE_MODE="legacy"
 NEXT_FLAG=""
 for i in "$@"; do
   if [[ "$i" == "--mode" ]]; then
@@ -88,10 +85,6 @@ for i in "$@"; do
     NEXT_FLAG="stop-after"
     continue
   fi
-  if [[ "$i" == "--canonicalize-mode" ]]; then
-    NEXT_FLAG="canonicalize-mode"
-    continue
-  fi
   if [[ "$NEXT_FLAG" == "mode" ]]; then
     MODE="$i"
     NEXT_FLAG=""
@@ -104,14 +97,11 @@ for i in "$@"; do
   elif [[ "$NEXT_FLAG" == "stop-after" ]]; then
     STOP_AFTER="$i"
     NEXT_FLAG=""
-  elif [[ "$NEXT_FLAG" == "canonicalize-mode" ]]; then
-    CANONICALIZE_MODE="$i"
-    NEXT_FLAG=""
   fi
 done
 
 # Phase ordering for --start-from / --stop-after
-PHASE_ORDER=(1 1a 1c 1b 2 3 3b 3c 3d 4 4b 5 6 6.5 6b 6c 6d)
+PHASE_ORDER=(1 1a 1c 1b 2 3 3b 3c 3d 4 4b 5 6 6b 6c 6d)
 should_run_phase() {
   local phase="$1"
   [[ -z "$START_FROM" && -z "$STOP_AFTER" ]] && return 0
@@ -283,8 +273,8 @@ else echo "  [SKIP] Phase 3b: Sync Jim"; fi
 # ─── Phase 3c: Canonicalize Topics ───────────────────────────
 if should_run_phase 3c; then
 echo ""
-echo "--- Phase 3c: Canonicalize Topics (Claude Sonnet) [canonicalize-mode=$CANONICALIZE_MODE] ---"
-npx tsx scripts/pipeline-generate.ts canonicalize --domain "$DOMAIN" --user-email "$EMAIL" --canonicalize-mode "$CANONICALIZE_MODE"
+echo "--- Phase 3c: Canonicalize Topics (Hybrid) ---"
+npx tsx scripts/pipeline-generate.ts canonicalize --domain "$DOMAIN" --user-email "$EMAIL"
 else echo "  [SKIP] Phase 3c: Canonicalize"; fi
 
 # ─── Phase 3d: Rebuild Clusters ──────────────────────────────
@@ -355,15 +345,6 @@ QA_RESULT=$(npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-em
 echo "  QA PASSED: Michael"
 else echo "  [SKIP] Phase 6: Michael"; fi
 
-# ─── Phase 6.5: Coverage Validation ──────────────────────────
-if [[ "$MODE" != "sales" ]]; then
-  if should_run_phase 6.5; then
-  echo ""
-  echo "--- Phase 6.5: Coverage Validation ---"
-  npx tsx scripts/pipeline-generate.ts validator --domain "$DOMAIN" --user-email "$EMAIL"
-  else echo "  [SKIP] Phase 6.5: Validator"; fi
-fi
-
 # ─── Phase 6b: Sync Michael → Supabase ────────────────────────
 if should_run_phase 6b; then
 echo ""
@@ -417,9 +398,6 @@ else
   echo "  Phase 5:  SKIPPED  (sales mode)"
 fi
 echo "  Phase 6:  Michael  — All artifacts → architecture_blueprint.md [QA ✓]"
-if [[ "$MODE" != "sales" ]]; then
-  echo "  Phase 6.5: Valid.  — Coverage validation (gap vs blueprint cross-check)"
-fi
 echo "  Phase 6b: sync     — architecture_blueprint.md → Supabase"
 echo "  Phase 6c: sync     — internal_all.csv + AUDIT_REPORT.md → Supabase"
 echo "  Phase 6d: local    — GBP lookup + citation scan (11 directories)"

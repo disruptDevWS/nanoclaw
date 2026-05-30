@@ -2,7 +2,7 @@
 
 > **This is a contract.** Every phase declares what it reads, what it writes, and what must exist before it runs. When a phase's responsibility changes, update this file in the same commit. See also: `docs/DECISIONS.md` for the "why" behind non-obvious choices.
 
-Orchestrator: `./scripts/run-pipeline.sh <domain> <email> [seed_matrix.json] [competitor_urls] [--mode sales|full|prospect] [--prospect-config <path>] [--canonicalize-mode legacy|hybrid|shadow]`
+Orchestrator: `./scripts/run-pipeline.sh <domain> <email> [seed_matrix.json] [competitor_urls] [--mode sales|full|prospect] [--prospect-config <path>]`
 
 Trigger paths:
 - **New audit:** Dashboard `useCreateAudit` → `run-audit` Edge Function → HTTP POST to Forge OS pipeline server → `run-pipeline.sh`
@@ -32,29 +32,17 @@ Core scripts:
 - `scripts/sync-to-dashboard.ts` — Supabase sync logic
 - `scripts/foundational_scout.sh` — DataForSEO CLI wrapper
 
-## Phase 2 Embedding Infrastructure Status (2026-04-20)
+## Canonicalize Infrastructure
 
-Phase 2 added hybrid canonicalize mode (vector pre-clustering + Sonnet arbitration) as an alternative to legacy Sonnet-only grouping. Both production clients (SMA, IMA) are promoted to hybrid. The embedding service, hybrid module, size gate, snapshot protocol, and contamination fix are all in production.
+Canonicalize uses hybrid mode (vector pre-clustering + Sonnet arbitration) for all audits. Legacy Sonnet-only mode was removed in Session 1 cleanup (2026-05-29).
 
 **Key components:**
 - Embedding service: `src/embeddings/` — OpenAI `text-embedding-3-small` (1536 dims) with Supabase caching via pgvector
 - Hybrid module: `src/agents/canonicalize/hybrid/` — pre-cluster + arbitrate + persist
-- Lock determinism fix: `src/agents/canonicalize/build-legacy-payload.ts` — prevents canonical field contamination
 - Migrations 016-018: pgvector RPC enhancement, classification metadata, shadow columns
 
-**Production clients:**
-
-| Client | Mode | Promoted | Keywords | Canonical Keys |
-|--------|------|----------|----------|----------------|
-| summitmedicalacademy.com | hybrid | 2026-04-20 (Phase 2.3b) | 127 | 27 |
-| idahomedicalacademy.com | hybrid | 2026-04-20 (Phase 2.4) | 1,100 | 76 |
-| forgegrowth.ai | hybrid | 2026-04-22 | 25 | 7 |
-| All others | legacy | — | — | — |
-
-**Known limitation:** `audits.canonicalize_mode` DB column is not read by any trigger path. See Phase 3c Known Limitation and `docs/architectural-review-post-phase-2-2026-04-21.md`.
-
-**Phase 2 documentation:**
-- `docs/canonicalize-hybrid-rollout.md` — complete rollout checklist (Phases 2.1-2.4)
+**Historical documentation:**
+- `docs/canonicalize-hybrid-rollout.md` — original rollout checklist (Phases 2.1-2.4)
 - `docs/phase-2.3b-sma-promotion-2026-04-20.md` — SMA promotion report
 - `docs/phase-2.3c-lock-determinism-fix-2026-04-20.md` — contamination bug fix
 - `docs/phase-2.4-ima-promotion-2026-04-20.md` — IMA promotion report
@@ -154,12 +142,10 @@ Phase 3b (sync jim)
       ▼
 Phase 3c (Canonicalize) — supports legacy and hybrid modes
   READS:     Supabase ← audit_keywords, audits (canonicalize_mode)
-  MODES:     legacy (Sonnet-only), hybrid (vector pre-clustering + Sonnet arbitration),
-             shadow (both paths, legacy authoritative)
   PRODUCES:  Supabase → audit_keywords (canonical_key, canonical_topic, cluster,
              intent_type, is_brand, is_near_me, classification_method,
              similarity_score, canonicalize_mode)
-  EXTERNAL:  OpenAI text-embedding-3-small (hybrid/shadow only)
+  EXTERNAL:  OpenAI text-embedding-3-small
   POST-STEP: Clears is_near_miss for branded/navigational keywords
       │
       ▼
@@ -202,11 +188,6 @@ Phase 6 (Michael)
              Supabase ← audit_clusters, audit_assumptions, audit_rollups,
              prospect-config.json → client_context (full mode, optional)
   PRODUCES:  architecture_blueprint.md (+ ## Revenue Opportunity in sales mode)
-      │
-      ▼
-Phase 6.5 (Validator)                    ← skipped in sales mode
-  READS:     content_gap_analysis.md (Gap), architecture_blueprint.md (Michael)
-  PRODUCES:  coverage_validation.md + Supabase → audit_coverage_validation
       │
       ▼
 Phase 6b (sync michael)
@@ -561,13 +542,7 @@ Each `audit_keywords` row includes revenue estimates: `delta_revenue_low/mid/hig
 
 **Function:** `runCanonicalize()` in `pipeline-generate.ts` | **Hybrid module:** `src/agents/canonicalize/hybrid/`
 
-**Modes:** Controlled by `--canonicalize-mode` CLI flag (default: `legacy`). The `audits.canonicalize_mode` DB column stores the intended mode per client but is **not yet wired** to trigger paths — see Known Limitation below.
-
-- **Legacy** (`--canonicalize-mode legacy`): Sonnet-only batching (up to 250 keywords/call). Returns `canonical_key`, `canonical_topic`, `is_brand`, `intent_type`, `primary_entity_type` per keyword.
-- **Hybrid** (`--canonicalize-mode hybrid`): Three-stage pipeline: Stage 1 (classification extraction via Haiku + deterministic rules) + Stage 2 (vector pre-clustering via OpenAI embeddings) + Stage 3 (Sonnet arbitration for edge cases). Authoritative output. Classification fields (`is_brand`, `intent_type`, `primary_entity_type`, `is_near_me`) handled by the classification extraction step; canonical grouping (`canonical_key`, `canonical_topic`, `cluster`) written exclusively by hybrid persist. **Legacy Sonnet grouping is completely skipped in hybrid mode** (early return after hybrid persist).
-- **Shadow** (`--canonicalize-mode shadow`): Runs both paths. Legacy output written first (authoritative), hybrid output written to `shadow_*` columns for comparison. Used during Phase 2 validation; not used in production post-promotion.
-
-**Production status (2026-04-21):** SMA and IMA are promoted to hybrid mode. All other audits remain on legacy. `canonicalize_mode` DB column is now wired to both `/trigger-pipeline` and `/recanonicalize` endpoints (commit `ce56f23`).
+**Mode:** Hybrid only (legacy and shadow modes removed 2026-05-29). Three-stage pipeline: Stage 1 (classification extraction via Haiku + deterministic rules) + Stage 2 (vector pre-clustering via OpenAI embeddings) + Stage 3 (Sonnet arbitration for edge cases). Classification fields (`is_brand`, `intent_type`, `primary_entity_type`, `is_near_me`) handled by the classification extraction step; canonical grouping (`canonical_key`, `canonical_topic`, `cluster`) written exclusively by hybrid persist.
 
 #### Hybrid canonicalize pipeline (`src/agents/canonicalize/hybrid/`)
 
@@ -594,15 +569,14 @@ Each `audit_keywords` row includes revenue estimates: `delta_revenue_low/mid/hig
 - New topics from earlier batches become context for later batches
 
 **Persist** (`hybrid/persist.ts`):
-- Hybrid mode: writes `canonical_key`, `canonical_topic`, `cluster`, `classification_method`, `similarity_score`, `canonicalize_mode` to primary columns
-- Shadow mode: writes to `shadow_canonical_key`, `shadow_canonical_topic`, etc.
+- Writes `canonical_key`, `canonical_topic`, `cluster`, `classification_method`, `similarity_score`, `canonicalize_mode` to primary columns
 - Batches of 50
 
 #### Classification extraction (Session B — hybrid mode only)
 
 **Module:** `src/agents/canonicalize/classify-keywords.ts`
 
-In hybrid mode, classification fields are extracted by a dedicated lightweight path **before** the hybrid pre-cluster/arbitrate pipeline runs. Legacy Sonnet is not invoked at all.
+Classification fields are extracted by a dedicated lightweight path **before** the hybrid pre-cluster/arbitrate pipeline runs.
 
 **Three-step extraction:**
 1. **Deterministic `is_near_me`:** `keyword.toLowerCase().includes(' near me')`
@@ -611,29 +585,22 @@ In hybrid mode, classification fields are extracted by a dedicated lightweight p
 
 **`core_services` prompt enrichment (2026-04-22):** When `audits.client_context.core_services` is populated (comma-separated string), the Haiku prompt receives two additional lines: (1) guidance to prefer Service/Course over Article for keywords matching listed services, (2) the actual service list. No prompt change when `core_services` is absent. Fixes entity_type misclassification for vocational verticals (e.g., "NREMT Test Prep" → Course instead of Article).
 
-**Writes per keyword:** `is_brand`, `intent_type`, `intent` (=intent_type for backward compat), `is_near_me`, `primary_entity_type`, `canonicalize_mode`
+**Writes per keyword:** `is_brand`, `intent_type`, `is_near_me`, `primary_entity_type`, `canonicalize_mode`
 
-**Cost:** ~$0.02-0.03 per 1,000 keywords (vs ~$0.30-0.50 for legacy Sonnet grouping).
+**Cost:** ~$0.02-0.03 per 1,000 keywords.
 
 **Injection:** `_setClassifyCallClaude(callClaude)` — same dependency injection pattern as `hybrid/arbitrator.ts`.
 
-#### Lock determinism fix (Phase 2.3c)
-
-In hybrid mode (pre-Session B), legacy Sonnet ran for classification fields but **must not write** `canonical_key`, `canonical_topic`, or `cluster`. `buildLegacyUpdatePayload()` (`src/agents/canonicalize/build-legacy-payload.ts:33-37`) enforces this exclusion when `canonicalizeMode === 'hybrid'`. **Post-Session B, this guard is no longer exercised in hybrid mode** (legacy Sonnet is skipped entirely), but remains as defense-in-depth for shadow mode.
-
-**Why:** If hybrid fails after legacy writes, the DB is left with legacy's stochastic output. Any retry's `priorHybridSnapshot` then captures this contaminated state. This caused 16.5% canonical_key drift on SMA's Phase 2.3b promotion. See `docs/phase-2.3c-lock-determinism-fix-2026-04-20.md`.
-
 #### Classification fields
 
-- **Hybrid mode:** All classification fields extracted by `classify-keywords.ts` (Haiku + deterministic rules). See "Classification extraction" section above.
-- **Legacy mode:** All classification fields extracted by legacy Sonnet grouping prompt (group-level, per batch of up to 250 keywords).
+All classification fields extracted by `classify-keywords.ts` (Haiku + deterministic rules). See "Classification extraction" section above.
 
-| Field | Hybrid | Legacy |
-|-------|--------|--------|
-| `is_brand` | Deterministic (string match) + Haiku fallback | Sonnet |
-| `intent_type` | Haiku | Sonnet |
-| `primary_entity_type` | Haiku | Sonnet |
-| `is_near_me` | Deterministic (`' near me'` check) | Deterministic |
+| Field | Method |
+|-------|--------|
+| `is_brand` | Deterministic (string match) + Haiku fallback |
+| `intent_type` | Haiku |
+| `primary_entity_type` | Haiku |
+| `is_near_me` | Deterministic (`' near me'` check) |
 
 **Near-me flagging:** Supplements flags already set by KeywordResearch on seeded keywords.
 
@@ -645,30 +612,23 @@ In hybrid mode (pre-Session B), legacy Sonnet ran for classification fields but 
 
 | API | Endpoint | Purpose | Used In |
 |-----|----------|---------|---------|
-| OpenAI Embeddings | `text-embedding-3-small` via `openai` SDK | Vector embeddings for pre-clustering | Hybrid/shadow only |
-| Anthropic API (sonnet) | `callClaude()` | Keyword grouping (legacy) + arbitration (hybrid) | All modes |
-| Anthropic API (haiku) | `callClaude()` | Classification extraction (intent_type, primary_entity_type, is_brand) | Hybrid only |
+| OpenAI Embeddings | `text-embedding-3-small` via `openai` SDK | Vector embeddings for pre-clustering | hybrid |
+| Anthropic API (sonnet) | `callClaude()` | Arbitration for edge cases | hybrid |
+| Anthropic API (haiku) | `callClaude()` | Classification extraction (intent_type, primary_entity_type, is_brand) | hybrid |
 
 **Embedding cost:** $0.02/1M tokens. 1,100 keywords ≈ 11K tokens ≈ $0.0002. Negligible.
 
 #### Supabase writes
 
 `audit_keywords` UPDATE:
-- All modes: `is_brand`, `intent_type`, `intent`, `is_near_me`, `primary_entity_type`, `canonicalize_mode`
-- Legacy only: `canonical_key`, `canonical_topic`, `cluster` (via Sonnet grouping)
-- Hybrid only (via classify-keywords.ts): classification fields written before hybrid pre-cluster runs
-- Hybrid only (via persist): `canonical_key`, `canonical_topic`, `cluster`, `classification_method`, `similarity_score`
-- Shadow only (via persist): `shadow_canonical_key`, `shadow_canonical_topic`, `shadow_classification_method`, `shadow_similarity_score`, `shadow_arbitration_reason`
+- Via classify-keywords.ts: `is_brand`, `intent_type`, `is_near_me`, `primary_entity_type`, `canonicalize_mode`
+- Via hybrid persist: `canonical_key`, `canonical_topic`, `cluster`, `classification_method`, `similarity_score`
 
 **PostgREST pagination:** Supabase PostgREST enforces `max-rows=1000` server-side. All keyword fetches in Phase 3c (and 3d, sync-michael, hybrid/index.ts) use `.range(offset, offset + PAGE_SIZE - 1)` pagination in a while loop. This was a pre-existing bug that silently capped IMA (1,100 keywords) at 1,000 — fixed in commit `36eb9c0`.
 
 **Why before Competitors:** Clean canonical keys eliminate duplicate SERP calls.
 
 **Does NOT rebuild clusters.** Phase 3d handles that.
-
-#### `canonicalize_mode` wiring (fixed)
-
-The `audits.canonicalize_mode` DB column stores each client's intended mode. Both `/trigger-pipeline` and `/recanonicalize` endpoints resolve this column before spawning the pipeline (commit `ce56f23`). NULL defaults to `'legacy'`. The resolved mode is passed as `--canonicalize-mode` to the shell orchestrator.
 
 ---
 
@@ -819,22 +779,6 @@ All cross-phase reads use `resolveArtifactPath()` with date fallback for operati
 **Prompt framing:** Uses "YOUR ENTIRE RESPONSE IS THE BLUEPRINT" top/bottom framing.
 
 **Known limitation:** Slug corruption detection counts Buyer Journey Coverage Assessment table rows (e.g., "Awareness (problem recognition...)") as rejected slugs, causing false positive corruption ratios of ~30%. The parser correctly produces only valid page rows. Non-blocking.
-
----
-
-### Phase 6.5: Validator — Coverage Cross-Check
-
-**Function:** `runValidator()` | **Model:** Claude Haiku (async)
-
-Cross-checks Gap's identified gaps against Michael's blueprint to verify coverage.
-
-**Input:** `content_gap_analysis.md` (Gap) + `architecture_blueprint.md` (Michael) — both resolved via `resolveArtifactPath()`
-
-**Output JSON:** `{ coverage: [{ gap_topic, gap_type, blueprint_page, status, notes }], summary }`
-
-**Statuses:** `addressed`, `partially_addressed`, `unaddressed`
-
-**Output:** `research/{date}/coverage_validation.md` + Supabase → `audit_coverage_validation`
 
 ---
 
@@ -1164,21 +1108,18 @@ Re-canonicalize runs Phase 3c + 3d without the full pipeline. Used from the Sett
 
 ### run-canonicalize.ts
 
-**Script:** `scripts/run-canonicalize.ts` | **Model:** Claude Sonnet (legacy grouping + hybrid arbitration)
+**Script:** `scripts/run-canonicalize.ts` | **Model:** Claude Haiku (classification) + Claude Sonnet (arbitration)
 
-**Invocation:** `npx tsx scripts/run-canonicalize.ts --domain <d> --user-email <e> [--canonicalize-mode legacy|hybrid|shadow]`
+**Invocation:** `npx tsx scripts/run-canonicalize.ts --domain <d> --user-email <e>`
 
 **Steps:**
 1. Resolve audit from Supabase (domain + email)
-2. Parse `--canonicalize-mode` flag (default: `legacy`)
-3. Run Phase 3c (`runCanonicalize()`) — semantic topic grouping in specified mode
-4. Run Phase 3d (`rebuildClustersAndRollups()`) — delete + insert clusters with status preservation + strategy deprecation
-5. Re-backfill `execution_pages.canonical_key` from updated `audit_keywords`
-6. Log `agent_runs` entry
+2. Run Phase 3c (`runCanonicalize()`) — hybrid classification + clustering
+3. Run Phase 3d (`rebuildClustersAndRollups()`) — delete + insert clusters with status preservation + strategy deprecation
+4. Re-backfill `execution_pages.canonical_key` from updated `audit_keywords`
+5. Log `agent_runs` entry
 
 **Status preservation:** `rebuildClustersAndRollups()` saves cluster activation status (status, activated_at, activated_by, target_publish_date, notes) before DELETE and restores it after INSERT for clusters that survive the rebuild. Also preserves `execution_pages.cluster_active` for surviving active clusters and deactivates pages for lost clusters. See Phase 3d section for details.
-
-**Known wiring gap:** The `/recanonicalize` endpoint (`pipeline-server-standalone.ts:390`) does not pass `--canonicalize-mode` to this script — it always runs in legacy mode regardless of the client's `audits.canonicalize_mode` column. See Phase 3c Known Limitation.
 
 ### Pipeline Server Endpoint
 
@@ -1186,7 +1127,7 @@ Re-canonicalize runs Phase 3c + 3d without the full pipeline. Used from the Sett
 |--------|------|---------|
 | POST | `/recanonicalize` | Start re-canonicalize (async, 202) |
 
-**Body:** `{ domain, email }` — same auth as other endpoints. Does not accept `canonicalize_mode` parameter (wiring gap).
+**Body:** `{ domain, email }` — same auth as other endpoints.
 
 ---
 
@@ -1368,12 +1309,10 @@ The pipeline server runs on Railway's managed infrastructure. Supabase Edge Func
 | 1 | Dwight | **sonnet** | `callClaude()` | AUDIT_REPORT.md [QA gated] |
 | 2 | KeywordResearch | **haiku** + **sonnet** | `callClaude()` | Service extraction (haiku) + synthesis (sonnet) |
 | 3 | Jim | **sonnet** | `callClaude()` | research_summary.md [QA gated] |
-| 3c | Canonicalize (legacy) | **sonnet** | `callClaude()` | Topic grouping JSON (batches of 250) + classification fields |
-| 3c | Canonicalize (hybrid) | **sonnet** + OpenAI embeddings | `callClaude()` + `openai` SDK | Legacy Sonnet for classification fields; hybrid: vector pre-clustering + Sonnet arbitration (batches of 40) |
+| 3c | Canonicalize (hybrid) | **haiku** + **sonnet** + OpenAI embeddings | `callClaude()` + `openai` SDK | Haiku classification + vector pre-clustering + Sonnet arbitration (batches of 40) |
 | 4 | Competitors | **haiku** | `callClaude()` | Domain classification (small batches) |
 | 5 | Gap | **sonnet** | `callClaude()` | Gap analysis JSON [QA gated] |
 | 6 | Michael | **sonnet** | `callClaude()` | architecture_blueprint.md [QA gated] |
-| 6.5 | Validator | **haiku** | `callClaude()` | Coverage validation JSON |
 | QA | QA Agent | **haiku** | `callClaude()` | Phase evaluation against rubrics |
 | — | Pam | **sonnet** | `callClaude()` | Content brief (metadata + schema + outline) |
 | — | Oscar | **sonnet** | `callClaude()` | Production HTML from brief (65K tokens, streaming) |
@@ -1387,8 +1326,8 @@ The pipeline server runs on Railway's managed infrastructure. Supabase Edge Func
 |-------|---------|------------|
 | `audits` | All agents, all syncs | Jim, sync-jim, sync-michael, sync-dwight |
 | `audits.client_context` (JSONB) | Settings page (dashboard reads/writes) | Settings page `useUpdateClientContext`. Pipeline reads from disk (`prospect-config.json`), not this column |
-| `audits.canonicalize_mode` | pipeline-server (reads at trigger), run-canonicalize.ts | SET during hybrid promotion (Phase 2.3b/2.4). Values: 'legacy', 'hybrid'. Read by `/trigger-pipeline` and `/recanonicalize` (commit `ce56f23`). |
-| `audit_keywords` | Canonicalize, Competitors, Gap, sync-jim, sync-michael | KeywordResearch (INSERT, source='keyword_research'), sync-jim (DELETE+INSERT, source='ranked'), Canonicalize legacy (UPDATE classification + canonical fields), Canonicalize hybrid classify-keywords.ts (UPDATE classification fields), Canonicalize hybrid persist (UPDATE canonical fields + metadata), sync-michael (UPDATE silo) |
+| `audits.canonicalize_mode` | — | All audits set to 'hybrid' (default). Column preserved but no longer read by pipeline code. |
+| `audit_keywords` | Canonicalize, Competitors, Gap, sync-jim, sync-michael | KeywordResearch (INSERT, source='keyword_research'), sync-jim (DELETE+INSERT, source='ranked'), Canonicalize classify-keywords.ts (UPDATE classification fields), Canonicalize hybrid persist (UPDATE canonical fields + metadata), sync-michael (UPDATE silo) |
 | `audit_clusters` | Gap, Michael, Clusters page (status + authority_score), Performance page (authority_score) | sync-jim (preliminary), rebuild-clusters Phase 3d (canonical, authoritative, preserves status/activation), generate-cluster-strategy.ts (status UPDATE → 'active'), deactivate-cluster (status UPDATE → 'inactive'), track-rankings.ts (authority_score UPDATE) |
 | `audit_rollups` | — | sync-jim (preliminary), rebuild-clusters Phase 3d (canonical, authoritative) |
 | `audit_assumptions` | sync-jim, rebuild-clusters, Settings page | Dashboard `useCreateAudit` (primary), `ensureAssumptions()` in sync (fallback from benchmarks), Settings page `useUpdateAssumptions` |
@@ -1404,7 +1343,7 @@ The pipeline server runs on Railway's managed infrastructure. Supabase Edge Func
 | `agent_architecture_blueprint` | — | sync-michael (DELETE+INSERT) |
 | `execution_pages` | sync-michael, Pam, Oscar | sync-michael (UPSERT), Pam (UPDATE → brief_ready), Oscar (UPDATE → review), sync-pam (UPSERT) |
 | `baseline_snapshots` | sync-jim | sync-jim (UPSERT, first run only) |
-| `audit_coverage_validation` | — | Validator (DELETE+INSERT) |
+| `audit_coverage_validation` | — | **DEPRECATED** — Validator (Phase 6.5) removed. Table preserved for historical data. |
 | `prospects` | Scout | Scout (INSERT/UPDATE) |
 | `pam_requests` | Pam | Dashboard (INSERT, status='pending') |
 | `oscar_requests` | Oscar | Dashboard (INSERT, status='pending') |
@@ -1431,9 +1370,8 @@ All paths relative to `audits/{domain}/`. Cross-phase reads use `resolveArtifact
 | `research/{date}/ranked_keywords.json` | Jim | sync-jim, Michael |
 | `research/{date}/competitors.json` | Jim | sync-jim |
 | `research/{date}/research_summary.md` | Jim | sync-jim, Michael |
-| `research/{date}/content_gap_analysis.md` | Gap | Michael, Validator |
-| `research/{date}/coverage_validation.md` | Validator | — (review) |
-| `architecture/{date}/architecture_blueprint.md` | Michael | sync-michael, Validator |
+| `research/{date}/content_gap_analysis.md` | Gap | Michael |
+| `architecture/{date}/architecture_blueprint.md` | Michael | sync-michael |
 | `scout/{date}/scout-{domain}-{date}.md` | Scout | — (review) |
 | `scout/{date}/scope.json` | Scout | KeywordResearch (optional priors) |
 | `content/{date}/{slug}/metadata.md` | Pam | Oscar, sync-pam |
@@ -1453,7 +1391,7 @@ All paths relative to `audits/{domain}/`. Cross-phase reads use `resolveArtifact
 | `src/agents/canonicalize/hybrid/arbitrator.ts` | Stage 2: Sonnet arbitration for ambiguous/new-topic/size-gated cases |
 | `src/agents/canonicalize/hybrid/persist.ts` | Write hybrid results to audit_keywords (hybrid or shadow columns) |
 | `src/agents/canonicalize/hybrid/types.ts` | TypeScript types: ClassificationMethod, VariantInput, PreClusterDecision, etc. |
-| `src/agents/canonicalize/build-legacy-payload.ts` | Phase 2.3c fix: excludes canonical fields in hybrid mode |
+| `src/agents/canonicalize/build-legacy-payload.ts` | Classification-only payload builder (canonical fields handled by hybrid persist) |
 | `scripts/embed-keywords.ts` | Embed-at-ingestion: pre-warm embedding cache for audit keywords (Phase 2 + 3b) |
 | `src/embeddings/service.ts` | Embedding service: OpenAI embed + Supabase cache + pgvector similarity |
 | `src/embeddings/config.ts` | Embedding constants: model, dimensions, thresholds |

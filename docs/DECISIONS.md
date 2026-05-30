@@ -4,6 +4,12 @@ Non-obvious choices that would look wrong without context. Check here before "fi
 
 ---
 
+**2026-05-29: Legacy canonicalize mode removed — hybrid is the only mode**
+
+Both production clients (IMA, SMA) and forgegrowth.ai were already on hybrid mode since 2026-04-20. Six inactive/demo audits (ecohvac, foxhvac, boiseplumbers, boiseheating, talon, tvr) were still on `legacy` — migrated to `hybrid` via migration 024. The `canonicalize_mode` column default is now `'hybrid'`. All legacy Sonnet grouping code, shadow mode, and mode-switching conditionals have been removed from `pipeline-generate.ts`, `pipeline-server-standalone.ts`, `run-pipeline.sh`, and `run-canonicalize.ts`. The `build-legacy-payload.ts` function no longer accepts a mode parameter — it always returns classification-only fields (canonical fields are written by hybrid persist). Shadow columns (`shadow_canonical_key`, etc.) remain in the DB schema but are no longer written.
+
+---
+
 **2026-04-29: Authority/Coverage charts — bar chart below 3 snapshots, filtered line chart above**
 
 Dashboard Performance page uses two visualization modes for cluster authority and coverage trends. With <3 weekly snapshots, a horizontal bar chart shows clusters sorted descending by score with tier-colored bars (red ≤25, amber ≤50, green ≤75, bright green >75). This replaces the previous line chart which plotted a single data point on a time-series axis — visually empty and unreadable with 15 clusters stacked at the same x-position. With 3+ snapshots, a line chart appears but filtered to top 5 clusters by score + any with significant movement (|delta| ≥3 for authority, ≥5 for coverage). This prevents 15 overlapping lines sharing one color. The 3-snapshot threshold is intentional: weekly cron means 3 points = 3 weeks of data, minimum for a meaningful trend.

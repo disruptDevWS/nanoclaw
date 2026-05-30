@@ -41,7 +41,6 @@ import {
 } from './dataforseo-llm-mentions.js';
 import { isCommitted } from './rerun-utils.js';
 import { parseBlueprintMarkdown } from './sync-to-dashboard.js';
-import { buildLegacyUpdatePayload } from '../src/agents/canonicalize/build-legacy-payload.js';
 
 // ============================================================
 // .env loader (same pattern as sync-to-dashboard)
@@ -89,14 +88,13 @@ interface CliArgs {
   prospectConfig?: string;
   phase?: string;
   mode: 'sales' | 'full';
-  canonicalizeMode: 'legacy' | 'hybrid' | 'shadow';
 }
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
   const subcommand = args[0] as CliArgs['subcommand'];
-  if (!['jim', 'competitors', 'michael', 'dwight', 'gap', 'canonicalize', 'validator', 'keyword-research', 'scout', 'qa'].includes(subcommand)) {
-    console.error('Usage: npx tsx scripts/pipeline-generate.ts <jim|competitors|gap|michael|dwight|canonicalize|validator|keyword-research|scout|qa> --domain <domain> --user-email <email> [--date YYYY-MM-DD] [--mode sales|full] [--prospect-config <path>]');
+  if (!['jim', 'competitors', 'michael', 'dwight', 'gap', 'canonicalize', 'keyword-research', 'scout', 'qa'].includes(subcommand)) {
+    console.error('Usage: npx tsx scripts/pipeline-generate.ts <jim|competitors|gap|michael|dwight|canonicalize|keyword-research|scout|qa> --domain <domain> --user-email <email> [--date YYYY-MM-DD] [--mode sales|full] [--prospect-config <path>]');
     process.exit(1);
   }
 
@@ -118,8 +116,6 @@ function parseArgs(): CliArgs {
   }
 
   const mode = (flags.mode === 'sales' ? 'sales' : 'full') as CliArgs['mode'];
-  const cmRaw = flags['canonicalize-mode'];
-  const canonicalizeMode = (['legacy', 'hybrid', 'shadow'].includes(cmRaw) ? cmRaw : 'legacy') as CliArgs['canonicalizeMode'];
 
   return {
     subcommand,
@@ -131,7 +127,6 @@ function parseArgs(): CliArgs {
     prospectConfig: flags['prospect-config'],
     phase: flags.phase,
     mode,
-    canonicalizeMode,
   };
 }
 
@@ -2592,20 +2587,8 @@ async function fetchSerpOrganic(
 // Canonicalize — Claude-based semantic topic grouping
 // ============================================================
 
-export type CanonicalizeMode = 'legacy' | 'hybrid' | 'shadow';
-
-export async function runCanonicalize(sb: SupabaseClient, auditId: string, domain: string, canonicalizeMode: CanonicalizeMode = 'legacy') {
-  console.log(`  [canonicalize] Mode: ${canonicalizeMode}`);
-
-  // Fetch audit metadata for context
-  const { data: auditRow } = await sb
-    .from('audits')
-    .select('id, domain, service_key, geo_mode, market_geos, market_city, market_state')
-    .eq('id', auditId)
-    .single();
-  const serviceKey = auditRow?.service_key ?? '';
-  const canonGeo = resolveGeoScope(auditRow);
-  const locationCtx = canonGeo.label;
+export async function runCanonicalize(sb: SupabaseClient, auditId: string, domain: string) {
+  console.log(`  [canonicalize] Mode: hybrid`);
 
   // Fetch all keywords for this audit (paginated — Supabase PostgREST max-rows=1000)
   const keywords: { id: string; keyword: string; intent: string | null; search_volume: number; topic: string | null }[] = [];
@@ -2630,11 +2613,9 @@ export async function runCanonicalize(sb: SupabaseClient, auditId: string, domai
   }
   console.log(`  [canonicalize] ${keywords.length} keywords to classify`);
 
-  // Snapshot prior hybrid assignments BEFORE legacy runs (legacy overwrites canonical_key).
-  // This preserves hybrid-origin values so the lock predicate locks the correct assignment.
+  // Snapshot prior hybrid assignments to preserve lock predicates on re-runs
   let priorHybridSnapshot: Map<string, { canonicalKey: string; canonicalTopic: string }> | undefined;
-  if (canonicalizeMode !== 'legacy') {
-    // Paginated fetch — IMA has >1000 keywords with classification_method
+  {
     const priorRows: any[] = [];
     {
       const PAGE_SIZE = 1000;
@@ -2661,307 +2642,53 @@ export async function runCanonicalize(sb: SupabaseClient, auditId: string, domai
     }
   }
 
-  // ── HYBRID MODE: Classification extraction + hybrid path (Session B) ──
-  // In hybrid mode, skip legacy Sonnet grouping entirely.
-  // Path: classification extraction (Haiku + rules) → hybrid pre-cluster + arbitrate + persist → is_near_miss clear → rebuild
-  if (canonicalizeMode === 'hybrid') {
-    // Step 1: Lightweight classification extraction
-    const { _setClassifyCallClaude, classifyKeywords } = await import('../src/agents/canonicalize/classify-keywords.js');
-    _setClassifyCallClaude(callClaude);
+  // Step 1: Lightweight classification extraction (Haiku + rules)
+  const { _setClassifyCallClaude, classifyKeywords } = await import('../src/agents/canonicalize/classify-keywords.js');
+  _setClassifyCallClaude(callClaude);
 
-    // Load client context for brand detection + core_services
-    let clientBusinessName: string | undefined;
-    let competitorNames: string[] | undefined;
-    let verticalDefault = 'Service';
-    let coreServices: string[] | undefined;
-    try {
-      const { data: auditCtx } = await (sb as any).from('audits').select('client_context').eq('id', auditId).maybeSingle();
-      if (auditCtx?.client_context) {
-        const ctx = typeof auditCtx.client_context === 'string' ? JSON.parse(auditCtx.client_context) : auditCtx.client_context;
-        clientBusinessName = ctx.business_name || ctx.company_name;
-        competitorNames = ctx.competitors;
-        if (ctx.vertical === 'education' || ctx.vertical === 'training') verticalDefault = 'Course';
-        if (ctx.core_services) {
-          coreServices = typeof ctx.core_services === 'string'
-            ? ctx.core_services.split(',').map((s: string) => s.trim()).filter(Boolean)
-            : Array.isArray(ctx.core_services) ? ctx.core_services : undefined;
-        }
-      }
-    } catch {
-      // Non-fatal: classification will use domain-based brand detection
-    }
+  // Fetch audit metadata for context
+  const { data: auditRow } = await sb
+    .from('audits')
+    .select('id, domain, service_key, geo_mode, market_geos, market_city, market_state')
+    .eq('id', auditId)
+    .single();
+  const serviceKey = auditRow?.service_key ?? '';
 
-    const classifyResult = await classifyKeywords(sb, keywords as any, {
-      auditId,
-      domain,
-      serviceKey,
-      canonicalizeMode,
-      clientBusinessName,
-      competitorNames,
-      verticalDefault,
-      coreServices,
-    });
-
-    // Step 2: is_near_miss clear (depends on is_brand, intent_type now written)
-    const BATCH_SIZE = 50;
-    const { data: staleNearMiss } = await sb.from('audit_keywords')
-      .select('id')
-      .eq('audit_id', auditId)
-      .eq('is_near_miss', true)
-      .or('is_brand.eq.true,intent_type.eq.navigational');
-    if (staleNearMiss && staleNearMiss.length > 0) {
-      const ids = staleNearMiss.map((r: any) => r.id);
-      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-        const chunk = ids.slice(i, i + BATCH_SIZE);
-        await sb.from('audit_keywords')
-          .update({ is_near_miss: false, delta_revenue_low: 0, delta_revenue_mid: 0, delta_revenue_high: 0, delta_leads_low: 0, delta_leads_high: 0, delta_traffic: 0 })
-          .in('id', chunk);
-      }
-      console.log(`  [canonicalize] Cleared is_near_miss for ${ids.length} branded/navigational keywords`);
-    }
-
-    // Step 3: Hybrid pre-cluster + arbitrate + persist
-    const { _setCallClaude } = await import('../src/agents/canonicalize/hybrid/arbitrator.js');
-    _setCallClaude(callClaude);
-
-    const { runHybridCanonicalize } = await import('../src/agents/canonicalize/hybrid/index.js');
-    const hybridResult = await runHybridCanonicalize(sb, auditId, domain, canonicalizeMode, priorHybridSnapshot);
-    console.log(`  [canonicalize] Hybrid path completed: ${hybridResult.autoAssigned} auto-assigned, ${hybridResult.arbitrated} arbitrated, ${hybridResult.priorLocked} prior-locked`);
-
-    // Audit trail
-    const runDate = new Date().toISOString().slice(0, 10);
-    await (sb as any).from('agent_runs').insert({
-      audit_id: auditId,
-      agent_name: 'canonicalize',
-      run_date: runDate,
-      status: 'completed',
-      metadata: {
-        mode: canonicalizeMode,
-        keyword_count: keywords.length,
-        classified: classifyResult.classified,
-        haiku_calls: classifyResult.haikuCalls,
-        hybrid_auto_assigned: hybridResult.autoAssigned,
-        hybrid_arbitrated: hybridResult.arbitrated,
-        hybrid_prior_locked: hybridResult.priorLocked,
-      },
-    });
-
-    return; // Hybrid path complete — skip legacy path below
-  }
-
-  // ── LEGACY MODE: Full legacy Sonnet grouping path ─────────────
-  // Build batches — if > 300 keywords, chunk by topic groups
-  const MAX_BATCH = 250;
-  let batches: typeof keywords[];
-
-  if (keywords.length <= MAX_BATCH) {
-    batches = [keywords];
-  } else {
-    // Group by extractTopic baseline, then greedily pack into batches
-    const topicGroups = new Map<string, typeof keywords>();
-    for (const kw of keywords) {
-      const t = kw.topic || 'general';
-      const arr = topicGroups.get(t);
-      if (arr) arr.push(kw);
-      else topicGroups.set(t, [kw]);
-    }
-    // Sort groups by size descending for greedy bin-packing
-    const sorted = [...topicGroups.values()].sort((a, b) => b.length - a.length);
-    batches = [];
-    let current: typeof keywords = [];
-    for (const group of sorted) {
-      if (current.length + group.length > MAX_BATCH && current.length > 0) {
-        batches.push(current);
-        current = [];
-      }
-      // If a single group exceeds MAX_BATCH, push it as its own batch
-      if (group.length > MAX_BATCH) {
-        if (current.length > 0) { batches.push(current); current = []; }
-        batches.push(group);
-      } else {
-        current.push(...group);
+  // Load client context for brand detection + core_services
+  let clientBusinessName: string | undefined;
+  let competitorNames: string[] | undefined;
+  let verticalDefault = 'Service';
+  let coreServices: string[] | undefined;
+  try {
+    const { data: auditCtx } = await (sb as any).from('audits').select('client_context').eq('id', auditId).maybeSingle();
+    if (auditCtx?.client_context) {
+      const ctx = typeof auditCtx.client_context === 'string' ? JSON.parse(auditCtx.client_context) : auditCtx.client_context;
+      clientBusinessName = ctx.business_name || ctx.company_name;
+      competitorNames = ctx.competitors;
+      if (ctx.vertical === 'education' || ctx.vertical === 'training') verticalDefault = 'Course';
+      if (ctx.core_services) {
+        coreServices = typeof ctx.core_services === 'string'
+          ? ctx.core_services.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : Array.isArray(ctx.core_services) ? ctx.core_services : undefined;
       }
     }
-    if (current.length > 0) batches.push(current);
-    console.log(`  [canonicalize] Split into ${batches.length} batches (${batches.map((b) => b.length).join(', ')} keywords)`);
+  } catch {
+    // Non-fatal: classification will use domain-based brand detection
   }
 
-  // Process each batch
-  type GroupResult = {
-    canonical_key: string;
-    canonical_topic: string;
-    primary_entity_type?: string;
-    keywords: { index: number; is_brand: boolean; intent_type: string }[];
-  };
-  const allGroups: { group: GroupResult; kwId: string }[] = [];
+  const classifyResult = await classifyKeywords(sb, keywords as any, {
+    auditId,
+    domain,
+    serviceKey,
+    canonicalizeMode: 'hybrid',
+    clientBusinessName,
+    competitorNames,
+    verticalDefault,
+    coreServices,
+  });
 
-  for (let bi = 0; bi < batches.length; bi++) {
-    const batch = batches[bi];
-    if (batches.length > 1) console.log(`  [canonicalize] Processing batch ${bi + 1}/${batches.length} (${batch.length} keywords)...`);
-
-    // Build numbered keyword list
-    const kwList = batch.map((kw, i) => `${i + 1}. "${kw.keyword}" (vol: ${kw.search_volume ?? 0}, intent: ${kw.intent ?? 'unknown'})`).join('\n');
-
-    const prompt = `You are an SEO keyword classifier for a ${serviceKey || 'local service'} business${locationCtx ? ` in ${locationCtx}` : ''}.
-
-Below are ${batch.length} keywords numbered 1 to ${batch.length}. Group them into semantic topics.
-
-RULES:
-- Canonical keys and topics MUST be geography-agnostic. Remove ALL city, state, region, and "near me" modifiers.
-  "boise water heater repair", "water heater repair boise", "meridian water heater repair" ALL map to canonical_key: "water_heater_repair", canonical_topic: "Water Heater Repair"
-  "plumber boise idaho", "boise plumber", "plumber meridian" ALL map to canonical_key: "plumbing", canonical_topic: "Plumbing"
-  Geographic targeting is handled by keyword-level data, not cluster identity.
-- Merge synonyms and word-order variants (e.g., "ac repair" and "air conditioning repair" → same group)
-
-WHEN TO SPLIT vs. MERGE:
-- Merge into one cluster: same primary service, different geo modifiers, word-order variants, or specificity levels
-- Merge into one cluster: informational keywords about a service (cost, how-to, FAQ) belong in that service's cluster, NOT a separate informational cluster
-- Split into separate clusters: meaningfully different services a business would have dedicated pages for
-- Split into separate clusters: topics with different primary audiences or buyer journeys, even if semantically adjacent (e.g., "EMT certification" vs. "EMT recertification" — new students vs. lapsed certifications. "new installation" vs. "repair" vs. "maintenance" for the same equipment type may warrant separate clusters if volume supports it)
-- Do NOT create clusters that are purely informational with no commercial anchor — informational keywords attach to their service cluster
-
-- canonical_key: lowercase with underscores, NO geo modifiers, NO state/city codes (e.g., "water_heater_repair" NOT "id:boise:water_heater_repair")
-- canonical_topic: Title Case, NO geo modifiers (e.g., "Water Heater Repair" NOT "Boise Water Heater Repair")
-- Target approximately 1 group per 5-8 keywords. Minimum 5 groups, maximum 40 groups. For batches of 150 keywords, aim for 18-30 groups. Do not merge semantically distinct service topics just to stay under a ceiling — accurate grouping is more important than a low group count.
-- Mark branded keywords (company names, brand terms) with is_brand: true
-- Classify intent_type for each keyword using standard SEO intent taxonomy:
-  * "commercial" = researching/comparing services or providers. IMPORTANT: "[service] [city]" keywords like "basement remodeling naperville" or "plumber boise" are COMMERCIAL — the searcher is evaluating options, not yet committing. Most local service keywords fall here.
-  * "transactional" = ready to act NOW. Includes: keywords with explicit action verbs (hire, book, schedule, buy, order, get quote) AND "near me" keywords — "[service] near me" signals immediate local intent and should always be classified transactional.
-  * "informational" = seeking knowledge — cost questions, how-to, guides, what-is, certification requirements (e.g., "basement finishing cost", "how to unclog drain")
-  * "navigational" = looking for a specific brand/company BY NAME (e.g., "talon construction group", "ross dress for less boise"). ONLY use navigational when the keyword contains a recognizable brand name. This includes competitor brand names, not just the client's brand — if a keyword appears to be a competitor's name or branded phrase, classify as navigational and set is_brand: true. Generic service keywords like "hvac contractors boise" or "air conditioning repair meridian" are NEVER navigational — they are commercial.
-- Reference keywords by their number (index), not by string
-
-INFORMATIONAL KEYWORD PLACEMENT:
-- Cost/pricing queries ("how much does X cost", "X price") → assign to the service/course cluster they price, NOT a separate informational group
-- How-to and guide content → assign to the most relevant service cluster
-- Comparison queries ("X vs Y") → assign to the cluster of the primary subject, or create a standalone cluster only if both subjects are core services with substantial volume
-- Informational keywords belong in the cluster of the entity they inform about, even though they'll be filtered from revenue calculations downstream
-- Do NOT create clusters named "Cost Guides", "How-To Guides", "FAQ", or similar topic-agnostic informational buckets. Each informational keyword has a parent service — assign it there.
-
-UNCLASSIFIABLE KEYWORDS: If a keyword does not clearly map to any service topic (e.g., ambiguous queries, pure competitor brand navigational leaks, non-service terms), assign it to a special group:
-{ "canonical_key": "other", "canonical_topic": "Other / Unclassified" }
-Use this group sparingly — only for keywords that genuinely resist classification. Most branded competitor keywords belong in navigational groups, not "other".
-
-KEYWORDS:
-${kwList}
-
-Respond with raw JSON only. No markdown code fences. Just the bare JSON object starting with {.
-
-JSON schema:
-{
-  "groups": [
-    {
-      "canonical_key": "ac_repair",
-      "canonical_topic": "AC Repair",
-      "primary_entity_type": "Service",
-      "keywords": [
-        { "index": 1, "is_brand": false, "intent_type": "commercial" }
-      ]
-    }
-  ]
-}
-
-primary_entity_type must be one of:
-- "Service" — a service the business performs (most common for local service businesses)
-- "Course" — an educational program with defined duration, credential, enrollment
-- "Product" — a physical or digital product
-- "LocalBusiness" — the business itself (use only for brand/homepage cluster)
-- "FAQPage" — primarily Q&A content with no single service anchor
-- "Article" — purely informational content not tied to a specific service or course
-
-When uncertain between Service and Course: if the offering grants a credential or certification, use Course. If it's a job performed for a customer, use Service.
-Default to "Service" when the category is ambiguous for a local service business.`;
-
-    let parsed: any = null;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const result = await callClaude(prompt, { model: 'sonnet', phase: 'canonicalize' });
-        const stripped = stripCodeFences(result);
-        parsed = repairJSON(stripped, 'groups');
-        break;
-      } catch (err: any) {
-        if (attempt === 1) {
-          console.warn(`  [canonicalize] Batch ${bi + 1} attempt 1 failed: ${err.message} — retrying`);
-        } else {
-          console.warn(`  [canonicalize] Batch ${bi + 1} attempt 2 failed: ${err.message} — skipping batch`);
-        }
-      }
-    }
-
-    if (parsed) {
-      const groups: GroupResult[] = parsed.groups ?? [];
-      for (const g of groups) {
-        for (const kwRef of g.keywords) {
-          const idx = kwRef.index - 1; // 1-indexed → 0-indexed
-          if (idx >= 0 && idx < batch.length) {
-            allGroups.push({ group: { ...g, keywords: [kwRef] }, kwId: batch[idx].id });
-          }
-        }
-      }
-      console.log(`  [canonicalize] Batch ${bi + 1}: ${groups.length} groups identified`);
-    }
-  }
-
-  if (allGroups.length === 0) {
-    console.warn('  [canonicalize] No groups produced, downstream will use extractTopic() fallback');
-    return;
-  }
-
-  // Deduplicate: if same canonical_key from multiple batches, keep the one with more keywords
-  // (already handled — each keyword maps to exactly one group)
-
-  // Detect near-me keywords deterministically (national volume, not locally actionable)
-  const nearMeIds = new Set<string>();
-  for (const { kwId } of allGroups) {
-    const kw = keywords.find((k) => k.id === kwId);
-    if (kw && kw.keyword.toLowerCase().includes(' near me')) {
-      nearMeIds.add(kwId);
-    }
-  }
-  if (nearMeIds.size > 0) {
-    console.log(`  [canonicalize] Flagging ${nearMeIds.size} near-me keywords`);
-  }
-
-  // Batch update audit_keywords
-  let updated = 0;
+  // Step 2: is_near_miss clear (depends on is_brand, intent_type now written)
   const BATCH_SIZE = 50;
-  for (let i = 0; i < allGroups.length; i += BATCH_SIZE) {
-    const chunk = allGroups.slice(i, i + BATCH_SIZE);
-    const promises = chunk.map(({ group, kwId }) => {
-      // Lock determinism fix (Phase 2.3c, 2026-04-20):
-      // In hybrid mode, canonical_key/canonical_topic/cluster are written exclusively by
-      // the hybrid persist step. Legacy must NOT write them because if hybrid fails after
-      // legacy writes, the DB is left with legacy's stochastic output. Any retry's
-      // priorHybridSnapshot then captures this contaminated state instead of the true prior
-      // hybrid values. This caused 16.5% canonical_key drift on SMA's Phase 2.3b promotion.
-      // Test: src/agents/canonicalize/__tests__/build-legacy-payload.test.ts
-      const payload = buildLegacyUpdatePayload(
-        {
-          isBrand: group.keywords[0].is_brand,
-          intentType: group.keywords[0].intent_type,
-          isNearMe: nearMeIds.has(kwId),
-          primaryEntityType: group.primary_entity_type ?? 'Service',
-          canonicalKey: group.canonical_key,
-          canonicalTopic: group.canonical_topic,
-        },
-        canonicalizeMode,
-      );
-      return (sb as any).from('audit_keywords').update(payload).eq('id', kwId);
-    },
-    );
-    const results = await Promise.all(promises);
-    for (const r of results) {
-      if (r.error) console.warn(`  [canonicalize] Update failed: ${r.error.message}`);
-      else updated++;
-    }
-  }
-
-  // Count distinct groups
-  const uniqueKeys = new Set(allGroups.map((g) => g.group.canonical_key));
-  console.log(`  [canonicalize] Updated ${updated}/${keywords.length} keywords across ${uniqueKeys.size} topics`);
-
-  // Post-canonicalize: clear is_near_miss for branded/navigational keywords
-  // (is_brand and intent_type may have changed during canonicalization)
   const { data: staleNearMiss } = await sb.from('audit_keywords')
     .select('id')
     .eq('audit_id', auditId)
@@ -2978,22 +2705,15 @@ Default to "Service" when the category is ambiguous for a local service business
     console.log(`  [canonicalize] Cleared is_near_miss for ${ids.length} branded/navigational keywords`);
   }
 
-  // ── Mode dispatch: shadow mode (hybrid returns early above) ──
-  if (canonicalizeMode === 'shadow') {
-    try {
-      // Inject callClaude into the hybrid arbitrator (scripts/ is outside src/ rootDir)
-      const { _setCallClaude } = await import('../src/agents/canonicalize/hybrid/arbitrator.js');
-      _setCallClaude(callClaude);
+  // Step 3: Hybrid pre-cluster + arbitrate + persist
+  const { _setCallClaude } = await import('../src/agents/canonicalize/hybrid/arbitrator.js');
+  _setCallClaude(callClaude);
 
-      const { runHybridCanonicalize } = await import('../src/agents/canonicalize/hybrid/index.js');
-      const hybridResult = await runHybridCanonicalize(sb, auditId, domain, canonicalizeMode, priorHybridSnapshot);
-      console.log(`  [canonicalize] Hybrid path completed: ${hybridResult.autoAssigned} auto-assigned, ${hybridResult.arbitrated} arbitrated, ${hybridResult.priorLocked} prior-locked`);
-    } catch (err: any) {
-      console.warn(`  [canonicalize] Shadow hybrid path failed (non-fatal): ${err.message}`);
-    }
-  }
+  const { runHybridCanonicalize } = await import('../src/agents/canonicalize/hybrid/index.js');
+  const hybridResult = await runHybridCanonicalize(sb, auditId, domain, 'hybrid', priorHybridSnapshot);
+  console.log(`  [canonicalize] Hybrid path completed: ${hybridResult.autoAssigned} auto-assigned, ${hybridResult.arbitrated} arbitrated, ${hybridResult.priorLocked} prior-locked`);
 
-  // ── agent_runs audit trail ──────────────────────────────────
+  // Audit trail
   const runDate = new Date().toISOString().slice(0, 10);
   await (sb as any).from('agent_runs').insert({
     audit_id: auditId,
@@ -3001,10 +2721,13 @@ Default to "Service" when the category is ambiguous for a local service business
     run_date: runDate,
     status: 'completed',
     metadata: {
-      mode: canonicalizeMode,
+      mode: 'hybrid',
       keyword_count: keywords.length,
-      topic_count: uniqueKeys.size,
-      updated_count: updated,
+      classified: classifyResult.classified,
+      haiku_calls: classifyResult.haikuCalls,
+      hybrid_auto_assigned: hybridResult.autoAssigned,
+      hybrid_arbitrated: hybridResult.arbitrated,
+      hybrid_prior_locked: hybridResult.priorLocked,
     },
   });
 }
@@ -3432,76 +3155,18 @@ A topic with NO CLIENT PAGES means the client has no URL mapped to that topic �
     console.log(`  Note: Could not load section coverage data (non-fatal): ${err.message}`);
   }
 
-  const prompt = `You are a Content Gap Analyst. Given the competitive landscape data for ${domain}, produce a JSON analysis identifying where competitors rank but the client is absent or weak.
-
-YOUR ENTIRE RESPONSE IS RAW JSON. Output ONLY the JSON object starting with {. No markdown, no code fences, no narration, no explanation before or after.
-${gapClientContextBlock}
-## Dominance Scores (worst first — low score = competitor dominates)
-${topDominance || 'No dominance data available.'}
-
-## Top Competitors
-${topCompetitors || 'No competitor data available.'}
-
-## Client Clusters by Revenue Opportunity
-${clusterSummary || 'No cluster data available.'}
-
-## Topics Where Client Is Absent/Weak But Competitors Rank Top-10
-${weakTopics || 'None identified.'}
-
-## Michael's Planned Architecture Pages
-${plannedSummary}
-
-## Client's Existing Page Inventory (from Dwight's crawl, top 100)
-${crawledInventory}
-${aiVisibilitySection}${sectionCoverageBlock}
-## Output — JSON with these keys:
-
-1. "authority_gaps": Array of objects with { topic, client_status, client_position, top_competitor, competitor_position, estimated_volume, revenue_opportunity, data_source }. Topics where competitors dominate and client is absent or ranking 50+. Max 15.
-
-Field rules:
-- topic: geo-agnostic service phrase, Title Case
-- client_status: "absent" | "weak" | "present-underperforming"
-- client_position: integer position or null if not ranking
-- top_competitor: domain string (exclude authority_site domains — government, regulatory bodies, .edu, professional associations — even if they rank #1; use the top-ranking industry_competitor instead)
-- competitor_position: integer
-- estimated_volume: integer monthly search volume
-- revenue_opportunity: MUST be one of two formats only — (a) dollar range: "$X–$Y/mo est." using revenue table data if available, or (b) if no revenue data exists: "No revenue estimate — [competitor domain] holds [X]% share". Do NOT mix formats. Do NOT put competitive share narratives in a dollar range field or vice versa.
-- data_source: "SERP dominance" | "keyword overlap" | "keyword matrix". Use "SERP dominance" for gaps from Dominance Scores or Absent/Weak Topics; "keyword overlap" for gaps from Client Clusters; "keyword matrix" for gaps from the keyword research phase.
-
-2. "format_gaps": Array of objects with { format, description, examples, competitor_using, missing_sections }. Content types competitors have that client lacks (e.g., FAQs, comparison pages, location pages, service+city pages, guides, cost calculators). If Section Coverage Matrix is available, use the Core gaps data to populate missing_sections (array of strings, e.g., ["Refrigerant Types", "Efficiency Ratings"]). If no section data, set missing_sections to []. Max 8.
-
-3. "unaddressed_gaps": Array of objects with { topic, gap_type, reason }. Gaps from authority_gaps NOT covered by Michael's planned architecture pages. Max 10.
-
-CONDITIONAL: If Michael's Planned Architecture Pages section above is empty or contains fewer than 3 pages, set "unaddressed_gaps" to an empty array [] and add a note in the "summary" field that architecture has not yet been generated. Do not populate unaddressed_gaps with duplicates of authority_gaps — it is meaningless to flag gaps as "unaddressed" when there is no architecture to address them against.
-
-4. "priority_recommendations": Array of objects with { rank, action, target_keyword, estimated_volume, rationale }. Top 8 actionable items sorted by revenue opportunity.
-
-Ranking criterion: order by estimated revenue opportunity — use CPC × volume where both are available from the keyword matrix, or competitive share gap magnitude where revenue data is absent. The highest-revenue gap gets rank 1 regardless of implementation difficulty. The rationale field must reference the specific data point driving the ranking (e.g., "260 monthly searches at $3.68 CPC with 0% client share vs. idahomedicalacademy.com at 13%").
-
-5. "summary": 2-3 sentence executive summary written for Michael (the architecture agent) and the Validator. Must include: (1) the dominant competitor domain by name and what makes them the primary threat, (2) the single highest-revenue gap topic by name, and (3) if unaddressed_gaps is empty due to missing architecture, note that here. Do not restate array contents — synthesize the competitive situation in terms that directly inform architecture decisions.
-
-6. "section_coverage": Object with per-topic coverage summary. Keys are canonical_key strings, values are { score, status, competitor_count, top_gaps }. If Section Coverage Matrix data was provided above, copy the scores directly. If no section data was provided, set to empty object {}.
-
-7. "ai_citation_gaps": Array of objects with { topic, client_mention_count, top_competitor_mention_count, gap_severity, recommended_action }. Topics where competitors are mentioned more frequently in AI platform responses than the client.
-   - gap_severity: "high" (competitor 3x+ client mentions), "medium" (competitor 1.5-3x), "low" (competitor slightly ahead)
-   - recommended_action: specific action to improve AI citation (e.g., "Add structured FAQ schema", "Create authoritative guide on topic")
-   - Max 5 entries. Only include topics where competitor meaningfully outpaces client.
-   - If no AI Visibility Data section is provided above, set to empty array [].
-
-## QUALITY RULES for authority_gaps topics:
-- DEDUPLICATION (LOAD-BEARING RULE): Each authority_gap MUST correspond to a DISTINCT [canonical_key] from the Dominance Scores. If multiple Dominance Scores share the same [canonical_key] prefix, they are the SAME topic — produce ONE gap entry using the highest-volume variant as the representative topic name. Example: if dominance data has [emt_training] for "EMT Training Courses Online", "EMT Training Programs", and "EMT Certification Classes", produce ONE authority_gap for "EMT Training" — not three separate entries. Similarly, "Burn First Aid" and "First Aid for Burns" → one gap. Max 15 is an UPPER BOUND, not a target. Typical audit: 6-12 distinct gaps.
-- Each topic must be a COMPLETE, meaningful service phrase (e.g., "AC repair", "furnace installation"). Never use truncated fragments like "boise heating and" or "repair boise".
-- Exclude brand/navigational queries (other companies' names, job listings, TV schedules).
-- Exclude non-customer intent (job postings, supplier queries, industry news).
-- Topics should be service-category level ("AC repair", "furnace installation"), not raw keyword strings.
-- If two topics differ only by city name, merge into the service topic and note the city in revenue_opportunity.
-- Do NOT use near-me keywords for revenue_opportunity estimates — near-me volume is national, not locally actionable.
-- In the top_competitor field: exclude authority_site domains (government agencies, regulatory bodies, .edu institutions, professional associations such as nremt.org, state licensing boards). Use the highest-ranking industry_competitor domain instead. If no industry_competitor ranks in the top 10 for a topic, note "No industry competitor in top 10" in the top_competitor field.
-- In format_gaps: base the analysis on what content formats competitors have that are absent from the client's crawled page inventory (see "Client's Existing Page Inventory" section above) — do not flag a format gap for a format type that already exists on the client's site even if individual pages are underperforming.
-
-CRITICAL: Respond with raw JSON only. No markdown code fences. Just the bare JSON object starting with {.
-
-REMINDER: Your response IS the JSON object — start with { and end with }. No preamble, no narration.`;
+  const gapTemplate = fs.readFileSync(path.resolve(process.cwd(), 'configs/agents/gap/system-prompt.md'), 'utf-8');
+  const prompt = gapTemplate
+    .replace('{{DOMAIN}}', domain)
+    .replace('{{CLIENT_CONTEXT}}', gapClientContextBlock)
+    .replace('{{TOP_DOMINANCE}}', topDominance || 'No dominance data available.')
+    .replace('{{TOP_COMPETITORS}}', topCompetitors || 'No competitor data available.')
+    .replace('{{CLUSTER_SUMMARY}}', clusterSummary || 'No cluster data available.')
+    .replace('{{WEAK_TOPICS}}', weakTopics || 'None identified.')
+    .replace('{{PLANNED_SUMMARY}}', plannedSummary)
+    .replace('{{CRAWLED_INVENTORY}}', crawledInventory)
+    .replace('{{AI_VISIBILITY_SECTION}}', aiVisibilitySection)
+    .replace('{{SECTION_COVERAGE_BLOCK}}', sectionCoverageBlock);
 
   console.log('  Generating content gap analysis via Anthropic API...');
   let gapAnalysis: any;
@@ -3912,180 +3577,29 @@ async function runDwight(domain: string) {
     semanticSection = `## Semantically Similar Pages (${ss.rowCount} pairs)\n${ss.header}\n${ss.rows}`;
   }
 
-  const reportPrompt = `You are Dwight, a Technical SEO & Agentic Readiness Auditor. You have crawled ${domain} with the DataForSEO OnPage API (${outputFiles.length} output files). Below is the crawl data filtered to indexable HTML pages only (${htmlPageCount} of ${totalBeforeFilter} total resources).
+  // Pre-compute dynamic sections for Dwight template
+  const internalSummaryHeader = `${internalSummary.rowCount} HTML pages${internalSummary.full ? ', complete' : `, showing first 200 of ${internalSummary.rowCount}`}`;
+  const fullSupplementarySection = supplementarySection ? `## Supplementary Crawl Exports\n${supplementarySection}` : '';
+  const semanticSection12 = semanticReport ? `\n---\n\n## Section 12: Content Similarity & Cannibalization\n[Analyze semantically similar pages. Flag potential cannibalization risks.]` : '';
 
-YOUR ENTIRE RESPONSE IS THE REPORT. Output ONLY the markdown content of AUDIT_REPORT.md — start with the "# Technical SEO" heading. Do NOT narrate, summarize, or describe what you are doing. Do NOT say "I'll analyze" or "Here's the report". Just output the report itself.
+  const dwightTemplate = fs.readFileSync(
+    path.resolve(process.cwd(), 'configs/agents/dwight/system-prompt.md'),
+    'utf-8',
+  );
+  const reportPrompt = dwightTemplate
+    .replaceAll('{{DOMAIN}}', domain)
+    .replaceAll('{{OUTPUT_FILES_COUNT}}', String(outputFiles.length))
+    .replaceAll('{{HTML_PAGE_COUNT}}', String(htmlPageCount))
+    .replaceAll('{{TOTAL_BEFORE_FILTER}}', String(totalBeforeFilter))
+    .replaceAll('{{DATE}}', date)
+    .replace('{{INTERNAL_SUMMARY_HEADER}}', internalSummaryHeader)
+    .replace('{{INTERNAL_SUMMARY_COLS}}', internalSummary.header)
+    .replace('{{INTERNAL_SUMMARY_ROWS}}', internalSummary.rows)
+    .replace('{{SUPPLEMENTARY_SECTION}}', fullSupplementarySection)
+    .replace('{{ISSUES_SECTION}}', issuesSection)
+    .replace('{{SEMANTIC_SECTION}}', semanticSection)
+    .replace('{{SEMANTIC_SECTION_12}}', semanticSection12);
 
-IMPORTANT: Focus your analysis on indexable HTML pages. Do NOT analyze CSS, JS, images, or non-indexable resources as SEO issues. The data below has been pre-filtered to HTML pages.
-
-## Primary Crawl Data — Internal:All (${internalSummary.rowCount} HTML pages${internalSummary.full ? ', complete' : `, showing first 200 of ${internalSummary.rowCount}`})
-### CSV Header
-${internalSummary.header}
-
-### CSV Rows
-${internalSummary.rows}
-
-${supplementarySection ? `## Supplementary Crawl Exports\n${supplementarySection}` : ''}
-
-${issuesSection}
-
-${semanticSection}
-
-## AUDIT_REPORT.md Format — You MUST follow this structure exactly:
-
-\`\`\`
-# Technical SEO & Agentic Readiness Audit
-## ${domain}
-**Audit Date:** ${date}
-**Auditor:** Dwight (Forge Growth)
-**Tool:** DataForSEO OnPage API
-**Crawl Scope:** ${htmlPageCount} HTML pages (${totalBeforeFilter} total resources, ${outputFiles.length} export files)
-**Output Directory:** \`audits/${domain}/auditor/${date}/\`
-
----
-
-## Executive Summary
-[2-3 paragraphs analyzing the site's technical SEO health and agentic readiness. Prioritize issues from critical to minor.]
-
----
-
-## Section 1: Status Code Integrity
-[Analyze status codes from the crawl data. Report 200s, 3xx redirects, 4xx/5xx errors with specific URLs.
-
-TRIAGE: 4xx errors are only a material issue when the affected URL is (a) indexed or previously indexed, (b) linked internally from a page that ranks, or (c) in the site's sitemap. 404s on query parameter variants, URL fragments, or URLs with no inbound internal links are noise — note them only in aggregate if the count is high. Do not list individual non-indexable 404s in the Priority fix list.
-
-Response time: Report TTFB figures as a diagnostic data point only. Frame as "investigate if Core Web Vitals are failing" — raw TTFB numbers are not a ranking signal in isolation. Do not place response time in Priority 1 or 2 unless you have evidence of CWV failure.]
-
----
-
-## Section 2: URL Identity
-[Check for uppercase URLs, trailing slashes, duplicate URL variants. Report as a table.
-
-TRIAGE: Flag duplicate URL variants only when BOTH conditions are true: (1) both variants return 200 and are independently indexable, AND (2) no canonical tag resolves the ambiguity. Trailing slash inconsistency alone is not a material issue if canonicals are consistent. Uppercase URL variants are only material if they are actively linked or indexed.]
-
----
-
-## Section 3: Canonical Correctness
-[Analyze canonical tags — self-referencing, missing, or conflicting. Use canonicals_all data.]
-
----
-
-## Section 4: Page Titles
-### 4.1 Page Titles
-[Table: URL | Title | Length | PixelWidth | Status — but populate the table with titles that are (a) missing entirely, (b) duplicated across multiple pages, or (c) misaligned with the page's target keyword intent. Include length as a data column but do NOT use length alone as the filter criterion. Over-length titles (>60 chars) should only appear if they also have one of the three issues above. Title truncation is a CTR aesthetic, not a ranking signal — do NOT place title length issues in Priority 1 or 2.]
-
-### 4.2 Meta Descriptions
-[Table: URL | Length for meta descriptions that are (a) missing entirely across the site, or (b) duplicated across multiple pages. Length over 155 chars is a display truncation issue only — do NOT flag individual over-length descriptions as SEO problems or place them in the priority fix list.]
-
----
-
-## Section 5: Heading Structure
-### 5.1 Missing H1
-[Flag pages missing an H1 only when the page is intended to rank for a commercial or transactional keyword. An H1 is a topical relevance signal — its absence matters when the page needs to rank, not as a universal rule. If a page has no ranking intent (e.g., privacy policy, thank-you page), note the missing H1 but do not include it in Priority 1 or 2.]
-
-### 5.2 Multiple H1
-[Flag multiple H1s only when the competing H1s send conflicting topical signals on a page with ranking intent. Multiple H1s on a well-structured page where one clearly leads and others are subheadings in practice is not a material issue. Do not flag this as a problem unless the page is ranking poorly and H1 conflict is a plausible contributing factor.]
-
----
-
-## Section 6: Structured Data
-[Analyze JSON-LD/schema.org presence from structured_data_all. Report issues with numbered items.]
-
----
-
-## Section 7: Sitemap Health
-[Analyze sitemap coverage vs crawled pages. The primary question is not "how many pages are in the sitemap" but "are any pages that should rank either missing from the sitemap AND missing from internal link structure?" Pages absent from both are orphan-risk — they may not be discovered or re-crawled after an update. Report the sitemap coverage gap with that framing. A missing sitemap is a Priority 1 issue for sites with weak internal linking. A missing sitemap on a well-internally-linked site is Priority 3.]
-
----
-
-## Section 8: Image Health
-[Missing alt text and oversized images — use images export data.
-
-TRIAGE: Oversized images are a material issue only when they are likely contributing to Largest Contentful Paint (LCP) failure — specifically large above-the-fold images on mobile. Flag these as a CWV diagnostic. Images below the fold or in non-LCP positions should be noted but not prioritized.
-
-Missing alt text is an accessibility issue and affects image search indexing. It does not directly affect page ranking for non-image-search queries. Report missing alt text in aggregate (e.g., "47 of 52 images missing alt text") and place it in Priority 3 unless the site has explicit image search value.]
-
----
-
-## Section 9: Security & Link Health
-### 9.1 Internal Link Health
-[Flag broken internal links (links on indexed pages that point to 4xx/5xx URLs) — these are material because they waste crawl budget and break user navigation on pages that rank. Broken external links (outbound links to third-party 4xx pages) are NOT a ranking issue and should not appear in the priority fix list. Note them only in aggregate if the count is unusually high.]
-
-### 9.2 Security & Headers
-[Report HTTPS/mixed content issues on indexed pages — these can trigger browser warnings that affect conversion. Referrer-Policy and other security headers are operational security concerns, not SEO issues. Note them as informational only; do not include in Priority 1 or 2.]
-
----
-
-## Section 10: Agentic Readiness
-[Assess AI/LLM readiness signals]
-
-### 10.4 Agentic Readiness Scorecard
-| Signal | Status | Weight |
-|--------|--------|--------|
-| @graph entity graph | PASS or FAIL | High |
-| LocalBusiness @id IRI | PASS or FAIL | High |
-| Service-level schema | PASS or FAIL | High |
-| .well-known/mcp.json | PASS or FAIL | Medium |
-| areaServed markup | PASS or FAIL | Medium |
-| sameAs to business profiles | PASS or FAIL | Medium |
-| Consistent URL identity | PASS or FAIL | Medium |
-Add industry-specific signals as needed (e.g., FAQPage, Event, BreadcrumbList, Review schema). Status MUST be exactly PASS or FAIL — put explanations after a dash (e.g., "FAIL — not present").
-
----
-
-## Section 11: Platform Observations
-[Platform/CMS detection and known limitations.]
-${semanticReport ? `\n---\n\n## Section 12: Content Similarity & Cannibalization\n[Analyze semantically similar pages. Flag potential cannibalization risks.]` : ''}
-
----
-
-## Prioritized Fix List
-
-TIER DEFINITIONS — enforce these strictly using the POP (Priority of Priority) framework.
-For each issue, assign it to a POP Group first, then map to the corresponding Priority tier.
-The "Severity Rationale" column MUST state the POP Group and the specific reasoning.
-
-GROUP A — Crawlability & Indexation (→ Priority 1):
-  Issues preventing discovery/indexing of pages that should rank.
-  Examples: noindex on commercial pages, canonical errors, orphaned indexable pages, sitemap missing on a site with weak internal links.
-
-GROUP B — On-Page SEO Signals (→ Priority 2):
-  Issues reducing ranking potential on indexed pages.
-  Examples: missing/conflicting H1, structured data absent on rich-result-eligible pages, broken internal links on ranking pages.
-  CONDITIONAL: CWV failures (LCP >2.5s, CLS >0.1) on pages targeting competitive commercial keywords where the page ranks 4-30 belong here — Google deprioritizes slow pages in crawl budget and CWV is a direct ranking signal. State the keyword and position evidence in the rationale.
-
-GROUP C — Content & UX Quality (→ Priority 2-3):
-  Issues affecting user experience without direct ranking evidence.
-  Examples: image optimization, internal link architecture, content thinness.
-  CWV issues on pages without competitive keyword targets or ranking evidence stay here.
-
-GROUP D — Informational / Cosmetic (→ Priority 3):
-  Real issues with minimal direct ranking impact.
-  Examples: title truncation, meta description length, external broken links, security headers.
-
-Do NOT include the following in Priority 1 or 2: title tag character counts, meta description character counts, missing alt text on non-LCP images, broken external links, response time without CWV evidence, missing secondary schema types (BreadcrumbList, WebSite/SearchAction) when primary schema is also absent.
-
-### Priority 1 — Critical (Group A)
-| # | Issue | Affected Pages | Fix | Severity Rationale |
-|---|-------|---------------|-----|--------------------|
-
-### Priority 2 — High (Group B / C)
-| # | Issue | Affected Pages | Fix | Severity Rationale |
-|---|-------|---------------|-----|--------------------|
-
-### Priority 3 — Medium (Group C / D)
-| # | Issue | Affected Pages | Fix | Severity Rationale |
-|---|-------|---------------|-----|--------------------|
-\`\`\`
-
-IMPORTANT:
-- Base ALL findings on the actual crawl data provided above — you have ${outputFiles.length} export files worth of data
-- Every issue must reference specific URLs from the crawl data
-- The Agentic Readiness Scorecard (Section 10.4) is mandatory
-- Priority tables must use numbered rows (| 1 |, | 2 |, etc.)
-- IMPACT TRIAGE RULE: Report only issues that materially affect (a) whether Google and LLM crawlers can discover and index the right pages, (b) whether indexed pages load fast enough to pass Core Web Vitals on mobile, or (c) whether links and functionality work correctly in the conversion path. Do NOT flag issues that are commonly reported by SEO tools but have no direct ranking or crawlability impact. When you encounter such items (e.g., title tag character counts, meta description length, external link status, missing breadcrumb schema on small sites), note them briefly under Priority 3 or omit them. Never let cosmetic or low-signal items displace critical crawlability and indexability issues in the priority list.
-- Only report what you can verify from the crawl data provided.
-- Your response IS the file content — start with "# Technical SEO & Agentic Readiness Audit" and output the full report. No preamble, no narration, no summary of what you did.`;
 
   console.log(`  Prompt size: ${reportPrompt.length} chars`);
   const report = await callClaude(reportPrompt, { model: 'sonnet', phase: 'dwight' });
@@ -4570,56 +4084,15 @@ Use this directive to inform your prioritization and analysis. The directive spe
 IMPORTANT: If the Keyword Research Directive above instructs you NOT to anchor to the current ranking footprint (typically for multi-state or regional clients), apply that constraint to your gap analysis. Do not flag absence of pages in expansion markets as service_gaps — those are architecture decisions, not keyword research gaps. Focus service_gaps on the primary service area only unless the directive explicitly instructs otherwise.
 ` : '';
 
-  const synthesisPrompt = `You are a Keyword Research Analyst for a ${industryLabel} business in ${kwGeo.label || 'unknown'}.
-
-## Site Inventory (from Dwight's Crawl)
-Services: ${services.join(', ')}
-Locations: ${locations.join(', ')}
-Platform: ${platform}
-Existing pages: ${existingUrls.length} URLs crawled
-${strategySection}
-## Validated Keyword Matrix (top 100 of ${validated.length}, sorted by CPC)
-Keyword | Service | City | Intent | Volume | CPC | Near-Me
-${validatedTable}
-
-## Task
-Analyze this keyword opportunity matrix and produce a JSON response:
-
-1. Top opportunities by revenue signal (CPC × estimated achievable volume)
-2. Distinguish two different gap types:
-   - zero_volume_services: Services the site offers for which NO keywords in the validated matrix have measurable search volume. This is a market signal failure — the service may not have search demand in this geo, or the seed terms were too generic. Flag these explicitly.
-   - service_gaps (already in output schema): Services OR sub-services with measurable keyword volume in the matrix but NO existing page on the site. This is a content gap — the demand exists but the site is not positioned to capture it. These are build opportunities.
-   Do not conflate these two categories. A zero-volume service is not the same as a missing page.
-3. Identify gaps: services with strong volume that have no existing page on the site
-4. Score each keyword with priority_score: (cpc * volume) / 1000, rounded to 2 decimals
-
-DATA QUALITY CHECK: If the validated keyword matrix contains fewer than 15 keywords, include a "data_quality_flag" field in your JSON output with a brief description of the coverage gap. Example: "Matrix contains only 3 keywords across 2 generic service categories — sub-service expansion and additional DataForSEO seed terms recommended before treating this analysis as complete." Do not suppress findings — produce the best analysis possible from the available data and surface the coverage gap explicitly.
-
-YOUR ENTIRE RESPONSE IS RAW JSON. Output ONLY the JSON object starting with {. No markdown, no code fences, no narration.
-
-Respond with raw JSON only:
-{
-  "keyword_opportunities": [
-    {
-      "keyword": "string",
-      "service": "string",
-      "city": "string",
-      "intent": "commercial|informational|transactional",
-      "volume": 1000,
-      "cpc": 5.50,
-      "is_near_me": false,
-      "has_existing_page": true,
-      "priority_score": 5.50
-    }
-  ],
-  "zero_volume_services": ["service name with no measurable demand"],
-  "service_gaps": [
-    { "service": "string", "total_volume": 1000, "top_keyword": "string", "has_page": false }
-  ],
-  "summary": "2-3 sentence executive summary that: (1) characterizes the overall opportunity landscape (strong/moderate/thin demand signal), (2) names the single highest-priority gap or opportunity by keyword and volume, and (3) notes any significant data quality or coverage concern. This summary is read by Michael and Pam — make it directionally useful, not a restatement of what the matrix contains."
-}
-
-REMINDER: Your response IS the JSON — start with { and end with }. No preamble.`;
+  const kwTemplate = fs.readFileSync(path.resolve(process.cwd(), 'configs/agents/keyword-research/system-prompt.md'), 'utf-8');
+  const scopeCtxBlock = `Services: ${services.join(', ')}\nLocations: ${locations.join(', ')}\nPlatform: ${platform}\nExisting pages: ${existingUrls.length} URLs crawled`;
+  const synthesisPrompt = kwTemplate
+    .replace('{{INDUSTRY_LABEL}}', industryLabel)
+    .replace('{{GEO_CONTEXT}}', kwGeo.label || 'unknown')
+    .replace('{{SCOPE_CONTEXT}}', scopeCtxBlock)
+    .replace('{{STRATEGY_SECTION}}', strategySection)
+    .replace('{{VALIDATED_COUNT}}', String(validated.length))
+    .replace('{{VALIDATED_TABLE}}', validatedTable);
 
   console.log('  Generating keyword research synthesis via Anthropic API (sonnet)...');
   let synthesis: any;
@@ -4719,165 +4192,6 @@ function buildKeywordResearchMd(domain: string, synthesis: any, services: string
     lines.push('|---------|-------------|-------------|----------|');
     for (const g of gaps) {
       lines.push(`| ${g.service} | ${g.total_volume} | ${g.top_keyword} | ${g.has_page ? 'yes' : 'no'} |`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
-// ============================================================
-// Phase 6.5: Coverage Validator — cross-check gaps vs blueprint
-// ============================================================
-
-async function runValidator(sb: SupabaseClient, auditId: string, domain: string, researchDate?: string) {
-  // Both artifacts required — resolve across date boundaries
-  const gapResolved = resolveArtifactPath(domain, 'research', 'content_gap_analysis.md', researchDate);
-  if (!gapResolved) throw new Error('content_gap_analysis.md not found — Gap agent must run first');
-
-  const blueprintResolved = resolveArtifactPath(domain, 'architecture', 'architecture_blueprint.md');
-  if (!blueprintResolved) throw new Error('architecture_blueprint.md not found — Michael must run first');
-
-  const gapContent = fs.readFileSync(gapResolved, 'utf-8');
-  const blueprintContent = fs.readFileSync(blueprintResolved, 'utf-8');
-
-  console.log(`  Gap analysis: ${gapContent.length} chars, Blueprint: ${blueprintContent.length} chars`);
-
-  const prompt = `You are a Coverage Validator. Compare the content gap analysis against the architecture blueprint and produce a structured coverage map.
-
-## Content Gap Analysis
-${gapContent}
-
-## Architecture Blueprint
-${blueprintContent}
-
-## Task
-For each gap identified in the analysis (authority_gaps, format_gaps, unaddressed_gaps), determine whether it is addressed by a page in the architecture blueprint.
-
-Coverage status definitions — apply strictly:
-- "addressed": A specific page exists in the blueprint (not just a silo) whose primary keyword directly targets the gap topic, OR whose URL slug contains the gap topic's key terms. A silo name alone does not constitute "addressed" — there must be a specific page row.
-- "partially_addressed": A related page exists that would capture some of the gap's search demand, but no page directly targets the gap topic as its primary keyword. Example: a general "EMT Training" page partially addresses an "EMT Certification Idaho" gap.
-- "unaddressed": No page in the blueprint targets the gap topic directly or partially.
-
-DEDUPLICATION GUARDRAIL: If near-duplicate topics appear in the gap analysis despite upstream deduplication (e.g., "First Aid for Burns" and "Burn First Aid" as separate entries), merge them into ONE coverage entry using the highest-volume variant as representative. Do not create separate coverage entries for semantic duplicates.
-
-EMPTY INPUT HANDLING:
-- If the gap analysis contains no authority_gaps, format_gaps, or unaddressed_gaps (e.g., because architecture had not yet been generated when gap analysis ran), set coverage to [] and note this in the summary.
-- If the architecture blueprint contains no silo tables (e.g., blueprint generation failed or is incomplete), set all gaps to status "unaddressed" with notes: "Blueprint unavailable — cannot validate coverage."
-
-YOUR ENTIRE RESPONSE IS RAW JSON. Output ONLY the JSON object starting with {. No markdown, no code fences, no narration.
-
-Respond with raw JSON only. Schema:
-{
-  "coverage": [
-    { "gap_topic": "string", "gap_type": "authority|format|unaddressed", "estimated_volume": "integer or null", "revenue_signal": "high|medium|low|unknown", "blueprint_page": "url-slug or null", "status": "addressed|partially_addressed|unaddressed", "notes": "string" }
-  ],
-  "summary": "2-3 sentence summary that must include: (1) overall coverage rate as a fraction (e.g., '7 of 11 gaps addressed'), (2) the highest-revenue unaddressed or partially_addressed gap by name, and (3) a clear PASS or FAIL signal — PASS if all high-revenue gaps are addressed, FAIL if any high-revenue gap is unaddressed or partially_addressed."
-}
-
-Field rules:
-- estimated_volume: carry through from gap analysis if available, null if not
-- revenue_signal: "high" if CPC × volume implies >$500/mo opportunity, "medium" if $100-500/mo, "low" if <$100/mo, "unknown" if no revenue data available
-- notes: REQUIRED for any gap with status "unaddressed" or "partially_addressed" — must explain why the gap is not fully addressed and what specific action would resolve it. Optional for "addressed" gaps.
-
-REMINDER: Your response IS the JSON — start with { and end with }. No preamble.`;
-
-  console.log('  Running coverage validation via Anthropic API (sonnet)...');
-  let validation: { coverage: any[]; summary: string };
-  try {
-    const result = await callClaude(prompt, { model: 'sonnet', phase: 'validator', warnOnTruncation: true });
-    const stripped = stripCodeFences(result);
-    try {
-      validation = JSON.parse(stripped);
-    } catch {
-      console.warn('  [validator] Direct JSON.parse failed, attempting repair...');
-      validation = repairJSON(stripped, 'coverage');
-    }
-  } catch (err: any) {
-    if (err instanceof TruncationError) {
-      console.warn('  [validator] Output truncated — attempting repair on partial output...');
-      const stripped = stripCodeFences(err.output);
-      try {
-        validation = repairJSON(stripped, 'coverage');
-        // Synthesize summary if repair dropped it
-        if (!validation.summary) {
-          validation.summary = `Partial result — output was truncated at max_tokens. ${(validation.coverage ?? []).length} coverage entries recovered.`;
-        }
-      } catch (repairErr: any) {
-        throw new Error(`Coverage validation truncated and repair failed: ${repairErr.message}`);
-      }
-    } else {
-      throw new Error(`Coverage validation failed: ${err.message}`);
-    }
-  }
-
-  const coverage = validation.coverage ?? [];
-  const addressed = coverage.filter((c) => c.status === 'addressed').length;
-  const partial = coverage.filter((c) => c.status === 'partially_addressed').length;
-  const unaddressed = coverage.filter((c) => c.status === 'unaddressed').length;
-
-  console.log(`  Coverage: ${addressed} addressed, ${partial} partially addressed, ${unaddressed} unaddressed (of ${coverage.length} gaps)`);
-
-  // Write markdown to disk — same directory as the gap analysis
-  const validationMd = buildCoverageValidationMd(domain, validation);
-  const outDir = path.dirname(gapResolved);
-  const outPath = path.join(outDir, 'coverage_validation.md');
-  fs.writeFileSync(outPath, validationMd, 'utf-8');
-  console.log(`  Written coverage_validation.md to ${path.relative(process.cwd(), outDir)}/`);
-
-  // Write to Supabase — pre-check table exists, then DELETE + INSERT
-  const { error: probeErr } = await sb.from('audit_coverage_validation').select('id', { count: 'exact', head: true }).limit(0);
-  if (probeErr) {
-    console.warn(`  Warning: audit_coverage_validation table not available (${probeErr.message}) — skipping DB write`);
-  } else {
-    await sb.from('audit_coverage_validation').delete().eq('audit_id', auditId);
-    if (coverage.length > 0) {
-      const rows = coverage.map((c) => ({
-        audit_id: auditId,
-        gap_topic: c.gap_topic,
-        gap_type: c.gap_type,
-        estimated_volume: typeof c.estimated_volume === 'number' ? c.estimated_volume : null,
-        revenue_signal: c.revenue_signal ?? null,
-        blueprint_page: c.blueprint_page ?? null,
-        status: c.status,
-        notes: c.notes ?? null,
-      }));
-      const { error } = await sb.from('audit_coverage_validation').insert(rows);
-      if (error) console.warn(`  Warning: Supabase insert failed: ${error.message}`);
-      else console.log(`  Inserted ${rows.length} rows into audit_coverage_validation`);
-    }
-  }
-
-  console.log(`  Validator complete — ${addressed}/${coverage.length} gaps addressed`);
-}
-
-function buildCoverageValidationMd(domain: string, validation: { coverage: any[]; summary: string }): string {
-  const lines: string[] = [];
-  lines.push(`# Coverage Validation — ${domain}`);
-  lines.push(`\n**Generated:** ${new Date().toISOString()}`);
-  lines.push(`**Source:** pipeline-generate.ts (gap vs blueprint cross-check)\n`);
-
-  if (validation.summary) {
-    lines.push(`## Summary\n`);
-    lines.push(validation.summary + '\n');
-  }
-
-  const unaddressed = (validation.coverage ?? []).filter((c) => c.status === 'unaddressed' || c.status === 'partially_addressed');
-  if (unaddressed.length > 0) {
-    lines.push('## Unaddressed / Partially Addressed Gaps\n');
-    lines.push('| Gap Topic | Gap Type | Est. Volume | Revenue Signal | Status | Blueprint Page | Notes |');
-    lines.push('|-----------|----------|-------------|----------------|--------|---------------|-------|');
-    for (const c of unaddressed) {
-      lines.push(`| ${c.gap_topic} | ${c.gap_type} | ${c.estimated_volume ?? '—'} | ${c.revenue_signal ?? 'unknown'} | ${c.status} | ${c.blueprint_page ?? 'N/A'} | ${c.notes ?? ''} |`);
-    }
-  }
-
-  const addressed = (validation.coverage ?? []).filter((c) => c.status === 'addressed');
-  if (addressed.length > 0) {
-    lines.push('\n## Addressed Gaps\n');
-    lines.push('| Gap Topic | Gap Type | Est. Volume | Revenue Signal | Blueprint Page | Notes |');
-    lines.push('|-----------|----------|-------------|----------------|---------------|-------|');
-    for (const c of addressed) {
-      lines.push(`| ${c.gap_topic} | ${c.gap_type} | ${c.estimated_volume ?? '—'} | ${c.revenue_signal ?? 'unknown'} | ${c.blueprint_page ?? 'N/A'} | ${c.notes ?? ''} |`);
     }
   }
 
@@ -6113,26 +5427,12 @@ async function runQA(
     .map((c) => `- [${c.weight}] ${c.name}: ${c.description}`)
     .join('\n');
 
-  const qaPrompt = `You are a QA evaluator for an SEO audit pipeline. Evaluate the following ${phase} artifact against the quality rubric below.
-
-## Rubric Checks
-${checksDescription}
-
-## Artifact Content${wasTruncated ? ' (truncated to 50K chars)' : ''}
-
-${truncated}
-
-## Instructions
-
-Evaluate each check. For each check, determine if it PASSES or FAILS, and provide brief feedback.
-
-Then determine the overall verdict:
-- **PASS**: All critical checks pass AND at most 1 high-weight check fails
-- **ENHANCE**: Any critical check fails OR 2+ high-weight checks fail, but the artifact has meaningful content worth improving
-- **FAIL**: Artifact is missing, empty, contains narration instead of the requested format, or is fundamentally broken
-
-YOUR ENTIRE RESPONSE IS RAW JSON — no markdown, no code fences. Output exactly:
-{"verdict": "pass|enhance|fail", "checks": [{"name": "check_name", "passed": true|false, "feedback": "brief reason"}], "feedback": "overall feedback for improvement (empty string if pass)"}`;
+  const qaTemplate = fs.readFileSync(path.resolve(process.cwd(), 'configs/agents/qa/system-prompt.md'), 'utf-8');
+  const qaPrompt = qaTemplate
+    .replace('{{PHASE}}', phase)
+    .replace('{{CHECKS_DESCRIPTION}}', checksDescription)
+    .replace('{{TRUNCATION_NOTICE}}', wasTruncated ? ' (truncated to 50K chars)' : '')
+    .replace('{{ARTIFACT_CONTENT}}', truncated);
 
   console.log(`  QA evaluating ${phase} (attempt ${attemptNumber})...`);
 
@@ -6243,10 +5543,7 @@ async function main() {
       await runDwight(args.domain);
       break;
     case 'canonicalize':
-      await runCanonicalize(sb, audit.id, args.domain, args.canonicalizeMode);
-      break;
-    case 'validator':
-      await runValidator(sb, audit.id, args.domain, args.date);
+      await runCanonicalize(sb, audit.id, args.domain);
       break;
     case 'keyword-research':
       await runKeywordResearch(sb, audit.id, args.domain, args.date);

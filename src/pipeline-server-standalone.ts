@@ -91,34 +91,8 @@ async function handleTrigger(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  // Resolve canonicalize_mode from audits table before spawning pipeline.
-  // Fail-loud: if the DB query fails, return 500 rather than silently defaulting to legacy.
-  // NULL canonicalize_mode → 'legacy' per column DEFAULT (unset = legacy).
-  let canonicalizeMode = 'legacy';
-  if (mode !== 'prospect') {
-    const sb = getSb();
-    if (!sb) {
-      json(res, 500, { error: 'Supabase not configured (cannot resolve canonicalize_mode)' });
-      return;
-    }
-    const { data: auditRow, error: auditErr } = await sb
-      .from('audits')
-      .select('canonicalize_mode')
-      .eq('domain', domain)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (auditErr) {
-      json(res, 500, { error: `Failed to resolve canonicalize_mode for ${domain}: ${auditErr.message}` });
-      return;
-    }
-    if (auditRow?.canonicalize_mode) {
-      canonicalizeMode = auditRow.canonicalize_mode;
-    }
-  }
-
   inFlight.add(domain);
-  console.log(`Pipeline triggered: ${domain} (${email}) [mode=${mode}, canonicalize_mode=${canonicalizeMode}]`);
+  console.log(`Pipeline triggered: ${domain} (${email}) [mode=${mode}]`);
 
   const scriptPath = path.resolve(process.cwd(), 'scripts/run-pipeline.sh');
   const args = [domain, email];
@@ -126,11 +100,6 @@ async function handleTrigger(req: http.IncomingMessage, res: http.ServerResponse
     args.push('--mode', 'prospect', '--prospect-config', prospectConfig);
   } else if (mode !== 'full') {
     args.push('--mode', mode);
-  }
-
-  // Pass canonicalize_mode to shell orchestrator (non-prospect modes only)
-  if (mode !== 'prospect' && canonicalizeMode !== 'legacy') {
-    args.push('--canonicalize-mode', canonicalizeMode);
   }
 
   const startFrom = payload.start_from || '';
@@ -415,39 +384,10 @@ async function handleRecanonicalize(req: http.IncomingMessage, res: http.ServerR
     return;
   }
 
-  // Resolve canonicalize_mode from audits table before spawning.
-  // Fail-loud: if the DB query fails, return 500 rather than silently defaulting to legacy.
-  // NULL canonicalize_mode → 'legacy' per column DEFAULT (unset = legacy).
-  let canonicalizeMode = 'legacy';
-  {
-    const sb = getSb();
-    if (!sb) {
-      json(res, 500, { error: 'Supabase not configured (cannot resolve canonicalize_mode)' });
-      return;
-    }
-    const { data: auditRow, error: auditErr } = await sb
-      .from('audits')
-      .select('canonicalize_mode')
-      .eq('domain', domain)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (auditErr) {
-      json(res, 500, { error: `Failed to resolve canonicalize_mode for ${domain}: ${auditErr.message}` });
-      return;
-    }
-    if (auditRow?.canonicalize_mode) {
-      canonicalizeMode = auditRow.canonicalize_mode;
-    }
-  }
-
   inFlight.add(recanonKey);
-  console.log(`Re-canonicalize triggered: ${domain} (${email}) [canonicalize_mode=${canonicalizeMode}]`);
+  console.log(`Re-canonicalize triggered: ${domain} (${email})`);
 
   const spawnArgs = ['tsx', 'scripts/run-canonicalize.ts', '--domain', domain, '--user-email', email];
-  if (canonicalizeMode !== 'legacy') {
-    spawnArgs.push('--canonicalize-mode', canonicalizeMode);
-  }
   const child = spawn('npx', spawnArgs, {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],

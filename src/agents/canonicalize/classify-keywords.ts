@@ -186,7 +186,6 @@ Only include is_brand for keywords marked [classify_brand]. Always include inten
       const payload: Record<string, unknown> = {
         is_brand: isBrand,
         intent_type: intentType,
-        intent: intentType, // backward compat (addendum correction #4)
         is_near_me: isNearMe,
         primary_entity_type: primaryEntityType,
         canonicalize_mode: opts.canonicalizeMode,

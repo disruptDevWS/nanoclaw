@@ -149,7 +149,7 @@ interface KeywordRow {
   keyword: string;
   search_volume: number | null;
   position: number | null;
-  intent: string | null;
+  intent_type: string | null;
   ranking_url: string | null;
   cpc: number | null;
 }
@@ -194,7 +194,7 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
   if (canonicalKey) {
     const { data } = await (sb as any)
       .from('audit_keywords')
-      .select('keyword, search_volume, position, intent, ranking_url, cpc')
+      .select('keyword, search_volume, position, intent_type, ranking_url, cpc')
       .eq('audit_id', req.audit_id)
       .eq('canonical_key', canonicalKey);
     keywords = (data ?? []) as KeywordRow[];
@@ -203,7 +203,7 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
   if (keywords.length === 0) {
     const { data } = await sb
       .from('audit_keywords')
-      .select('keyword, search_volume, position, intent, ranking_url, cpc')
+      .select('keyword, search_volume, position, intent_type, ranking_url, cpc')
       .eq('audit_id', req.audit_id)
       .order('search_volume', { ascending: false })
       .limit(50);
@@ -901,7 +901,7 @@ function buildPrompt(
         '| Keyword | Volume/mo | Current Position | CPC | Intent |',
         '|---------|-----------|-----------------|-----|--------|',
         ...keywords.map((k) =>
-          `| ${k.keyword} | ${k.search_volume ?? '—'} | ${k.position ?? '—'} | ${k.cpc != null ? `$${k.cpc.toFixed(2)}` : '—'} | ${k.intent ?? '—'} |`
+          `| ${k.keyword} | ${k.search_volume ?? '—'} | ${k.position ?? '—'} | ${k.cpc != null ? `$${k.cpc.toFixed(2)}` : '—'} | ${k.intent_type ?? '—'} |`
         ),
       ].join('\n')
     : 'No keyword data available. Use best judgment based on the page topic and domain context.';
@@ -1025,7 +1025,7 @@ Rationale: [one sentence]
 | Keyword | Target Element | Notes |
 |---------|---------------|-------|
 
-**Implementation Notes:** [anything Oscar or a human editor needs to know before writing — e.g., OPTIMIZE: do not rewrite hero section, update FAQ block only; or CREATE: this is a pillar page, tone is authoritative, conversion-focused]
+**Implementation Notes:** [anything Oscar or a human editor needs to know before writing — e.g., OPTIMIZE: do not rewrite hero section; or CREATE: this is a pillar page, tone is authoritative, conversion-focused]
 
 ---METADATA_END---
 
@@ -1041,7 +1041,6 @@ REQUIRED ENTITIES (all pages):
 
 CONDITIONAL ENTITIES (add when appropriate):
 - Service: when the page targets a specific service — include name (must match canonical cluster topic), provider pointing to Organization @id, areaServed
-- FAQPage: when the page includes Q&A content — include Question/Answer pairs that match the FAQ section in the outline exactly. This is an opportunity surface (featured snippets, PAA, AI Overviews), not the primary schema goal.
 - HowTo: when the page includes sequential instructional content
 - BreadcrumbList: on all non-homepage pages — reinforces site hierarchy for machine readers
 
@@ -1130,7 +1129,7 @@ Only provide full content direction for ADD items.` : ''}]
 ## Quality Standards
 1. Metadata rationale must justify each element in terms of both user intent and ranking signal — not just describe what it says
 2. Schema must be a coherent @graph contribution — consistent @id IRIs, correct @type for page intent, all required entities present with placeholders for unknown values
-3. FAQPage and HowTo schema are opportunities to be added when content warrants them — not required on every page
+3. HowTo schema is an opportunity to be added when content warrants it — not required on every page
 4. Required content coverage must address PAA questions with explicit [TABLE STAKES] / [OPPORTUNITY] / [DEPTH SIGNAL] / [AI CITATION GAP] / [TIME-SENSITIVE] classification
 5. Internal linking map must specify direction and placement context — not just destination URLs
 6. Cluster expansion opportunities are mandatory — minimum 1 suggestion per brief

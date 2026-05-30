@@ -277,7 +277,7 @@ async function trackRankings(cliArgs: CliArgs) {
   // Build keyword → metadata map (case-insensitive)
   const keywordMeta = new Map<string, {
     canonical_key: string | null;
-    cluster: string | null;
+    canonical_topic: string | null;
     is_brand: boolean;
     intent_type: string | null;
     search_volume: number;
@@ -286,7 +286,7 @@ async function trackRankings(cliArgs: CliArgs) {
   for (const kw of auditKeywords ?? []) {
     keywordMeta.set(kw.keyword.toLowerCase(), {
       canonical_key: kw.canonical_key,
-      cluster: kw.cluster,
+      canonical_topic: kw.cluster,
       is_brand: kw.is_brand ?? false,
       intent_type: kw.intent_type,
       search_volume: kw.search_volume ?? 0,
@@ -317,7 +317,7 @@ async function trackRankings(cliArgs: CliArgs) {
       ranking_url: ranking?.url ?? null,
       search_volume: ranking?.volume ?? meta.search_volume,
       canonical_key: meta.canonical_key,
-      cluster: meta.cluster,
+      canonical_topic: meta.canonical_topic,
       is_brand: meta.is_brand,
       intent_type: meta.intent_type,
     });
@@ -335,7 +335,7 @@ async function trackRankings(cliArgs: CliArgs) {
         ranking_url: ranking.url,
         search_volume: ranking.volume,
         canonical_key: null,
-        cluster: null,
+        canonical_topic: null,
         is_brand: false,
         intent_type: ranking.intent,
       });

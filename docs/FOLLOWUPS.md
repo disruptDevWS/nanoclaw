@@ -12,23 +12,18 @@ Each entry is self-contained: picking it up 3 months later should not require re
 
 ---
 
-### [Pipeline] `ranking_snapshots.cluster` column rename
+### ~~[Pipeline] `ranking_snapshots.cluster` column rename~~ — RESOLVED
 
-- **Issue:** After the `audit_keywords.cluster` column split (Session B), `track-rankings.ts` caches the `cluster` value from `audit_keywords` and writes it to `ranking_snapshots.cluster`. Post-split, `audit_keywords.cluster` holds `canonical_topic`, so `ranking_snapshots.cluster` also holds `canonical_topic` — but the column name suggests silo.
-- **Why it matters:** Misleading column name could confuse future development. The column stores canonical_topic but is named `cluster`.
-- **Prerequisites:** Session B cluster split complete and verified.
-- **Scope estimate:** S — rename column in migration + update `track-rankings.ts` writer + verify no dashboard readers depend on the column name.
-- **Captured:** Session B Check 3, 2026-04-21
+- **Resolved:** 2026-05-29, Session 1. Migration 025 renamed `cluster` → `canonical_topic`. `track-rankings.ts` updated. No dashboard readers used the column directly.
 
 ---
 
-### [Pipeline] Deprecate `intent` column on `audit_keywords`
+### [Dashboard] Drop `intent` column on `audit_keywords`
 
-- **Issue:** `intent` is a backward-compatible copy of `intent_type`. Both columns exist on `audit_keywords`. Session B writes both (`intent = intent_type`) to maintain backward compatibility.
-- **Why it matters:** Column duplication creates maintenance risk. Dashboard or edge functions may read `intent` in some places, `intent_type` in others. Pam's `generate-brief.ts` reads the `intent` column in its keyword SELECT.
-- **Prerequisites:** Audit all `intent` column readers across pipeline repo and lovable-repo. Update them to use `intent_type`. Then drop `intent` column.
-- **Scope estimate:** M — cross-repo reader audit + migration + dashboard updates.
-- **Captured:** Session B addendum correction #4, 2026-04-21
+- **Status:** Pipeline writers updated (2026-05-29) — no pipeline code writes to `intent` anymore. `generate-brief.ts` now reads `intent_type`.
+- **Remaining:** Audit all `intent` column readers in lovable-repo (dashboard). Update them to use `intent_type`. Then drop `intent` column via migration.
+- **Scope estimate:** S — dashboard reader audit + column drop migration.
+- **Captured:** Session B addendum correction #4, 2026-04-21. Pipeline-side cleanup: Session 1, 2026-05-29
 
 ---
 

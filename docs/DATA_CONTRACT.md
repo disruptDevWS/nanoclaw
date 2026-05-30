@@ -67,7 +67,7 @@
 | `search_volume` | Pipeline | Dashboard | Geo-qualified (sum across service-area states) when `geo_mode != 'national'`; national volume when `geo_mode = 'national'` or geo lookup suppressed |
 | `cpc` | Pipeline | Dashboard | |
 | `ranking_url` | Pipeline | Dashboard | |
-| `intent` | Pipeline | Dashboard | |
+| `intent` | **DEPRECATED** — no pipeline writers | Dashboard (legacy readers) | Use `intent_type` instead. Pipeline stopped writing this column 2026-05-29. Column drop pending dashboard reader audit. |
 | `topic` | Pipeline | Dashboard | |
 | `cluster` | Pipeline | Dashboard | = canonical_topic after Phase 3c (canonical_topic-exclusive post-Session-B) |
 | `silo` | Pipeline (Phase 6b) | Dashboard | syncMichael silo backfill. NULL until syncMichael matches keyword to a silo. Added migration 019. |
@@ -273,21 +273,9 @@ Written by syncDwight + syncMichael. Tracks agent execution history.
 
 ---
 
-### `audit_coverage_validation`
+### `audit_coverage_validation` — **DEPRECATED**
 
-Written by Phase 6.5 (Validator, Sonnet). Cross-checks gap analysis vs architecture blueprint.
-
-| Column | Notes |
-|--------|-------|
-| `gap_topic` | Gap topic string from gap analysis |
-| `gap_type` | `authority` / `format` / `unaddressed` |
-| `estimated_volume` | Monthly search volume (integer, nullable) — carried from gap analysis |
-| `revenue_signal` | `high` / `medium` / `low` / `unknown` — CPC × volume threshold |
-| `blueprint_page` | URL slug of addressing page, or null |
-| `status` | `addressed` / `partially_addressed` / `unaddressed` |
-| `notes` | Required for unaddressed/partially_addressed gaps |
-
-**Dashboard reads**: Not currently consumed by UI (available for future use)
+**Status:** Inactive. Phase 6.5 (Validator) was removed — its coverage check was superseded by Gap analysis. Table preserved for historical data; no pipeline code reads or writes to it.
 
 ---
 
@@ -318,6 +306,7 @@ Written by `track-rankings.ts` (monthly cron or on-demand).
 | `search_volume` | |
 | `snapshot_date` | |
 | `canonical_key` | For cluster aggregation |
+| `canonical_topic` | Human-readable cluster name (renamed from `cluster` in migration 025) |
 
 **Dashboard reads**: Via `ranking_deltas` view
 
