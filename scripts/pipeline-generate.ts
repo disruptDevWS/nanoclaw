@@ -1099,6 +1099,215 @@ function buildSiteInventory(domain: string): string {
 }
 
 // ============================================================
+// Deterministic research_data.json builder — replaces regex-parsed numeric fields
+// ============================================================
+
+interface ResearchData {
+  keyword_overview: {
+    total_keywords: number;
+    total_volume: number;
+    avg_position: number;
+    etv: number;
+    top_10_count: number;
+    near_miss_count: number;
+  };
+  position_distribution: Array<{ range: string; count: number; pct: number }>;
+  branded_split: {
+    branded: { count: number; volume: number; avg_position: number };
+    non_branded: { count: number; volume: number; avg_position: number };
+  };
+  intent_breakdown: Array<{ intent: string; count: number; volume: number; pct_volume: number }>;
+  top_ranking_urls: Array<{ url: string; keywords: number; volume: number }>;
+  competitor_analysis: Array<{
+    rank: number; domain: string; overlap_pct: number;
+    shared_keywords: number; total_keywords: number; avg_position: number; etv: number;
+  }>;
+  competitor_summary: {
+    competitor_avg_keywords: number; competitor_avg_position: number; competitor_avg_etv: number;
+  };
+  striking_distance: Array<{
+    keyword: string; position: number; volume: number; cpc: number | null; intent: string;
+  }>;
+  content_gap_observations?: string[];
+  key_takeaways?: Array<{ section: string; takeaway: string }>;
+  ai_visibility?: {
+    client_mentions: Array<{ keyword: string; platform: string; mention_count: number; cited: boolean }>;
+    competitor_totals: Array<{ domain: string; platform: string; total_mentions: number }>;
+    top_citation_domains: string[];
+  };
+}
+
+function buildResearchData(rawKeywords: any[], rawCompetitors: any[], domain: string): ResearchData {
+  // --- Keyword Overview ---
+  const rankedKws = rawKeywords.filter((item) => (item.ranked_serp_element?.serp_item?.rank_group ?? 100) < 100);
+  const totalVolume = rawKeywords.reduce((sum, item) => sum + (item.keyword_data?.keyword_info?.search_volume ?? 0), 0);
+  const positionsForAvg = rankedKws.map((item) => item.ranked_serp_element?.serp_item?.rank_group as number);
+  const avgPosition = positionsForAvg.length > 0
+    ? Math.round((positionsForAvg.reduce((s, p) => s + p, 0) / positionsForAvg.length) * 10) / 10
+    : 0;
+  const totalEtv = rawKeywords.reduce((sum, item) => sum + (item.ranked_serp_element?.serp_item?.etv ?? 0), 0);
+  const top10Count = rawKeywords.filter((item) => {
+    const pos = item.ranked_serp_element?.serp_item?.rank_group ?? 999;
+    return pos >= 1 && pos <= 10;
+  }).length;
+  const nearMissCount = rawKeywords.filter((item) => {
+    const pos = item.ranked_serp_element?.serp_item?.rank_group ?? 999;
+    return pos >= 11 && pos <= 20;
+  }).length;
+
+  // --- Position Distribution ---
+  const buckets = [
+    { range: '1-3', min: 1, max: 3 },
+    { range: '4-10', min: 4, max: 10 },
+    { range: '11-20', min: 11, max: 20 },
+    { range: '21-50', min: 21, max: 50 },
+    { range: '51-100', min: 51, max: 100 },
+  ];
+  const positionDistribution = buckets.map(({ range, min, max }) => {
+    const count = rawKeywords.filter((item) => {
+      const pos = item.ranked_serp_element?.serp_item?.rank_group ?? 999;
+      return pos >= min && pos <= max;
+    }).length;
+    return { range, count, pct: rawKeywords.length > 0 ? Math.round(count / rawKeywords.length * 1000) / 10 : 0 };
+  });
+
+  // --- Branded Split ---
+  const domainBase = domain.replace(/\.(com|net|org|io|co|edu|gov)$/i, '').replace(/-/g, ' ').toLowerCase();
+  const domainNoSpaces = domainBase.replace(/\s+/g, '');
+  const branded: any[] = [];
+  const nonBranded: any[] = [];
+  for (const item of rawKeywords) {
+    const kwLower = (item.keyword_data?.keyword ?? '').toLowerCase();
+    const kwNoSpaces = kwLower.replace(/\s+/g, '');
+    if (kwNoSpaces.includes(domainNoSpaces) || kwLower.includes(domainBase)) {
+      branded.push(item);
+    } else {
+      nonBranded.push(item);
+    }
+  }
+  const brandedVolume = branded.reduce((s, i) => s + (i.keyword_data?.keyword_info?.search_volume ?? 0), 0);
+  const nonBrandedVolume = nonBranded.reduce((s, i) => s + (i.keyword_data?.keyword_info?.search_volume ?? 0), 0);
+  const brandedPositions = branded
+    .map((i) => i.ranked_serp_element?.serp_item?.rank_group as number)
+    .filter((p) => p < 100);
+  const nonBrandedPositions = nonBranded
+    .map((i) => i.ranked_serp_element?.serp_item?.rank_group as number)
+    .filter((p) => p < 100);
+
+  const brandedSplit = {
+    branded: {
+      count: branded.length,
+      volume: brandedVolume,
+      avg_position: brandedPositions.length > 0
+        ? Math.round(brandedPositions.reduce((s, p) => s + p, 0) / brandedPositions.length * 10) / 10 : 0,
+    },
+    non_branded: {
+      count: nonBranded.length,
+      volume: nonBrandedVolume,
+      avg_position: nonBrandedPositions.length > 0
+        ? Math.round(nonBrandedPositions.reduce((s, p) => s + p, 0) / nonBrandedPositions.length * 10) / 10 : 0,
+    },
+  };
+
+  // --- Intent Breakdown ---
+  const intentMap = new Map<string, { count: number; volume: number }>();
+  for (const item of rawKeywords) {
+    const intent = (item.keyword_data?.search_intent_info?.main_intent ?? 'unknown').toLowerCase();
+    // Capitalize first letter for consistency
+    const intentLabel = intent.charAt(0).toUpperCase() + intent.slice(1);
+    const vol = item.keyword_data?.keyword_info?.search_volume ?? 0;
+    const existing = intentMap.get(intentLabel) ?? { count: 0, volume: 0 };
+    existing.count++;
+    existing.volume += vol;
+    intentMap.set(intentLabel, existing);
+  }
+  const intentBreakdown = [...intentMap.entries()]
+    .map(([intent, data]) => ({
+      intent,
+      count: data.count,
+      volume: data.volume,
+      pct_volume: totalVolume > 0 ? Math.round(data.volume / totalVolume * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.volume - a.volume);
+
+  // --- Top Ranking URLs ---
+  const urlMap = new Map<string, { keywords: number; volume: number }>();
+  for (const item of rawKeywords) {
+    const url = item.ranked_serp_element?.serp_item?.url;
+    if (!url) continue;
+    const existing = urlMap.get(url) ?? { keywords: 0, volume: 0 };
+    existing.keywords++;
+    existing.volume += item.keyword_data?.keyword_info?.search_volume ?? 0;
+    urlMap.set(url, existing);
+  }
+  const topRankingUrls = [...urlMap.entries()]
+    .map(([url, data]) => ({ url, keywords: data.keywords, volume: data.volume }))
+    .sort((a, b) => b.keywords - a.keywords)
+    .slice(0, 20);
+
+  // --- Competitor Analysis ---
+  const totalClientKeywords = rawKeywords.length;
+  const sortedCompetitors = [...rawCompetitors]
+    .sort((a, b) => (b.intersections ?? 0) - (a.intersections ?? 0))
+    .slice(0, 15);
+  const competitorAnalysis = sortedCompetitors.map((c, i) => ({
+    rank: i + 1,
+    domain: c.domain ?? '',
+    overlap_pct: totalClientKeywords > 0
+      ? Math.round((c.intersections ?? 0) / totalClientKeywords * 1000) / 10 : 0,
+    shared_keywords: c.intersections ?? 0,
+    total_keywords: c.full_domain_metrics?.organic?.count ?? 0,
+    avg_position: Math.round((c.avg_position ?? 0) * 10) / 10,
+    etv: Math.round(c.full_domain_metrics?.organic?.etv ?? 0),
+  }));
+
+  // --- Competitor Summary (top 3 averages) ---
+  const top3 = competitorAnalysis.slice(0, 3);
+  const competitorSummary = {
+    competitor_avg_keywords: top3.length > 0
+      ? Math.round(top3.reduce((s, c) => s + c.total_keywords, 0) / top3.length) : 0,
+    competitor_avg_position: top3.length > 0
+      ? Math.round(top3.reduce((s, c) => s + c.avg_position, 0) / top3.length * 10) / 10 : 0,
+    competitor_avg_etv: top3.length > 0
+      ? Math.round(top3.reduce((s, c) => s + c.etv, 0) / top3.length) : 0,
+  };
+
+  // --- Striking Distance (positions 11-20, sorted by volume) ---
+  const strikingDistance = rawKeywords
+    .filter((item) => {
+      const pos = item.ranked_serp_element?.serp_item?.rank_group ?? 999;
+      return pos >= 11 && pos <= 20;
+    })
+    .sort((a, b) => (b.keyword_data?.keyword_info?.search_volume ?? 0) - (a.keyword_data?.keyword_info?.search_volume ?? 0))
+    .slice(0, 20)
+    .map((item) => ({
+      keyword: item.keyword_data?.keyword ?? '',
+      position: item.ranked_serp_element?.serp_item?.rank_group ?? 0,
+      volume: item.keyword_data?.keyword_info?.search_volume ?? 0,
+      cpc: item.keyword_data?.keyword_info?.cpc ?? null,
+      intent: (item.keyword_data?.search_intent_info?.main_intent ?? 'unknown'),
+    }));
+
+  return {
+    keyword_overview: {
+      total_keywords: rawKeywords.length,
+      total_volume: totalVolume,
+      avg_position: avgPosition,
+      etv: Math.round(totalEtv * 100) / 100,
+      top_10_count: top10Count,
+      near_miss_count: nearMissCount,
+    },
+    position_distribution: positionDistribution,
+    branded_split: brandedSplit,
+    intent_breakdown: intentBreakdown,
+    top_ranking_urls: topRankingUrls,
+    competitor_analysis: competitorAnalysis,
+    competitor_summary: competitorSummary,
+    striking_distance: strikingDistance,
+  };
+}
+
+// ============================================================
 // Phase 3: Jim — DataForSEO calls → research artifacts → Claude narrative
 // ============================================================
 
@@ -1541,6 +1750,33 @@ ${dataQualityNotes}
     console.log(`  Warning: LLM mentions fetch failed (non-fatal): ${err.message}`);
   }
 
+  // Build deterministic research_data.json (replaces fragile regex-parsed numeric fields)
+  const researchData = buildResearchData(rawKeywords, rawCompetitors, domain);
+  // Include AI visibility data if available
+  if (llmMentionsResult && llmMentionsResult.domain_mentions.length > 0) {
+    researchData.ai_visibility = {
+      client_mentions: llmMentionsResult.domain_mentions.map((m) => ({
+        keyword: m.keyword,
+        platform: m.platform,
+        mention_count: m.mention_count,
+        cited: m.mention_count > 0,
+      })),
+      competitor_totals: llmMentionsResult.competitor_mentions.map((cm) => ({
+        domain: cm.domain,
+        platform: cm.platform,
+        total_mentions: cm.mention_count,
+      })),
+      top_citation_domains: [...new Set(
+        llmMentionsResult.domain_mentions
+          .flatMap((m) => m.citation_sources)
+          .filter(Boolean),
+      )],
+    };
+  }
+  const researchDataPath = path.join(researchDir, 'research_data.json');
+  fs.writeFileSync(researchDataPath, JSON.stringify(researchData, null, 2), 'utf-8');
+  console.log(`  research_data.json: ${researchData.keyword_overview.total_keywords} keywords, ${researchData.competitor_analysis.length} competitors`);
+
   // Count organic vs supplemented keywords for prompt context
   const organicKeywords = rawKeywords.filter((item) => (item.ranked_serp_element?.serp_item?.rank_group ?? 100) < 100);
   const supplementedKeywords = rawKeywords.filter((item) => (item.ranked_serp_element?.serp_item?.rank_group ?? 100) >= 100);
@@ -1731,6 +1967,27 @@ Each gap must reference specific evidence from the data — not generic best pra
 ### 11.5 Recommendations
 [Based on the structural gaps identified in 11.4, recommend specific actions. Each recommendation must name a specific page, content type, or structural change and connect it to a gap identified above. Do not repeat generic advice ("add structured data") — specify WHAT structured data, on WHICH pages, addressing WHICH citation gap.]
 ` : ''}
+## STRUCTURED INSIGHTS OUTPUT (REQUIRED)
+
+After all report sections, output a fenced JSON block:
+
+\`\`\`json:insights
+{
+  "content_gap_observations": [
+    "Gap Title: explanation with specific keywords, URLs, competitors"
+  ],
+  "key_takeaways": [
+    { "section": "SECTION LABEL", "takeaway": "recommendation text" }
+  ]
+}
+\`\`\`
+
+Rules:
+- content_gap_observations: array of strings, each matching a Section 9 entry (bold title + explanation combined into one string)
+- key_takeaways: array of {section, takeaway} objects matching Section 10 entries. section = the bracketed label in ALL CAPS, takeaway = the recommendation text
+- This block MUST appear after all report sections, before end of output
+- The json:insights block is machine-parsed — do not include markdown formatting inside it
+
 ## IMPORTANT RULES
 - Use plain numbers (no tildes ~) in table cells. Round to whole numbers.
 - Use /mo suffix for volume in Keyword Overview and Branded tables.
@@ -1762,6 +2019,24 @@ Each gap must reference specific evidence from the data — not generic best pra
   fs.writeFileSync(summaryPath, summaryMd, 'utf-8');
   validateArtifact(summaryPath, 'research_summary.md', 3000);
   console.log(`  Written research_summary.md (${summaryMd.length} chars) to ${path.relative(process.cwd(), researchDir)}/`);
+
+  // Backfill LLM insights into research_data.json (makes it a complete self-contained artifact)
+  const insightsMatch = summaryMd.match(/```json:insights\s*\n([\s\S]*?)```/);
+  if (insightsMatch) {
+    try {
+      const insights = JSON.parse(insightsMatch[1].trim());
+      if (Array.isArray(insights.content_gap_observations)) {
+        researchData.content_gap_observations = insights.content_gap_observations;
+      }
+      if (Array.isArray(insights.key_takeaways)) {
+        researchData.key_takeaways = insights.key_takeaways;
+      }
+      fs.writeFileSync(researchDataPath, JSON.stringify(researchData, null, 2), 'utf-8');
+      console.log(`  research_data.json updated with ${insights.content_gap_observations?.length ?? 0} gaps, ${insights.key_takeaways?.length ?? 0} takeaways`);
+    } catch (err: any) {
+      console.log(`  Warning: Failed to parse json:insights block: ${err.message}`);
+    }
+  }
 
   // Step 5: Insert audit_snapshots + agent_runs
   const { data: existingSnapshot } = await sb

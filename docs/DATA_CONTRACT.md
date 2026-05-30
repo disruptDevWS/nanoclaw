@@ -180,7 +180,7 @@
 | agent_name | Writer Phase | Key JSONB Columns | Dashboard Consumer |
 |------------|-------------|-------------------|-------------------|
 | `dwight` | Phase 6c (syncDwight) | `executive_summary`, `prioritized_fixes[]`, `agentic_readiness[]`, `structured_data_issues[]`, `heading_issues[]`, `security_issues[]`, `platform_notes`, `site_metadata` | `useAuditSiteFindings()` → AuditPage |
-| `jim` | Phase 3 (syncJim) | `research_summary_markdown`, `keyword_overview{}`, `position_distribution[]`, `branded_split{}`, `intent_breakdown[]`, `top_ranking_urls[]`, `competitor_analysis[]`, `competitor_summary{}`, `striking_distance[]`, `content_gap_observations[]`, `key_takeaways[]` | `useResearchSiteFindings()` → ResearchPage |
+| `jim` | Phase 3 (syncJim) | `research_summary_markdown`, `keyword_overview{}`, `position_distribution[]`, `branded_split{}`, `intent_breakdown[]`, `top_ranking_urls[]`, `competitor_analysis[]`, `competitor_summary{}`, `striking_distance[]`, `content_gap_observations[]`, `key_takeaways[]`. **Numeric columns now sourced from `research_data.json` (deterministic) when available; falls back to regex-parsed `research_summary.md` for backward compat.** | `useResearchSiteFindings()` → ResearchPage |
 | `gap` | Phase 5 | `keyword_overview` (JSONB with `authority_gaps[]`, `format_gaps[]`, `gap_summary`, `ai_citation_gaps[]`) | `useAuditSnapshots()`, `useAiCitationGaps()` |
 
 **Shared columns**: `id`, `audit_id`, `agent_name`, `snapshot_version`, `agent_run_id`, `row_count`, `created_at`
@@ -595,6 +595,7 @@ Written by `generate-cluster-strategy.ts` (on-demand, per-cluster via `/activate
 | `ai_optimization_notes` | Section 5 prose fallback |
 | `ai_optimization_targets` | JSONB — structured AI/search targets from Section 5: `[{query, target_type, structural_pattern, applies_to_page, condition, rationale}]` |
 | `search_intent` | TEXT — cluster dominant intent: `commercial`, `informational`, `transactional`, `navigational`, `mixed`. From entity map Section 0. Consumed by Pam for content-type guidance. Migration 022. |
+| `visibility_queries` | JSONB — AI visibility measurement queries from Section 7: `[{query, query_type, target_cluster, platforms}]`. Migration 026. |
 | `status` | TEXT: `active` (default), `deprecated`. Deprecated by `rebuildClustersAndRollups()` when canonical_key no longer exists in rebuilt clusters. Migration 014. |
 | `deprecated_at` | TIMESTAMPTZ, set when status → `deprecated`. NULL for active strategies. |
 | `model_used` | |

@@ -499,9 +499,10 @@ Client Brief (auto after Phase 6d, non-fatal)
 - `research/{date}/ranked_keywords.national.json` (backup, Mode A only, geo-qualified audits only)
 - `research/{date}/competitors.json`
 - `research/{date}/llm_mentions.json` (AI platform mention data: domain_mentions, competitor_mentions, queried_keywords, total_cost)
-- `research/{date}/research_summary.md` (10-11 sections: executive summary, keyword overview, position distribution, branded analysis, intent breakdown, top URLs, competitor deep dive, striking distance, content gaps, key takeaways, + conditional Section 11: AI Visibility)
+- `research/{date}/research_summary.md` (10-11 sections: executive summary, keyword overview, position distribution, branded analysis, intent breakdown, top URLs, competitor deep dive, striking distance, content gaps, key takeaways, + conditional Section 11: AI Visibility. Includes a `json:insights` fenced block with content_gap_observations and key_takeaways as structured JSON.)
+- `research/{date}/research_data.json` (deterministic numeric fields computed from raw DataForSEO JSON — keyword_overview, position_distribution, branded_split, intent_breakdown, top_ranking_urls, competitor_analysis, competitor_summary, striking_distance. Also contains ai_visibility data when LLM mentions are available, and content_gap_observations/key_takeaways backfilled from the `json:insights` block after Jim's LLM call completes.)
 
-**Prompt framing:** Uses "YOUR ENTIRE RESPONSE IS THE REPORT" top/bottom framing. `validateArtifact()` enforces ≥3000 byte minimum.
+**Prompt framing:** Uses "YOUR ENTIRE RESPONSE IS THE REPORT" top/bottom framing. `validateArtifact()` enforces ≥3000 byte minimum. Prompt includes a `STRUCTURED INSIGHTS OUTPUT` section requiring Jim to emit a `json:insights` block.
 
 **Supabase writes:** `agent_runs`, `audit_snapshots` (agent='jim'), `audits` (research_snapshot_at)
 
@@ -511,7 +512,9 @@ Client Brief (auto after Phase 6d, non-fatal)
 
 **Function:** `syncJim()` in sync-to-dashboard.ts | **No external APIs**
 
-**Reads:** `ranked_keywords.json`, `research_summary.md` (parsed for structured sections)
+**Reads:** `ranked_keywords.json`, `research_data.json` (preferred, deterministic), `research_summary.md` (fallback, regex-parsed)
+
+**Data source priority:** Three-tier: (1) `research_data.json` for numeric fields → (1b) `json:insights` block from `research_summary.md` for narrative fields → (1c) regex fallback for narrative fields → (2) full regex parse of `research_summary.md` (backward compat for pre-`research_data.json` runs)
 
 **Supabase reads:** `audit_assumptions` (CR/ACV rates), `ctr_models` (CTR by position)
 
@@ -1191,14 +1194,14 @@ Cluster activation is an on-demand step that generates a strategy document for a
 1. Resolve audit from Supabase (domain + email)
 2. Load cluster (with `primary_entity_type`), keywords, execution_pages, gap analysis, competitors, client context
 3. Build prompt → `callClaude()` with Opus (strategic judgment tier). Prompt includes entity type context and Section 0 (Entity Map) requirement.
-4. Parse via `extractJsonBySection()` (header-based, not positional): entity_map (Section 0, includes `search_intent` + `intent_rationale`), buyer_stages (Section 1), recommended_pages (Section 3), format_gaps (Section 4), AI optimization notes (Section 5)
-5. Upsert `cluster_strategy` table (includes `entity_map` JSONB, `search_intent` TEXT)
+4. Parse via `extractJsonBySection()` (header-based, not positional): entity_map (Section 0, includes `search_intent` + `intent_rationale`), buyer_stages (Section 1), recommended_pages (Section 3), format_gaps (Section 4), AI optimization notes (Section 5), visibility_queries (Section 7)
+5. Upsert `cluster_strategy` table (includes `entity_map` JSONB, `search_intent` TEXT, `visibility_queries` JSONB)
 6. SET `audit_clusters.status = 'active'`, `activated_at = now()`
 7. SET `execution_pages.cluster_active = true` WHERE `canonical_key = key`
 8. **Insert recommended_pages into `execution_pages`** with `source: 'cluster_strategy'`, `buyer_stage`, `strategy_rationale` (slug dedup check prevents duplicates on re-activation)
 9. Log `agent_runs` entry
 
-**Strategy sections:** 0. Entity Map (JSON), 1. Buyer Journey Map (JSON), 2. Content Strategy (markdown), 3. Recommended New Pages (JSON), 4. Format Gaps (JSON), 5. AI Optimization Priorities
+**Strategy sections:** 0. Entity Map (JSON), 1. Buyer Journey Map (JSON), 2. Content Strategy (markdown), 3. Recommended New Pages (JSON), 4. Format Gaps (JSON), 5. AI Optimization Priorities, 6. Production Sequence (markdown), 7. AI Visibility Measurement Queries (JSON — natural-language queries for tracking AI platform visibility)
 
 **Cost:** ~$0.15-0.50 per cluster (single Opus call).
 

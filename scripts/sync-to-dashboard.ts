@@ -574,6 +574,27 @@ function parseResearchSummary(filePath: string): ParsedResearchSummary {
   return result;
 }
 
+/**
+ * Parse the ```json:insights``` block from research_summary.md.
+ * Returns narrative fields (content gaps + key takeaways) or null if block is missing/invalid.
+ */
+function parseInsightsBlock(md: string): {
+  content_gap_observations: string[];
+  key_takeaways: Array<{ section: string; takeaway: string }>;
+} | null {
+  const match = md.match(/```json:insights\s*\n([\s\S]*?)```/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1].trim());
+    return {
+      content_gap_observations: Array.isArray(parsed.content_gap_observations)
+        ? parsed.content_gap_observations.filter((s: any) => typeof s === 'string') : [],
+      key_takeaways: Array.isArray(parsed.key_takeaways)
+        ? parsed.key_takeaways.filter((t: any) => t?.section && t?.takeaway) : [],
+    };
+  } catch { return null; }
+}
+
 // ============================================================
 // Jim sync — ranked_keywords.json → audit_keywords + clusters + rollups
 // ============================================================
@@ -1160,15 +1181,84 @@ async function syncJim(
   // Build clusters + rollups from keyword data
   await rebuildClustersAndRollups(sb, auditId, 'jim');
 
-  // Parse research_summary.md for site-level findings
+  // Three-tier data source for site-level findings:
+  //   Tier 1:  research_data.json (deterministic, ground truth for numeric fields)
+  //   Tier 1b: json:insights block from research_summary.md (narrative fields)
+  //   Tier 1c: Regex-parse narrative fields from research_summary.md (fallback for insights)
+  //   Tier 2:  Full regex parse via parseResearchSummary() (backward compat for pre-research_data.json runs)
   const summaryFile = path.join(dir, 'research_summary.md');
+  const researchDataFile = path.join(dir, 'research_data.json');
   let parsedSummary: ParsedResearchSummary | null = null;
-  if (fs.existsSync(summaryFile)) {
-    console.log(`  [jim] Parsing ${summaryFile} for site-level findings`);
+
+  if (fs.existsSync(researchDataFile)) {
+    // Tier 1: Deterministic JSON — numeric fields are ground truth
+    const rd = JSON.parse(fs.readFileSync(researchDataFile, 'utf-8'));
+    console.log(`  [jim] Data source: research_data.json (deterministic)`);
+
+    parsedSummary = {
+      keywordOverview: {
+        total_keywords: rd.keyword_overview?.total_keywords ?? 0,
+        total_volume: rd.keyword_overview?.total_volume ?? 0,
+        avg_position: rd.keyword_overview?.avg_position ?? 0,
+        etv: rd.keyword_overview?.etv ?? 0,
+        paid_traffic_equivalent: 0,
+        top_10_count: rd.keyword_overview?.top_10_count ?? 0,
+        near_miss_count: rd.keyword_overview?.near_miss_count ?? 0,
+        api_cost: 0,
+      },
+      positionDistribution: rd.position_distribution ?? [],
+      brandedSplit: rd.branded_split ?? { branded: { count: 0, volume: 0, avg_position: 0 }, non_branded: { count: 0, volume: 0, avg_position: 0 } },
+      intentBreakdown: rd.intent_breakdown ?? [],
+      topRankingUrls: rd.top_ranking_urls ?? [],
+      competitorAnalysis: rd.competitor_analysis ?? [],
+      competitorSummary: {
+        veterans_keywords: 0,
+        veterans_avg_position: 0,
+        veterans_etv: 0,
+        competitor_avg_keywords: rd.competitor_summary?.competitor_avg_keywords ?? 0,
+        competitor_avg_position: rd.competitor_summary?.competitor_avg_position ?? 0,
+        competitor_avg_etv: rd.competitor_summary?.competitor_avg_etv ?? 0,
+      },
+      strikingDistance: rd.striking_distance ?? [],
+      contentGapObservations: rd.content_gap_observations ?? [],
+      keyTakeaways: rd.key_takeaways ?? [],
+    };
+
+    // Tier 1b: If narrative fields empty in research_data.json, try json:insights block from markdown
+    if (parsedSummary.contentGapObservations.length === 0 || parsedSummary.keyTakeaways.length === 0) {
+      if (fs.existsSync(summaryFile)) {
+        const summaryMd = fs.readFileSync(summaryFile, 'utf-8');
+        const insights = parseInsightsBlock(summaryMd);
+        if (insights) {
+          if (parsedSummary.contentGapObservations.length === 0 && insights.content_gap_observations.length > 0) {
+            parsedSummary.contentGapObservations = insights.content_gap_observations;
+          }
+          if (parsedSummary.keyTakeaways.length === 0 && insights.key_takeaways.length > 0) {
+            parsedSummary.keyTakeaways = insights.key_takeaways;
+          }
+          console.log(`  [jim] Narrative fields from json:insights block: ${insights.content_gap_observations.length} gaps, ${insights.key_takeaways.length} takeaways`);
+        } else {
+          // Tier 1c: Regex-parse narrative fields only from markdown
+          const regexParsed = parseResearchSummary(summaryFile);
+          if (parsedSummary.contentGapObservations.length === 0) {
+            parsedSummary.contentGapObservations = regexParsed.contentGapObservations;
+          }
+          if (parsedSummary.keyTakeaways.length === 0) {
+            parsedSummary.keyTakeaways = regexParsed.keyTakeaways;
+          }
+          console.log(`  [jim] Narrative fields from regex fallback: ${regexParsed.contentGapObservations.length} gaps, ${regexParsed.keyTakeaways.length} takeaways`);
+        }
+      }
+    }
+
+    console.log(`  [jim] Extracted: ${parsedSummary.keywordOverview.total_keywords} total keywords, ${parsedSummary.competitorAnalysis.length} competitors, ${parsedSummary.strikingDistance.length} striking distance, ${parsedSummary.contentGapObservations.length} content gaps`);
+  } else if (fs.existsSync(summaryFile)) {
+    // Tier 2: Full regex parse (backward compat for pre-research_data.json runs)
+    console.log(`  [jim] Data source: regex (research_summary.md)`);
     parsedSummary = parseResearchSummary(summaryFile);
     console.log(`  [jim] Extracted: ${parsedSummary.keywordOverview.total_keywords} total keywords, ${parsedSummary.competitorAnalysis.length} competitors, ${parsedSummary.strikingDistance.length} striking distance, ${parsedSummary.contentGapObservations.length} content gaps`);
   } else {
-    console.log(`  [jim] No research_summary.md found — site-level findings will be empty`);
+    console.log(`  [jim] No research_summary.md or research_data.json found — site-level findings will be empty`);
   }
 
   // Snapshot versioning

@@ -1132,3 +1132,25 @@ If the report count exceeds ~15 or clients need self-service report management, 
 **2026-05-27: Intelligence brief HTML conversion — dangerouslySetInnerHTML, not full JSX**
 
 The IMA and SMA intelligence brief HTML files (1004 and 1275 lines) were too large for full JSX conversion (exceeded 32k output token limits in agents). Used scoped CSS + `dangerouslySetInnerHTML` for the body content. This is safe because: (1) content is static, pre-authored by Forge Growth — not user input, (2) reports are behind auth, (3) base64 inline images were replaced with `/public/brand/` asset references. The smaller IMA/SMA proposal (515 lines) got full JSX conversion. If briefs need interactive elements in the future, convert individual sections to JSX incrementally.
+
+---
+
+**2026-05-29: Deterministic research_data.json over LLM-produced JSON**
+
+Jim's `parseResearchSummary()` used 10+ regex patterns to extract structured data from LLM-generated markdown tables — the #1 fragility point in the pipeline. Any formatting drift (tildes, comma placement, extra columns) caused silent data loss in dashboard columns.
+
+Key insight: 8 of 10 parsed fields are computable deterministically from the raw DataForSEO JSON (`ranked_keywords.json`, `competitors.json`). Only `content_gap_observations` and `key_takeaways` require LLM analytical output.
+
+Approach: `buildResearchData()` computes all numeric fields in code and writes `research_data.json`. Jim's prompt now includes a `json:insights` instruction requiring a structured JSON block for narrative fields. `syncJim()` uses a three-tier priority: (1) `research_data.json` for numerics, (1b) `json:insights` block for narratives, (1c) regex fallback for narratives, (2) full regex parse for backward compat. The regex parser is retained but never used for new runs.
+
+Alternatives rejected:
+- "Ask Jim to produce both markdown and JSON" — doubles LLM output, doubles cost, and JSON formatting is still LLM-dependent
+- "Replace parseResearchSummary entirely" — breaks backward compat for existing audit directories without `research_data.json`
+
+---
+
+**2026-05-29: visibility_queries as Section 7 separate from ai_optimization_targets**
+
+AI optimization targets (Section 5) are structural recommendations — "add FAQ schema to this page for this query." Visibility queries (Section 7) are measurement probes — "how would a user ask an AI platform about this topic?" They serve different consumers: Section 5 feeds content briefs; Section 7 feeds future automated AI visibility tracking (LLM Mentions API).
+
+Keeping them separate avoids overloading the `ai_optimization_targets` column and keeps the cluster strategy prompt modular. `visibility_queries` is its own JSONB column (migration 026) with a distinct schema: `{query, query_type, target_cluster, platforms}`.

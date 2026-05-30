@@ -442,10 +442,34 @@ Do not produce generic optimization recommendations (e.g., "add FAQ schema"). Pr
 ### 6. Production Sequence
 Ordered list of content to produce first for maximum impact.
 
+### 7. AI Visibility Measurement Queries
+
+Generate 5-10 queries representing how users ask AI platforms about this topic.
+
+Output as JSON:
+\`\`\`json
+{
+  "visibility_queries": [
+    {
+      "query": "best EMT training programs in Idaho",
+      "query_type": "discovery|consideration|comparison|brand",
+      "target_cluster": "${args.canonicalKey}",
+      "platforms": ["google", "chat_gpt", "perplexity"]
+    }
+  ]
+}
+\`\`\`
+
+Rules:
+- Natural-language questions, NOT keyword-shaped queries
+- At least 1 query per buyer stage with keywords in this cluster
+- At least 1 comparison query naming the client vs a specific competitor
+- query_type: discovery (what/who awareness), consideration (evaluation), comparison (head-to-head), brand (direct entity)
+
 ---
 
 IMPORTANT FORMATTING RULES:
-- Sections 0, 1, 3, 4, and 5 MUST contain valid JSON blocks (fenced with \`\`\`json ... \`\`\`).
+- Sections 0, 1, 3, 4, 5, and 7 MUST contain valid JSON blocks (fenced with \`\`\`json ... \`\`\`).
 - Sections 2 and 6 are markdown prose.
 - Do not include any preamble before "### 0. Entity Map".
 
@@ -501,6 +525,18 @@ REMINDER: Your response IS the cluster strategy document — start with "### 0. 
   const aiNotesMatch = result.match(/### 5\.\s*AI.*?Optimization.*?\n([\s\S]*?)(?=### 6\.|$)/i);
   const aiOptimizationNotes = aiNotesMatch ? aiNotesMatch[1].trim() : null;
 
+  // Extract AI visibility measurement queries (Section 7)
+  let visibilityQueries: any[] = [];
+  try {
+    const section7Json = extractJsonBySection(result, /### 7\.\s*AI\s+Visibility/i);
+    if (section7Json?.visibility_queries && Array.isArray(section7Json.visibility_queries)) {
+      visibilityQueries = section7Json.visibility_queries;
+      console.log(`  [cluster-strategy] Parsed ${visibilityQueries.length} visibility queries`);
+    }
+  } catch (e) {
+    console.warn('[cluster-strategy] Could not parse Section 7 visibility queries:', e);
+  }
+
   // 10. Upsert cluster_strategy
   const { error: stratErr } = await (sb as any).from('cluster_strategy').upsert({
     audit_id: auditId,
@@ -512,6 +548,7 @@ REMINDER: Your response IS the cluster strategy document — start with "### 0. 
     format_gaps: formatGaps,
     ai_optimization_notes: aiOptimizationNotes,
     ai_optimization_targets: aiOptimizationTargets.length > 0 ? aiOptimizationTargets : null,
+    visibility_queries: visibilityQueries.length > 0 ? visibilityQueries : null,
     entity_map: entityMap,
     search_intent: searchIntent,
     generated_at: new Date().toISOString(),
