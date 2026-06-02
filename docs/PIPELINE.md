@@ -1052,19 +1052,38 @@ AI platform mention tracking runs independently of the audit pipeline — monthl
 
 **Invocation:** `npx tsx scripts/track-llm-mentions.ts --domain <d> --user-email <e> [--force]`
 
-**Steps:**
+**Two modes** (auto-selected per audit):
+
+**Cluster-aware mode** (preferred — when activated clusters have `visibility_queries`):
+1. Resolve audit from Supabase (domain + email)
+2. Recency check: skip if latest `llm_visibility_snapshots` < 25 days old (bypass with `--force`)
+3. Load visibility queries from `cluster_strategy` WHERE `status='active' AND visibility_queries IS NOT NULL`
+4. Cap at 40 queries total (round-robin across clusters if over limit)
+5. Load top 3 non-client competitors per cluster from `audit_topic_competitors` (by `share` DESC)
+6. Fetch DataForSEO domain mentions for client (budget: $5.00)
+7. Fetch DataForSEO competitor aggregated metrics, deduped across clusters (budget: $3.00)
+8. DELETE + UPSERT to `llm_visibility_snapshots` with `cluster_canonical_key` set
+9. INSERT to `llm_mention_details` (client mentions only — competitor API returns aggregates)
+10. Log per-cluster SOV summary to console
+
+**Fallback mode** (when no cluster queries exist):
 1. Resolve audit from Supabase (domain + email)
 2. Recency check: skip if latest `llm_visibility_snapshots` < 25 days old (bypass with `--force`)
 3. Load top 5 keywords from `audit_keywords` (by volume, rank ≤ 30, excluding brand/near-me)
-4. Fetch DataForSEO LLM Mentions `/search/live` for domain mentions across platforms (~$0.10-0.30)
-5. DELETE + INSERT to `llm_visibility_snapshots` (one row per keyword × platform)
-6. DELETE + INSERT to `llm_mention_details` (one row per mention text)
+4. Fetch DataForSEO LLM Mentions `/search/live` for domain mentions (~$0.10-0.30)
+5. DELETE + UPSERT to `llm_visibility_snapshots` with `cluster_canonical_key = null`
+6. INSERT to `llm_mention_details`
+
+**Cost projection (cluster mode):** 10 activated clusters × 6 queries avg × 2 platforms = 120 API calls × $0.10 = ~$12/month per domain. With 3 competitors per cluster: 10 × 3 × 2 = 60 × $0.101 = ~$6/month. Total: ~$18/domain/month. Budget guards prevent runaway costs.
 
 **External APIs:**
 
 | API | Endpoint | Purpose |
 |-----|----------|---------|
-| DataForSEO LLM Mentions | `/v3/ai_optimization/llm_mentions/search/live` | AI platform mention data |
+| DataForSEO LLM Mentions | `/v3/ai_optimization/llm_mentions/search/live` | AI platform mention data (Google AI Overview, ChatGPT) |
+| DataForSEO LLM Mentions | `/v3/ai_optimization/llm_mentions/aggregated_metrics/live` | Competitor mention aggregates |
+
+**Note:** Perplexity is NOT supported by the LLM Mentions API. Only `google` and `chat_gpt` platforms are available.
 
 ### cron-llm-mentions-all.ts — Batch Runner
 
@@ -1072,7 +1091,7 @@ AI platform mention tracking runs independently of the audit pipeline — monthl
 
 **Invocation:** `npx tsx scripts/cron-llm-mentions-all.ts [--force]`
 
-**Logic:** Queries all audits where `status='completed'`, resolves user emails, runs `track-llm-mentions.ts` sequentially with 30-second delays between domains. The 25-day recency check prevents double-runs.
+**Logic:** Queries all audits where `status='completed'`, resolves user emails, runs `track-llm-mentions.ts` sequentially with 45-second delays between domains. Logs whether each audit used cluster-aware or fallback mode. The 25-day recency check prevents double-runs.
 
 **Scheduling:** Railway cron job or external scheduler, monthly.
 

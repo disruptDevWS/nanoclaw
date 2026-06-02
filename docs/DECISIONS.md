@@ -4,6 +4,30 @@ Non-obvious choices that would look wrong without context. Check here before "fi
 
 ---
 
+**2026-06-02: Perplexity not supported — Google AI Overview + ChatGPT only**
+
+DataForSEO LLM Mentions API only supports `google` (AI Overview) and `chat_gpt` platforms. Perplexity is not available. The pipeline tracks these two platforms only. Monitor DataForSEO roadmap for Perplexity support.
+
+---
+
+**2026-06-02: AI SOV computed on dashboard read, not stored**
+
+Share-of-Voice per cluster is computed client-side from raw `llm_visibility_snapshots` rows via `useClusterAiSov()`. No materialized table or precomputed column. Simpler than a stored computation, avoids sync issues, and the row count per cluster is small (~6 queries × 2 platforms × n competitors). If dashboard performance degrades with many clusters, add a materialized `cluster_ai_sov` table later.
+
+---
+
+**2026-06-02: 40-query cap for cluster-aware LLM tracking**
+
+The cluster-aware mode in `track-llm-mentions.ts` caps at 40 total queries per run (round-robin across clusters). This limits cost to ~$12/domain/month for domain mentions + ~$6 for competitor mentions. Without the cap, a domain with 20 activated clusters × 10 queries each = 200 queries = $60/month. The round-robin ensures every cluster gets at least some coverage.
+
+---
+
+**2026-06-02: Content publication → AI re-check feedback loop deferred**
+
+Considered auto-triggering AI visibility re-check when Oscar content is published. Deferred: no clients have published enough content to measure AI visibility impact yet. When ready, the loop would be: Oscar marks page `published` → trigger per-cluster re-check on visibility_queries for that cluster. Tracked in FOLLOWUPS.md.
+
+---
+
 **2026-06-02: Entity Authority Directive replaces Keyword Research Directive**
 
 The strategy brief's Section 2 was renamed from "Keyword Research Directive" to "Entity Authority Directive". The market has shifted: AI Mode is Google's default (1B+ monthly users), information gain is a primary ranking signal, and AI-paraphrased content lost 71% of traffic. The old framing told downstream phases what keywords to target; the new framing tells them what entities the domain should be authoritative for, with keywords as evidence rather than targets. All regex consumers in pipeline-generate.ts (Michael injection, Jim extraction, keyword synthesis, QA rubric) updated. Strategy brief prompt extracted to `configs/agents/strategy-brief/system-prompt.md` in the same change.

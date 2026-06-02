@@ -469,12 +469,15 @@ Written by syncJim (Phase 3b) and `track-llm-mentions.ts` (monthly cron or on-de
 | `ai_search_volume` | Pipeline | Dashboard | Nullable |
 | `top_citation_domains` | Pipeline | Dashboard | JSONB array of domain strings |
 | `is_estimated` | Pipeline | Dashboard | Boolean, default false. True for competitor rows (aggregate API data, not per-keyword measured) |
+| `cluster_canonical_key` | Pipeline | Dashboard | TEXT, nullable. Links snapshot to the cluster strategy that generated the query. NULL for legacy fallback-mode snapshots. Added migration 027. |
 | `created_at` | Auto | Dashboard | |
 
 **UNIQUE constraint:** `(audit_id, snapshot_date, keyword, platform, domain)` — allows client and competitor data to coexist.
 
-**Pipeline writes**: syncJim (client + competitor mentions from `llm_mentions.json`), `track-llm-mentions.ts` (client mentions only, monthly)
-**Dashboard reads**: `useLlmVisibilitySnapshots()` → AiVisibilityPage, PerformancePage (via `useAiVisibilityTrend`)
+**Index:** `idx_llm_vis_cluster` on `(audit_id, cluster_canonical_key)` WHERE `cluster_canonical_key IS NOT NULL` — for dashboard cluster SOV queries.
+
+**Pipeline writes**: syncJim (client + competitor mentions from `llm_mentions.json`), `track-llm-mentions.ts` (client + competitor mentions, monthly — cluster-aware or fallback mode)
+**Dashboard reads**: `useLlmVisibilitySnapshots()` → AiVisibilityPage, PerformancePage (via `useAiVisibilityTrend`), ClustersPage (via `useClusterAiSov`)
 
 ---
 

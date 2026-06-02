@@ -5,6 +5,24 @@ Each entry is self-contained: picking it up 3 months later should not require re
 
 ---
 
+### [Pipeline] Content publication → AI visibility re-check feedback loop
+
+- **Status:** Deferred. No clients have published enough Oscar content to measure AI visibility impact yet.
+- **Action:** When content volume warrants it, add a trigger: Oscar marks page `published` → schedule per-cluster re-check of `visibility_queries` for that cluster. Could use a post-publish webhook or a separate cron that checks for recently published pages. The re-check would run `track-llm-mentions.ts` in cluster-targeted mode (single cluster, bypass 25-day recency for that cluster only).
+- **Scope estimate:** M — new trigger path + targeted re-check mode
+- **Captured:** Session 4, 2026-06-02
+
+---
+
+### [Pipeline] Perplexity AI visibility tracking
+
+- **Status:** Blocked by DataForSEO. LLM Mentions API only supports `google` and `chat_gpt` platforms.
+- **Action:** Monitor DataForSEO roadmap for Perplexity support. When available, add `perplexity` to the `PLATFORMS` array in `dataforseo-llm-mentions.ts` and update budget calculations.
+- **Scope estimate:** S — add platform string + budget adjustment
+- **Captured:** Session 4, 2026-06-02
+
+---
+
 ### [Pipeline/Dashboard] Gap `content_gap_observations` type mismatch
 
 - **Status:** Latent. Gap agent writes `content_gap_observations` as an array of objects (from `json:insights` block). Dashboard readers may expect an array of strings. No current breakage observed but a type coercion risk exists.

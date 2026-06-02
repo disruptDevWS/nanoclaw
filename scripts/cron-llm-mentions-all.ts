@@ -134,7 +134,8 @@ async function main() {
         console.log(`    Skipped (recent snapshot)`);
         skipped++;
       } else {
-        console.log(`    Done`);
+        const mode = result.output.includes('CLUSTER-AWARE') ? 'cluster-aware' : 'fallback';
+        console.log(`    Done (${mode} mode)`);
         tracked++;
       }
     } else {
@@ -146,9 +147,9 @@ async function main() {
       failed++;
     }
 
-    // 30-second delay between domains to avoid DataForSEO rate limits
+    // 45-second delay between domains (cluster mode makes more API calls per domain)
     if (i < audits.length - 1) {
-      await sleep(30_000);
+      await sleep(45_000);
     }
   }
 
