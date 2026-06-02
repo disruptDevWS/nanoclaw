@@ -240,7 +240,8 @@ Written by syncMichael (Phase 6b). One row per recommended page.
 | `url_slug` | Recommended URL |
 | `page_status` | `new` / `exists` |
 | `silo_name` | Content silo assignment |
-| `role` | Page role in silo |
+| `role` | Page role in silo (pillar/cluster/support) — structural position |
+| `coverage_role` | Entity-authority intent purpose: commercial, informational, geographic, comparison, faq, credential, outcome. Written by syncMichael, read by dashboard. Orthogonal to `role` — `role` = structural position in silo, `coverage_role` = content purpose in entity authority strategy. |
 | `primary_keyword` | Target keyword |
 | `primary_keyword_volume` | |
 | `action_required` | What to do |
@@ -544,7 +545,7 @@ Written by syncMichael (Phase 6b) and Cluster Strategy (on-demand), updated by P
 | `buyer_stage` | Cluster Strategy | `awareness`, `consideration`, `decision`, `retention` — null for architecture pages |
 | `strategy_rationale` | Cluster Strategy | Why this page was recommended — null for architecture pages |
 | `status` | Pipeline + Dashboard | `not_started` → `brief_ready` → `in_progress` → `review` → `published`. Also `deprecated` — set by: (1) syncMichael on strategic re-run for stale uncommitted pages, (2) Michael's deprecation recommendations, (3) dashboard user "Remove from queue" action (`useDeprecateExecutionPage`). Oscar writes `in_progress` (dashboard shows "Draft Ready"). `review` = manual user action ("In Review"). |
-| `page_brief` | syncMichael | JSONB |
+| `page_brief` | syncMichael | JSONB — shape: `{silo, role, coverage_role, primary_keyword, volume, action, page_status}`. `coverage_role` added for entity-authority intent purpose (commercial, informational, geographic, comparison, faq, credential, outcome). Read by Pam for Page Identity context. |
 | `canonical_key` | syncMichael | Join to `audit_clusters` |
 | `cluster_active` | Pipeline (rebuild) | Boolean, gates content production |
 | `metadata_markdown` | Pam | |

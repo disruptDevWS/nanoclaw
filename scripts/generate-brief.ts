@@ -635,7 +635,27 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
     }
   }
 
-  return { auditMeta, brief, keywords, siblings, blueprintExcerpt, siloName, serpEnrichment, clientProfile, authorityGaps, formatGaps, aiCitationGaps, marketContext, strategyContext, primaryEntityType, entityMap, searchIntent, buyerStage, strategyRationale, canonicalKey, technicalBaselineSection, gbpEntitySection, siblingCoverageSection, performanceContextSection, clusterAiTargets };
+  // 17. Visibility queries from cluster strategy
+  let visibilityQueries: string[] = [];
+  if (canonicalKey) {
+    try {
+      const { data: vqRow } = await (sb as any)
+        .from('cluster_strategy')
+        .select('visibility_queries')
+        .eq('audit_id', req.audit_id)
+        .eq('canonical_key', canonicalKey)
+        .eq('status', 'active')
+        .maybeSingle();
+      const vqs = (vqRow as any)?.visibility_queries ?? [];
+      if (Array.isArray(vqs)) {
+        visibilityQueries = vqs.map((vq: any) => typeof vq === 'string' ? vq : vq.query ?? JSON.stringify(vq));
+      }
+    } catch {
+      // Column may not exist yet
+    }
+  }
+
+  return { auditMeta, brief, keywords, siblings, blueprintExcerpt, siloName, serpEnrichment, clientProfile, authorityGaps, formatGaps, aiCitationGaps, marketContext, strategyContext, primaryEntityType, entityMap, searchIntent, buyerStage, strategyRationale, canonicalKey, technicalBaselineSection, gbpEntitySection, siblingCoverageSection, performanceContextSection, clusterAiTargets, visibilityQueries };
 }
 
 function escapeRegex(s: string): string {
@@ -885,15 +905,64 @@ Use placeholder brackets for any client-specific claims (years in business, revi
   return lines.join('\n');
 }
 
+function buildInformationGainDirective(
+  clientProfile: Record<string, any> | null,
+  entityMap: any,
+): string {
+  if (!clientProfile) {
+    return `## Information Gain Directive — COMMODITY CONTENT RISK
+No client profile is available. Without proprietary knowledge (USPs, differentiators, practitioner expertise), content risks being indistinguishable from competitor pages. Oscar should:
+- Mark all sections as [COMMODITY CONTENT] in the outline
+- Flag sections where [CLIENT INPUT NEEDED] would transform generic content into proprietary insight
+- Prioritize structural differentiation (better organization, clearer answers, richer schema) over content differentiation`;
+  }
+
+  const usps = clientProfile.usps ?? [];
+  const differentiators = clientProfile.service_differentiators ?? '';
+  const years = clientProfile.years_in_business ?? null;
+  const founder = clientProfile.founder_background ?? null;
+
+  const hasProprietaryKnowledge = usps.length > 0 || differentiators;
+
+  if (!hasProprietaryKnowledge) {
+    return `## Information Gain Directive — LIMITED PROPRIETARY KNOWLEDGE
+Client profile exists but lacks USPs and service differentiators. Oscar should:
+- Mark most sections as [COMMODITY CONTENT]
+${years ? `- Leverage track record (${years} years) as a trust signal where relevant` : ''}
+${founder ? `- Reference founder background where it adds credibility: ${founder}` : ''}
+- Flag 2-3 sections where [CLIENT INPUT NEEDED] would add the most differentiation value`;
+  }
+
+  const knowledgeAreas: string[] = [];
+  if (usps.length > 0) knowledgeAreas.push(`USPs: ${usps.join('; ')}`);
+  if (differentiators) knowledgeAreas.push(`Differentiators: ${differentiators}`);
+  if (years) knowledgeAreas.push(`Track record: ${years} years in business`);
+  if (founder) knowledgeAreas.push(`Practitioner expertise: ${founder}`);
+
+  return `## Information Gain Directive — PROPRIETARY KNOWLEDGE AVAILABLE
+The following client-specific knowledge areas should inform content differentiation. Oscar should mark sections in the outline:
+- [ORIGINAL INSIGHT] — sections where proprietary knowledge creates genuine information gain
+- [COMMODITY CONTENT] — sections covering table-stakes topics with no differentiator
+- [CLIENT INPUT NEEDED] — sections where a brief client interview would unlock unique content
+
+**Available proprietary knowledge:**
+${knowledgeAreas.map((k) => `- ${k}`).join('\n')}`;
+}
+
 function buildPrompt(
   req: PamRequest,
   ctx: Awaited<ReturnType<typeof gatherContext>>
 ): string {
-  const { auditMeta, brief, keywords, siblings, blueprintExcerpt, siloName, clientProfile, authorityGaps, formatGaps, aiCitationGaps, marketContext, strategyContext, primaryEntityType, entityMap, searchIntent, buyerStage, strategyRationale, technicalBaselineSection, gbpEntitySection, siblingCoverageSection, performanceContextSection, clusterAiTargets } = ctx;
+  const { auditMeta, brief, keywords, siblings, blueprintExcerpt, siloName, clientProfile, authorityGaps, formatGaps, aiCitationGaps, marketContext, strategyContext, primaryEntityType, entityMap, searchIntent, buyerStage, strategyRationale, technicalBaselineSection, gbpEntitySection, siblingCoverageSection, performanceContextSection, clusterAiTargets, visibilityQueries } = ctx;
   const slug = req.page_url.replace(/^\/+/, '');
   const actionType = req.action_type || 'create';
   const pageRole = req.page_role ?? brief?.role ?? 'service page';
-  const pageStatus = brief?.page_status ?? (actionType === 'create' ? 'new' : 'exists');
+  const coverageRole = (brief as any)?.coverage_role ?? 'commercial';
+
+  const domain = auditMeta.domain;
+  const service_key = auditMeta.service_key;
+  const market_city = auditMeta.market_city;
+  const market_state = auditMeta.market_state;
 
   // Build keyword table
   const keywordTable = keywords.length > 0
@@ -919,11 +988,6 @@ function buildPrompt(
       ].join('\n')
     : 'No sibling pages found for this silo.';
 
-  const domain = auditMeta.domain;
-  const service_key = auditMeta.service_key;
-  const market_city = auditMeta.market_city;
-  const market_state = auditMeta.market_state;
-
   // Build AI citation gaps section
   let aiCitationGapsSection = '';
   if (aiCitationGaps.length > 0) {
@@ -937,7 +1001,7 @@ function buildPrompt(
     aiCitationGapsSection += `\nFor sections addressing these topics, label them [AI CITATION GAP] in the Required Content Coverage section of the outline. Oscar will apply direct-answer structure to these sections.\n`;
   }
 
-  // Build cluster AI targets section
+  // Build cluster AI targets section (used both as context block and inline in outline)
   let clusterAiTargetsSection = '';
   if (clusterAiTargets.length > 0) {
     clusterAiTargetsSection = `## Cluster AI Optimization Targets (from Cluster Strategy — Opus)\n`;
@@ -951,191 +1015,84 @@ function buildPrompt(
     }
   }
 
-  return `You are Pam, The Synthesizer — a content engineering agent for Forge Growth.
+  // Build entity map section
+  let entityMapSection = '';
+  if (entityMap) {
+    entityMapSection = `## Entity Map (from Cluster Strategy) — BINDING ENTITY CONTRACT\n${JSON.stringify(entityMap, null, 2)}\n\nThis entity_map is generated by Opus with full cluster context and is the authoritative entity model for every page in this cluster. Rules:\n- entity_map.entity_type is BINDING. Use it verbatim as the @type of the primary entity node in your schema @graph. Do NOT substitute a more specific type. Do NOT substitute a more general type. Do NOT second-guess the entity_map.\n- entity_map.key_attributes must appear as properties on the primary entity wherever the corresponding data is available.\n- The pillar page establishes the primary entity. Supporting pages reference it via sameAs or isRelatedTo where appropriate.\n- If the "Specificity" rule in the schema section below appears to recommend a different @type, the entity_map wins. The specificity rule is a fallback for pages without a cluster strategy — it does not apply here.\n`;
+  }
 
-Your job is strategic content engineering. You are not producing a document template — you are making decisions about what this page needs to be, who it serves, how it builds topical authority, and what Oscar needs to know to write content that is genuinely useful to the reader and correctly optimized by construction.
+  // Build search intent section
+  let searchIntentSection = '';
+  if (searchIntent) {
+    searchIntentSection = `## Content Intent Guidance (from Cluster Strategy)\nCluster dominant intent: **${searchIntent}**\n`;
+    if (searchIntent === 'commercial') searchIntentSection += '- Service page structure — lead with value proposition, features, social proof, CTA. Authoritative and confident tone.\n';
+    else if (searchIntent === 'informational') searchIntentSection += '- Educational guide structure — lead with comprehensive answer, use progressive detail. Thorough and educational tone.\n';
+    else if (searchIntent === 'transactional') searchIntentSection += '- Conversion-focused structure — lead with offer, pricing/comparison, trust signals, CTA. Direct and action-oriented tone.\n';
+    else if (searchIntent === 'navigational') searchIntentSection += '- Brand-anchored structure — ensure brand entity consistency, direct paths to key resources.\n';
+    else if (searchIntent === 'mixed') searchIntentSection += '- Balance educational depth with conversion elements. Match section structure to the dominant intent of each section.\n';
+  }
 
-## Action Type: ${actionType === 'create' ? 'CREATE — brand new page' : 'OPTIMIZE — existing page'}
+  // Build visibility queries section
+  let visibilityQueriesSection = '';
+  if (visibilityQueries.length > 0) {
+    visibilityQueriesSection = `## AI Visibility Measurement Queries (from Cluster Strategy)\nThese queries track this cluster's presence in AI platform responses.\nYour brief should ensure the page provides clear, attributable answers to these queries.\n`;
+    for (const vq of visibilityQueries) {
+      visibilityQueriesSection += `- ${vq}\n`;
+    }
+  }
 
-${performanceContextSection}
-## Page Identity
-- Domain: ${domain}
-- URL: /${slug}
-- Silo: ${siloName ?? 'Unknown'}
-- Role: ${pageRole}
-- Service category: ${service_key}
-- Primary Entity Type: ${primaryEntityType} (schema.org type — use for @type in JSON-LD)
-- Market: ${market_city}, ${market_state}
+  // Build buyer stage section
+  let buyerStageSection = '';
+  if (buyerStage) {
+    buyerStageSection = `## Buyer Journey Context\n- Buyer Stage Target: ${buyerStage}\n- Source: Cluster strategy recommendation (not original architecture)\n`;
+    if (strategyRationale) buyerStageSection += `- Strategic Rationale: ${strategyRationale}\n`;
+    buyerStageSection += `IMPORTANT: This page was added to address a gap in the ${buyerStage} stage of the buyer journey.\nThe content brief must directly address the questions buyers have at this stage, not just target\nthe primary keyword. The page should guide the reader toward the next stage in their journey.`;
+  }
 
-${buyerStage ? `## Buyer Journey Context
-- Buyer Stage Target: ${buyerStage}
-- Source: Cluster strategy recommendation (not original architecture)
-${strategyRationale ? `- Strategic Rationale: ${strategyRationale}` : ''}
-IMPORTANT: This page was added to address a gap in the ${buyerStage} stage of the buyer journey.
-The content brief must directly address the questions buyers have at this stage, not just target
-the primary keyword. The page should guide the reader toward the next stage in their journey.` : ''}
-## Target Keywords
-${keywordTable}
+  // Build optimize change spec
+  const optimizeChangeSpec = actionType === 'optimize' ? `**OPTIMIZE MODE — Change Specification:**\nThis is an existing page. Do not produce a full content brief. Produce a change specification:\nFor each content area: KEEP (no change needed and why), UPDATE (what to change, why, and what the updated version should accomplish), ADD (new content to insert — describe what and why), or REMOVE (what to cut and why).\nOnly provide full content direction for ADD items.` : '';
 
-## Sibling Pages in This Silo
-${siblingsTable}
+  // Build information gain directive
+  const informationGainDirective = buildInformationGainDirective(clientProfile, entityMap);
 
-${siblingCoverageSection}
-${strategyContext ? `## Strategy Brief (Phase 1b)\n${strategyContext}\n` : ''}
-${marketContext ? `## Market Context\n${marketContext}\n` : ''}
-## Architecture Blueprint Context
-${blueprintExcerpt || 'No architecture blueprint available.'}
+  // Load template and replace placeholders
+  const template = fs.readFileSync(
+    path.resolve(process.cwd(), 'configs/agents/pam/system-prompt.md'), 'utf-8'
+  );
 
-${technicalBaselineSection}
-${buildContentGapSection(authorityGaps, formatGaps)}
-
-${aiCitationGapsSection}
-${entityMap ? `## Entity Map (from Cluster Strategy) — BINDING ENTITY CONTRACT\n${JSON.stringify(entityMap, null, 2)}\n\nThis entity_map is generated by Opus with full cluster context and is the authoritative entity model for every page in this cluster. Rules:\n- entity_map.entity_type is BINDING. Use it verbatim as the @type of the primary entity node in your schema @graph. Do NOT substitute a more specific type. Do NOT substitute a more general type. Do NOT second-guess the entity_map.\n- entity_map.key_attributes must appear as properties on the primary entity wherever the corresponding data is available.\n- The pillar page establishes the primary entity. Supporting pages reference it via sameAs or isRelatedTo where appropriate.\n- If the "Specificity" rule in the schema section below appears to recommend a different @type, the entity_map wins. The specificity rule is a fallback for pages without a cluster strategy — it does not apply here.\n` : ''}
-${searchIntent ? `## Content Intent Guidance (from Cluster Strategy)
-Cluster dominant intent: **${searchIntent}**
-${searchIntent === 'commercial' ? '- Service page structure — lead with value proposition, features, social proof, CTA. Authoritative and confident tone.' : ''}${searchIntent === 'informational' ? '- Educational guide structure — lead with comprehensive answer, use progressive detail. Thorough and educational tone.' : ''}${searchIntent === 'transactional' ? '- Conversion-focused structure — lead with offer, pricing/comparison, trust signals, CTA. Direct and action-oriented tone.' : ''}${searchIntent === 'navigational' ? '- Brand-anchored structure — ensure brand entity consistency, direct paths to key resources.' : ''}${searchIntent === 'mixed' ? '- Balance educational depth with conversion elements. Match section structure to the dominant intent of each section.' : ''}
-` : ''}
-${buildSerpSection(ctx.serpEnrichment)}
-
-${buildClientProfileSection(clientProfile)}
-
-${gbpEntitySection}
----
-
-## Output Format
-
-Produce exactly three sentinel-delimited sections. The sentinel markers are parsed programmatically — they must appear exactly as shown.
-
----METADATA_START---
-
-**Primary Keyword:** [the single keyword this page targets as its primary ranking signal]
-**Intent:** commercial | transactional | informational
-**Buyer Journey Stage:** awareness | consideration | decision | retention
-
-**Meta Title:** [≤60 chars — primary keyword near front, brand at end if space permits]
-Rationale: [one sentence — why this title serves both the user and the ranking goal]
-
-**Meta Description:** [≤155 chars — expands on title, includes a secondary keyword or geo modifier, ends with implicit or explicit CTA]
-Rationale: [one sentence]
-
-**H1:** [matches or closely mirrors meta title intent — this is what the user reads first, not a keyword insertion exercise]
-Rationale: [one sentence]
-
-**Keyword-to-Element Mapping:**
-| Keyword | Target Element | Notes |
-|---------|---------------|-------|
-
-**Implementation Notes:** [anything Oscar or a human editor needs to know before writing — e.g., OPTIMIZE: do not rewrite hero section; or CREATE: this is a pillar page, tone is authoritative, conversion-focused]
-
----METADATA_END---
-
----SCHEMA_START---
-
-[Complete JSON-LD @graph. This schema is infrastructure — it contributes to the site's entity graph, not just individual page rich results.
-
-ENTITY GRAPH PHILOSOPHY: Every page's schema should tell a coherent machine-readable story: this Organization, operating in this location, offers this Service, described on this WebPage. The @graph on each page extends the site-wide entity model — it does not start from scratch.
-
-REQUIRED ENTITIES (all pages):
-- Organization: consistent @id (https://${domain}/#organization), name, url, telephone, address — use [PLACEHOLDER: field] for any unknown values, never omit required fields
-- WebPage: @id (https://${domain}/${slug}/#webpage), @type based on intent (ServicePage for commercial/transactional, Article for informational), name, url, isPartOf pointing to WebSite @id
-
-CONDITIONAL ENTITIES (add when appropriate):
-- Service: when the page targets a specific service — include name (must match canonical cluster topic), provider pointing to Organization @id, areaServed
-- HowTo: when the page includes sequential instructional content
-- BreadcrumbList: on all non-homepage pages — reinforces site hierarchy for machine readers
-
-@id IRI PATTERN (use consistently across all pages for this domain):
-- Organization: https://${domain}/#organization
-- WebSite: https://${domain}/#website
-- WebPage: https://${domain}/${slug}/#webpage
-- Service: https://${domain}/${slug}/#service
-
-ENTITY AUTHORITY REQUIREMENTS:
-- If GBP Canonical Entity data is provided above, use those values verbatim for Organization name, address, and telephone. Do not substitute values from client_profiles if GBP data exists — GBP is the authoritative external identifier.
-- sameAs: Include on the Organization entity. Add all known external identifiers: Google Business Profile URL, LinkedIn company URL, state licensing or accreditation registry URL if applicable. If the GBP Canonical Entity section above includes a "GBP URL" value, use it directly as the first sameAs entry — do not placeholder it. Use [PLACEHOLDER: sameAs_linkedin], [PLACEHOLDER: sameAs_accreditation] for identifiers not provided above. Do not omit the sameAs property — placeholder unknown values rather than omitting them.
-- Specificity (FALLBACK — only when no Entity Map is provided in the context above): Use the most specific Schema.org @type available. For vocational training programs, prefer EducationalOccupationalProgram over Service. For content pages about a program, prefer Course over Article. Generic types (Service, Article) are last resort. When an Entity Map IS provided, entity_map.entity_type is binding and overrides this rule — do not apply specificity reasoning to override a provided entity_map.
-- Property saturation: Beyond @type, use relationship properties where they apply: teaches, occupationalCredentialAwarded, programPrerequisites for educational programs; hasPart, about, mentions for content pages; aggregateRating nested within the primary entity (never standalone).
-- Agentic callability: On transactional and commercial pages, include a potentialAction on the primary Service or EducationalOccupationalProgram entity:
-  { "@type": "ReserveAction", "target": "[PLACEHOLDER: enrollment_or_contact_url]" }
-  or
-  { "@type": "ScheduleAction", "target": "[PLACEHOLDER: scheduling_url]" }
-  Use [PLACEHOLDER: action_target_url] if the URL is not known. Do not omit — this is the schema layer that makes the entity callable by AI agents.
-
-PLACEHOLDER PROTOCOL: Use [PLACEHOLDER: field_name] for any unknown client data. Do not fabricate values. Do not omit fields — placeholder them so human editors know what requires completion.]
-
----SCHEMA_END---
-
----OUTLINE_START---
-
-[Strategic content brief for Oscar. This is direction, not a script. Oscar has craft and judgment — give him what he needs to make good decisions, not a line-by-line prescription.
-
-**Page Purpose:**
-One paragraph. What is this page for? Who is reading it, at what stage of the buyer journey, and what do they need to leave with? How does this page build topical authority for the ${siloName ?? 'Unknown'} cluster?
-
-**Content Strategy:**
-- Primary angle: what makes this page's treatment of the topic distinct from generic competitor coverage
-- Tone: derived from intent — commercial pages are confident and authoritative, transactional pages are direct and conversion-focused, informational pages are thorough and educational
-- Depth signal: cover the topic completely for the user's intent — a transactional page should be concise and conversion-focused, an informational page should be comprehensive. Let intent drive length, not a word count target.
-
-**Required Content Coverage:**
-What this page must address to fully serve user intent and compete for the target keyword. List the topics, questions, and angles that must be covered — not the sections and their word counts. Oscar decides structure; Pam decides what must be in it.
-
-Include:
-- Core service/topic coverage (what the user came to understand or do)
-- Trust and proof signals relevant to this business and market (license, insurance, years, certifications, reviews — whatever applies)
-- PAA and query fan-out coverage: list the questions from SERP enrichment this page should answer. Mark each as:
-  [TABLE STAKES] — must answer, competitors all cover this
-  [OPPORTUNITY] — answer with a clear extractable response for AI Overview / featured snippet capture
-  [DEPTH SIGNAL] — address if space permits, signals topical completeness
-  [AI CITATION GAP] — this topic has a documented AI citation gap (from the AI Citation Gaps section above); answer with a direct, attributable, verifiable response. Oscar will apply direct-answer structure to these sections.
-  [TIME-SENSITIVE] — the answer changes periodically (regulatory, scheduling, cost, exam format). Flag for Oscar to add a \`[PLACEHOLDER: last verified date]\` note. These are high-value citation targets but decay without maintenance signals.
-- Geo and local signals: how this page establishes local relevance for ${market_city}, ${market_state}
-
-${clusterAiTargetsSection}
-**Agentic and Voice Search Targets:**
-If Cluster Strategy AI targets are provided above (from the entity map / cluster strategy), use those as the basis. Otherwise derive from the SERP enrichment data.
-
-For each target (2–3 per page):
-- The query
-- Target type: ai_overview | featured_snippet | voice | paa
-- Structural pattern — choose the CORRECT pattern for this specific query's intent:
-  - direct_answer: question-intent queries with a single clear answer; the section H2 is the question and the first sentence of the body paragraph is a complete answer
-  - list: comparative or enumerative intent (how many, what are the steps, what does it include); 3–7 substantive items
-  - table: comparative/spec intent (cost comparison, program options, scheduling matrix)
-  - prose_elaboration: explanatory intent requiring context before answer; do NOT force a direct-answer opening
-- The condition under which the pattern applies (why this query warrants this structure)
-
-IMPORTANT: These structural patterns are conditional, not universal. A page that applies direct_answer to every section has no narrative flow and performs poorly for users. Oscar uses these targets to apply structure where intent warrants it — not as a mandate to restructure the entire page.
-
-**Internal Linking:**
-| Link To | Anchor Text | Placement Context | Direction |
-|---------|-------------|------------------|-----------|
-Direction: outbound (this page links out) or inbound (sibling should link here — flag for human).
-Pillar pages receive links from clusters. Cluster pages link up to pillar. Support pages link to both.
-Use descriptive, contextual anchor text — not "click here" or "learn more."
-
-**Cluster Expansion Opportunities:**
-Based on the keyword data, PAA questions, and gap analysis, identify 1–3 adjacent topic pages that would strengthen this cluster if they don't already exist in the architecture. Format as:
-| Suggested Page | Target Keyword | Buyer Stage | Rationale |
-These are recommendations for Michael and the content queue — not part of this page's brief.
-
-${actionType === 'optimize' ? `**OPTIMIZE MODE — Change Specification:**
-This is an existing page. Do not produce a full content brief. Produce a change specification:
-For each content area: KEEP (no change needed and why), UPDATE (what to change, why, and what the updated version should accomplish), ADD (new content to insert — describe what and why), or REMOVE (what to cut and why).
-Only provide full content direction for ADD items.` : ''}]
-
----OUTLINE_END---
-
-## Quality Standards
-1. Metadata rationale must justify each element in terms of both user intent and ranking signal — not just describe what it says
-2. Schema must be a coherent @graph contribution — consistent @id IRIs, correct @type for page intent, all required entities present with placeholders for unknown values
-3. HowTo schema is an opportunity to be added when content warrants it — not required on every page
-4. Required content coverage must address PAA questions with explicit [TABLE STAKES] / [OPPORTUNITY] / [DEPTH SIGNAL] / [AI CITATION GAP] / [TIME-SENSITIVE] classification
-5. Internal linking map must specify direction and placement context — not just destination URLs
-6. Cluster expansion opportunities are mandatory — minimum 1 suggestion per brief
-7. For OPTIMIZE pages: change specification only, not a full rewrite brief
-8. The brief should give Oscar strategic direction and content requirements — not prescribe structure or word counts
-`;
+  return template
+    .replace('{{ACTION_TYPE}}', actionType === 'create' ? 'CREATE — brand new page' : 'OPTIMIZE — existing page')
+    .replaceAll('{{DOMAIN}}', domain)
+    .replaceAll('{{SLUG}}', slug)
+    .replaceAll('{{SILO_NAME}}', siloName ?? 'Unknown')
+    .replace('{{PAGE_ROLE}}', pageRole)
+    .replace('{{COVERAGE_ROLE}}', coverageRole)
+    .replace('{{SERVICE_KEY}}', service_key)
+    .replace('{{PRIMARY_ENTITY_TYPE}}', primaryEntityType)
+    .replace('{{MARKET_CITY}}', market_city)
+    .replace('{{MARKET_STATE}}', market_state)
+    .replace('{{ENTITY_MAP_SECTION}}', entityMapSection)
+    .replace('{{SEARCH_INTENT_SECTION}}', searchIntentSection)
+    .replace('{{VISIBILITY_QUERIES_SECTION}}', visibilityQueriesSection)
+    .replace('{{INFORMATION_GAIN_DIRECTIVE}}', informationGainDirective)
+    .replace('{{BLUEPRINT_EXCERPT}}', blueprintExcerpt || 'No architecture blueprint available.')
+    .replace('{{SIBLINGS_TABLE}}', siblingsTable)
+    .replace('{{SIBLING_COVERAGE}}', siblingCoverageSection)
+    .replace('{{STRATEGY_CONTEXT}}', strategyContext ? `## Strategy Brief (Phase 1b)\n${strategyContext}\n` : '')
+    .replace('{{BUYER_STAGE_SECTION}}', buyerStageSection)
+    .replace('{{KEYWORD_TABLE}}', keywordTable)
+    .replace('{{MARKET_CONTEXT}}', marketContext ? `## Market Context\n${marketContext}\n` : '')
+    .replace('{{TECHNICAL_BASELINE}}', technicalBaselineSection)
+    .replace('{{CONTENT_GAP_SECTION}}', buildContentGapSection(authorityGaps, formatGaps))
+    .replace('{{AI_CITATION_GAPS}}', aiCitationGapsSection)
+    .replace('{{SERP_SECTION}}', buildSerpSection(ctx.serpEnrichment))
+    .replace('{{CLIENT_PROFILE_SECTION}}', buildClientProfileSection(clientProfile))
+    .replace('{{GBP_ENTITY}}', gbpEntitySection)
+    .replace('{{AI_TARGETS_SECTION}}', clusterAiTargetsSection)
+    .replace('{{AI_TARGETS_INLINE}}', clusterAiTargetsSection)
+    .replace('{{PERFORMANCE_CONTEXT}}', performanceContextSection)
+    .replace('{{OPTIMIZE_CHANGE_SPEC}}', optimizeChangeSpec);
+}
 }
 
 // ============================================================

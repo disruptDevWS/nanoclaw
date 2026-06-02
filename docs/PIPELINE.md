@@ -748,9 +748,14 @@ Synthesizes all competitive intelligence + keyword data into a structured gap an
 
 **Function:** `runMichael()` | **Model:** Claude Sonnet (async)
 
+**Prompt:** Extracted to `configs/agents/michael/system-prompt.md` (8 placeholders: `{{RERUN_SECTION}}`, `{{SALES_MODE_SECTION}}`, `{{GEO_ARCH_BLOCK}}`, etc.). Loaded via `fs.readFileSync()` + `.replaceAll()` chain. Re-run/sales/geo blocks are pre-computed in runtime code and injected as placeholder values.
+
+**Persona framing:** Entity-authority strategist and information architect. Michael frames architecture decisions through entity-authority: pages exist to establish the client as the authoritative entity for a topic cluster, not just to rank for keywords.
+
 Reads ALL prior artifacts to produce a silo-based site architecture.
 
-**Input summary:**
+**Input summary (entity-first ordering):**
+- Supabase: `cluster_strategy` (entity_map, visibility_queries, search_intent) — entity context injected BEFORE keyword data
 - Jim: `research_summary.md` + top 200 keywords from `ranked_keywords.json`
 - Gap: `content_gap_analysis.md`
 - Dwight: `internal_all.csv` (filtered, 100 rows), Platform Observations from `AUDIT_REPORT.md`
@@ -765,7 +770,9 @@ All cross-phase reads use `resolveArtifactPath()` with date fallback for operati
 
 **Strategy Brief authority (two-tier):** Strategy Brief sections are classified as binding constraints (prohibitions/exclusions: "do not," "avoid," "exclude") vs strategic framing (everything else). When structured data suggests building a page that conflicts with a binding constraint, the constraint wins and the opportunity is reported in a `## Deferred Targets` section.
 
-**Output:** `architecture/{date}/architecture_blueprint.md` — Executive Summary + Platform Constraints (conditional) + Deferred Targets (conditional, when brief constraints deferred opportunities) + 3-7 Silos (each with page table: URL slug, status, role, primary keyword, volume, action + Buyer Journey Coverage Assessment) + Cannibalization Warnings + Internal Linking Strategy. In sales mode, additionally includes `## Revenue Opportunity` section.
+**Output:** `architecture/{date}/architecture_blueprint.md` — Executive Summary + Platform Constraints (conditional) + Deferred Targets (conditional, when brief constraints deferred opportunities) + 3-7 Silos (each with page table: URL slug, status, role, coverage role, primary keyword, volume, action + Buyer Journey Coverage Assessment) + Cannibalization Warnings + Internal Linking Strategy + Entity Relationship Map + AI visibility query mapping in Action column. In sales mode, additionally includes `## Revenue Opportunity` section.
+
+**Silo table columns:** URL slug, Status, Role, Coverage Role, Primary Keyword, Volume, Action. The Coverage Role column uses the vocabulary: commercial, informational, geographic, comparison, faq, credential, outcome. Action column now includes AI visibility query mapping where applicable.
 
 **Structural validation:** Blueprint must contain `## Executive Summary` and at least one `### Silo N:` heading. If missing, Michael auto-retries once. Slug corruption ratio > 10% also triggers a retry (coverage assessment rows cause false positives — see known limitation).
 
@@ -774,8 +781,13 @@ All cross-phase reads use `resolveArtifactPath()` with date fallback for operati
 - **Rule 14 — Near-me slug prohibition.** No URL slugs containing "near-me." Near-me query volume captured through location-modified primary keywords on properly-structured geographic pages.
 - **Rule 15 — Buyer Journey Coverage.** Every silo must have Consideration + Decision stage coverage. Coverage Assessment table required per silo.
 - **Cannibalization pre-finalization self-check.** Before finalizing silo tables, Michael reviews for internal cannibalization (competing primary keywords, near-duplicate intent, parent/child overlap) and consolidates. Cannibalization Warnings section reports resolved risks, not self-created ones.
+- **Rule 10 — Entity coverage prioritization.** Pages are prioritized by their contribution to entity authority coverage (same underlying logic, reframed through entity-authority lens). Each page must demonstrate how it strengthens the client's position as the authoritative entity for its topic cluster.
 - Platform Constraints section required when Dwight detects CMS-specific limitations
 - Every authority gap from Gap analysis must map to at least one architecture page
+
+**New blueprint sections:**
+- **Entity Relationship Map** — appears after Internal Linking Strategy. Maps entity relationships across silos to ensure comprehensive entity authority coverage.
+- **AI visibility query mapping** — integrated into silo table Action column, linking pages to `visibility_queries` from `cluster_strategy`.
 
 **Geographic architecture (conditional by `geo_mode`):** Geographic rules are injected conditionally via `getGeographicArchitectureBlock()`. National mode = no geographic rules (topical architecture only). City/metro mode = service-primary container with city/metro geographic pages. State mode = service-primary container with state/city geographic pages driven by keyword data. All modes follow the principle: service is the primary topical container, location is the qualifier. See `docs/prompts/michael-architecture-blueprint.md` for full block text.
 
@@ -801,7 +813,7 @@ All cross-phase reads use `resolveArtifactPath()` with date fallback for operati
 
 | Table | Purpose |
 |-------|---------|
-| `agent_architecture_pages` | Parsed page records (slug, silo, role, keyword, volume, action) — always DELETE+INSERT |
+| `agent_architecture_pages` | Parsed page records (slug, silo, role, coverage_role, keyword, volume, action) — always DELETE+INSERT |
 | `agent_architecture_blueprint` | Full markdown + executive summary — always DELETE+INSERT |
 | `execution_pages` | Conditional UPSERT — committed pages preserved on strategic re-run. Writes `source: 'michael'` on INSERT. |
 | `audit_keywords` | UPDATE `cluster` field from silo assignments (3-tier matching: exact primary_keyword → substring match → URL slug match). Achieves ~50-60% backfill rate. Known limitation: editorial/informational slugs often don't match keyword text. |
@@ -877,9 +889,10 @@ sync-michael → execution_pages (page_brief, status='not_started')
        │
        ▼
 Pam (generate-brief.ts) — polls pam_requests
-  READS:  execution_pages, audit_keywords, audit_snapshots (gap),
-          architecture_blueprint.md, research_summary.md,
-          client_profiles, DataForSEO SERP Advanced
+  READS:  execution_pages (page_brief w/ coverage_role), audit_keywords,
+          audit_snapshots (gap), architecture_blueprint.md, research_summary.md,
+          client_profiles, cluster_strategy (entity_map, visibility_queries),
+          DataForSEO SERP Advanced
   WRITES: content/{date}/{slug}/metadata.md, schema.json, content_outline.md
           execution_pages → status='brief_ready'
        │
@@ -895,21 +908,30 @@ Oscar (generate-content.ts) — polls oscar_requests
 
 **Script:** `scripts/generate-brief.ts` | **Model:** Claude Sonnet (async)
 
+**Prompt:** Extracted to `configs/agents/pam/system-prompt.md` (30+ placeholders). Loaded via `fs.readFileSync()` + `.replace()` chain. Many interpolations are replaced with pre-built section strings assembled in runtime code.
+
 **Trigger:** `pam_requests` table (status='pending'). Polled by running `npx tsx scripts/generate-brief.ts [--domain <d>]`.
 
 **What it does:** For each `execution_pages` row created by sync-michael, generates a complete content brief: metadata (meta title, description, H1, intent), JSON-LD schema, and a detailed content outline with per-section word counts, keyword targets, and internal linking maps.
 
-**Context gathered per page:**
-1. `execution_pages` — page_brief, silo, url_slug, buyer_stage, strategy_rationale (from sync-michael or cluster strategy)
-2. `audit_keywords` — keywords sharing the page's `canonical_key` (Session B: join via `canonical_key`, with volume-based fallback if empty). Includes `primary_entity_type`.
-3. `audit_clusters` → `cluster_strategy` (filtered `status='active'`) — entity_map (JSONB) for entity-aware content framing
-4. `architecture_blueprint.md` — silo excerpt from disk
-5. `research_summary.md` — striking distance + key takeaways from Jim
-6. `audit_snapshots` (agent='gap') — authority gaps and format gaps
-7. `client_profiles` — brand voice, USPs, differentiators (optional)
-8. DataForSEO SERP Advanced — PAA questions, People Also Search, top organic competitors (optional, per primary keyword)
+**Context gathered per page (entity-first ordering):**
+1. **Entity Map** — `audit_clusters` → `cluster_strategy` (filtered `status='active'`) — entity_map (JSONB) for entity-aware content framing
+2. **Search Intent** — search intent context from cluster strategy
+3. **Page Identity** — `execution_pages` — page_brief (including `coverage_role`), silo, url_slug, buyer_stage, strategy_rationale (from sync-michael or cluster strategy)
+4. **Visibility Queries** — `cluster_strategy.visibility_queries` (JSONB) — AI visibility measurement queries for the page's cluster
+5. **Information Gain Directive** — evaluates `client_profiles` for proprietary knowledge; outputs one of: `PROPRIETARY KNOWLEDGE AVAILABLE` / `LIMITED PROPRIETARY KNOWLEDGE` / `COMMODITY CONTENT RISK`
+6. `architecture_blueprint.md` — silo excerpt from disk
+7. `research_summary.md` — striking distance + key takeaways from Jim
+8. `audit_snapshots` (agent='gap') — authority gaps and format gaps
+9. **Keywords** — `audit_keywords` sharing the page's `canonical_key` (Session B: join via `canonical_key`, with volume-based fallback if empty). Includes `primary_entity_type`. (Demoted from position #2 to #9 — entity context takes priority over raw keyword data.)
+10. `client_profiles` — brand voice, USPs, differentiators (optional)
+11. DataForSEO SERP Advanced — PAA questions, People Also Search, top organic competitors (optional, per primary keyword)
 
 **Entity + buyer journey context:** If the page has a `primary_entity_type` (from audit_clusters), it's injected into the Page Identity block. If `entity_map` exists on the cluster's strategy, the full entity definition is injected. If `buyer_stage` is set (cluster strategy pages), a Buyer Journey Context block is added.
+
+**Information Gain Directive:** Evaluates the client profile (services, certifications, proprietary processes, case studies) to determine the level of proprietary knowledge available. This gates Pam's content strategy: pages with `PROPRIETARY KNOWLEDGE AVAILABLE` emphasize unique data and client expertise; `COMMODITY CONTENT RISK` pages require explicit information gain strategies to differentiate from generic competitors.
+
+**Coverage role in Page Identity:** The `coverage_role` field from `execution_pages.page_brief` (written by sync-michael) is included in the Page Identity section. This tells Pam the entity-authority intent purpose of the page (commercial, informational, geographic, comparison, faq, credential, outcome) and shapes the brief accordingly.
 
 **Output (3 files per page):**
 - `content/{date}/{slug}/metadata.md` — meta title, description, H1, intent, keyword-element mapping
@@ -1371,7 +1393,7 @@ The pipeline server runs on Railway's managed infrastructure. Supabase Edge Func
 | `oscar_requests` | Oscar | Dashboard (INSERT, status='pending') |
 | `client_profiles` | Pam, Oscar | Dashboard (manual) |
 | `agent_implementation_pages` | — | sync-pam (DELETE+INSERT, legacy compat) |
-| `cluster_strategy` | Cluster activation dashboard, Pam (entity_map) | generate-cluster-strategy.ts (UPSERT), rebuildClustersAndRollups (UPDATE status='deprecated', deprecated_at) |
+| `cluster_strategy` | Cluster activation dashboard, Michael (entity_map, visibility_queries, search_intent), Pam (entity_map, visibility_queries) | generate-cluster-strategy.ts (UPSERT), rebuildClustersAndRollups (UPDATE status='deprecated', deprecated_at) |
 | `embeddings` | Hybrid canonicalize (embedding cache) | `src/embeddings/service.ts` (UPSERT on content_type + content_id) |
 | `ranking_snapshots` | Performance tab, ranking_deltas view | track-rankings.ts (UPSERT) |
 | `cluster_performance_snapshots` | Performance page (authority trend chart), Clusters page (authority delta) | track-rankings.ts (UPSERT) |

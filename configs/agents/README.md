@@ -19,13 +19,14 @@ Each file contains the agent's identity and instructions with `{{PLACEHOLDER}}` 
 | QA | `qa/system-prompt.md` | 4 | Quality evaluation rubric |
 | Keyword Research | `keyword-research/system-prompt.md` | 6 | Keyword synthesis prompt |
 | Strategy Brief | `strategy-brief/system-prompt.md` | 10 | Phase 1b strategic framing — entity authority directive |
+| Michael | `michael/system-prompt.md` | 8 | Entity-authority architecture blueprint — coverage_role column, entity relationship map |
+| Pam | `pam/system-prompt.md` | 30+ | Content brief synthesizer — entity-first context ordering, visibility queries, information gain directive |
 
 ## Inline Agents (not yet extracted)
 
 | Agent | Reason |
 |-------|--------|
 | Jim | ~30 interpolations, multiple conditional context blocks |
-| Michael | ~40% static, deeply coupled to re-run/sales/geo logic |
 | Competitors | Per-chunk dynamic prompt, minor extraction value |
 | Scout | DataForSEO orchestrator — no LLM prompt |
 

@@ -1196,3 +1196,15 @@ Alternatives rejected:
 AI optimization targets (Section 5) are structural recommendations — "add FAQ schema to this page for this query." Visibility queries (Section 7) are measurement probes — "how would a user ask an AI platform about this topic?" They serve different consumers: Section 5 feeds content briefs; Section 7 feeds future automated AI visibility tracking (LLM Mentions API).
 
 Keeping them separate avoids overloading the `ai_optimization_targets` column and keeps the cluster strategy prompt modular. `visibility_queries` is its own JSONB column (migration 026) with a distinct schema: `{query, query_type, target_cluster, platforms}`.
+
+---
+
+### 2026-06-02 — coverage_role additive alongside role (not replacement)
+
+The existing `role` column (pillar/cluster/support) on `agent_architecture_pages` is load-bearing: Pam uses `pageRole === 'pillar'` to select Opus for pillar page briefs. `coverage_role` is a new orthogonal dimension capturing entity-authority intent purpose (commercial, informational, geographic, etc.). Both columns coexist — role describes structural position in silo, coverage_role describes content purpose in entity authority strategy.
+
+---
+
+### 2026-06-02 — Michael and Pam prompt extraction to configs/agents/
+
+Both prompts were inline in pipeline-generate.ts and generate-brief.ts respectively. Extracted to `configs/agents/michael/system-prompt.md` (8 placeholders) and `configs/agents/pam/system-prompt.md` (30+ placeholders). Michael was previously listed as "~40% static, deeply coupled to re-run/sales/geo logic" — the re-run/sales/geo blocks are now pre-computed in the runtime code and injected as {{RERUN_SECTION}}, {{SALES_MODE_SECTION}}, {{GEO_ARCH_BLOCK}} placeholders. Pam's many interpolations are replaced with pre-built section strings and a .replace() chain.

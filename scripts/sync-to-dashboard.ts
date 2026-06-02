@@ -2121,6 +2121,7 @@ interface ArchPage {
   page_status: string;
   silo_name: string;
   role: string;
+  coverage_role: string;
   primary_keyword: string;
   primary_keyword_volume: number;
   action_required: string;
@@ -2235,7 +2236,9 @@ export function parseBlueprintMarkdown(markdown: string): BlueprintParseResult {
 
     const statusIdx = headers.findIndex((h) => h.includes('status') || h.includes('exists') || h.includes('new'));
     const siloColIdx = headers.findIndex((h) => h.includes('silo') || h.includes('cluster'));
-    const roleIdx = headers.findIndex((h) => h.includes('role') || h.includes('type'));
+    // coverage_role detection MUST come before role — both contain "role"
+    const coverageRoleIdx = headers.findIndex((h) => h.includes('coverage'));
+    const roleIdx = headers.findIndex((h) => h === 'role' || (h.includes('role') && !h.includes('coverage')));
     const kwIdx = headers.findIndex((h) => h.includes('keyword') || h.includes('target'));
     const volIdx = headers.findIndex((h) => h.includes('volume') || h.includes('vol'));
     const actionIdx = headers.findIndex((h) => h.includes('action') || h.includes('required') || h.includes('recommendation'));
@@ -2271,6 +2274,7 @@ export function parseBlueprintMarkdown(markdown: string): BlueprintParseResult {
         page_status: statusIdx >= 0 ? (cells[statusIdx] ?? '').toLowerCase().replace(/[*`]/g, '') : 'unknown',
         silo_name: siloColIdx >= 0 ? (cells[siloColIdx] ?? '').replace(/[*`]/g, '') : siloName,
         role: roleIdx >= 0 ? (cells[roleIdx] ?? '').replace(/[*`]/g, '') : '',
+        coverage_role: coverageRoleIdx >= 0 ? (cells[coverageRoleIdx] ?? '').replace(/[*`]/g, '').toLowerCase() : '',
         primary_keyword: kwIdx >= 0 ? (cells[kwIdx] ?? '').replace(/[*`]/g, '') : '',
         primary_keyword_volume: volIdx >= 0 ? parseInt(cells[volIdx] ?? '0', 10) || 0 : 0,
         action_required: actionIdx >= 0 ? (cells[actionIdx] ?? '').toLowerCase().replace(/[*`]/g, '') : '',
@@ -2348,6 +2352,7 @@ async function syncMichael(
       page_status: p.page_status.includes('new') ? 'new' : p.page_status.includes('exist') ? 'exists' : p.page_status,
       silo_name: p.silo_name,
       role: p.role,
+      coverage_role: p.coverage_role || null,
       primary_keyword: p.primary_keyword,
       primary_keyword_volume: p.primary_keyword_volume,
       action_required: p.action_required,
@@ -2381,6 +2386,7 @@ async function syncMichael(
       page_brief: {
         silo_name: p.silo_name,
         role: p.role,
+        coverage_role: p.coverage_role || null,
         primary_keyword: p.primary_keyword,
         primary_keyword_volume: p.primary_keyword_volume,
         action_required: p.action_required,

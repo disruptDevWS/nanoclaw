@@ -2583,80 +2583,63 @@ These pages receive organic traffic but are not in the current architecture. Eva
 
   console.log(`  Context loaded: ${clusters.length} clusters, research=${!!researchSummary}, keywords=${!!keywordSection}, gap=${!!gapSection}, crawl=${!!crawlSection}, platform=${!!platformSection}${isRerun ? ', rerun=true' : ''}`);
 
-  // --- Build comprehensive prompt ---
-  const prompt = `You are Michael, The Architect — an information architecture and semantic content strategist.
+  // --- Build entity context block from cluster_strategy data ---
+  let entityContextBlock = '';
+  {
+    const { data: clusterStrategyData } = await (sb as any)
+      .from('cluster_strategy')
+      .select('canonical_key, canonical_topic, entity_map, visibility_queries, search_intent')
+      .eq('audit_id', auditId)
+      .eq('status', 'active');
+    const csRows = (clusterStrategyData ?? []) as any[];
+    if (csRows.length > 0) {
+      entityContextBlock = `## Entity Context (from Cluster Strategy — entity-first framing)\n`;
+      entityContextBlock += `The following entity data defines the authoritative entity model for each cluster. Architecture silos should align with these entity clusters.\n\n`;
+      for (const row of csRows) {
+        entityContextBlock += `### ${row.canonical_topic ?? row.canonical_key}\n`;
+        if (row.entity_map) {
+          const em = row.entity_map;
+          entityContextBlock += `- Entity Type: ${em.entity_type ?? 'Service'}\n`;
+          if (em.key_attributes) entityContextBlock += `- Key Attributes: ${Array.isArray(em.key_attributes) ? em.key_attributes.join(', ') : JSON.stringify(em.key_attributes)}\n`;
+          if (em.related_entities) entityContextBlock += `- Related Entities: ${Array.isArray(em.related_entities) ? em.related_entities.map((e: any) => typeof e === 'string' ? e : e.name ?? JSON.stringify(e)).join(', ') : JSON.stringify(em.related_entities)}\n`;
+        }
+        if (row.search_intent) entityContextBlock += `- Dominant Intent: ${row.search_intent}\n`;
+        if (row.visibility_queries && Array.isArray(row.visibility_queries) && row.visibility_queries.length > 0) {
+          entityContextBlock += `- AI Visibility Queries:\n`;
+          for (const vq of row.visibility_queries) {
+            entityContextBlock += `  - ${typeof vq === 'string' ? vq : vq.query ?? JSON.stringify(vq)}\n`;
+          }
+        }
+        entityContextBlock += '\n';
+      }
+      console.log(`  Entity context: ${csRows.length} cluster strategies loaded`);
+    }
+  }
 
-YOUR ENTIRE RESPONSE IS THE BLUEPRINT. Output ONLY the markdown content of architecture_blueprint.md — start with the "## Executive Summary" heading. Do NOT narrate, summarize what you did, or describe the file. Do NOT wrap in code fences. Just output the blueprint content directly.
+  // --- Build context blocks (variable data sections for prompt template) ---
+  const contextBlockParts: string[] = [];
+  // Entity context FIRST (entity-first input ordering)
+  if (entityContextBlock) contextBlockParts.push(entityContextBlock);
+  if (researchSummary) contextBlockParts.push(`## Jim's Research Summary (Foundational Search Intelligence)\n${researchSummary}`);
+  if (keywordSection) contextBlockParts.push(keywordSection);
+  contextBlockParts.push(`## Revenue Clusters (by opportunity — from syncJim with revenue estimates)\nTopic | Volume | Revenue Range | Sample Keywords\n${clusterTable || 'No cluster data available yet.'}`);
+  if (crawlSection) contextBlockParts.push(crawlSection);
+  if (semanticSection) contextBlockParts.push(semanticSection);
+  if (gapSection) contextBlockParts.push(`## Content Gap Intelligence\nThe following analysis was produced by the Gap agent. Your architecture MUST address every identified gap.\n\n${gapSection}`);
+  if (platformSection) contextBlockParts.push(`## Platform Constraints (from Dwight's Technical Audit)\nThe following platform/CMS observations were identified by the technical auditor. Your architecture MUST account for these constraints.\n\n${platformSection}`);
+  if (michaelStrategyBlock) contextBlockParts.push(michaelStrategyBlock);
+  if (michaelClientContextBlock) contextBlockParts.push(michaelClientContextBlock);
+  const contextBlocks = contextBlockParts.join('\n\n');
 
-## Task
-Generate a complete site architecture blueprint for ${audit.domain} (${audit.service_key} in ${michaelGeo.label}).
+  // --- Sales mode section ---
+  let salesModeSection = '';
+  if (mode === 'sales') {
+    salesModeSection = `## SALES MODE OVERRIDE\nThis is a condensed sales prospect report. Follow these overrides:\n- Executive Summary: 3-5 paragraphs strategic pitch focused on revenue opportunity\n- Max 3 silos with 3-5 pages each\n- Skip Cannibalization Warnings and Internal Linking Strategy sections entirely\n- Use revenue opportunity language throughout — this is for a prospect, not an internal planning doc`;
+    if (revenueSection) salesModeSection += `\n- Include the following Revenue Opportunity section at the END of your blueprint, after the last silo, VERBATIM (do not modify the numbers):\n\n${revenueSection}`;
+  }
 
-${researchSummary ? `## Jim's Research Summary (Foundational Search Intelligence)\n${researchSummary}\n` : ''}
-${keywordSection ? `${keywordSection}\n` : ''}
-## Revenue Clusters (by opportunity — from syncJim with revenue estimates)
-Topic | Volume | Revenue Range | Sample Keywords
-${clusterTable || 'No cluster data available yet.'}
-
-${crawlSection ? `${crawlSection}\n` : ''}
-${semanticSection ? `${semanticSection}\n` : ''}
-${gapSection ? `## Content Gap Intelligence\nThe following analysis was produced by the Gap agent. Your architecture MUST address every identified gap.\n\n${gapSection}\n` : ''}
-${platformSection ? `## Platform Constraints (from Dwight's Technical Audit)\nThe following platform/CMS observations were identified by the technical auditor. Your architecture MUST account for these constraints.\n\n${platformSection}\n` : ''}
-${michaelStrategyBlock ? `${michaelStrategyBlock}\n\n` : ''}${michaelClientContextBlock ? `${michaelClientContextBlock}\n` : ''}${rerunBlock ? `${rerunBlock}\n` : ''}${mode === 'sales' ? `## SALES MODE OVERRIDE
-This is a condensed sales prospect report. Follow these overrides:
-- Executive Summary: 3-5 paragraphs strategic pitch focused on revenue opportunity
-- Max 3 silos with 3-5 pages each
-- Skip Cannibalization Warnings and Internal Linking Strategy sections entirely
-- Use revenue opportunity language throughout — this is for a prospect, not an internal planning doc
-${revenueSection ? `- Include the following Revenue Opportunity section at the END of your blueprint, after the last silo, VERBATIM (do not modify the numbers):\n\n${revenueSection}\n` : ''}` : ''}## Output Format — CRITICAL
-You MUST produce output in this EXACT format. The parser depends on these heading patterns:
-
-### Start with:
-\`\`\`
-## Executive Summary
-[2-3 paragraphs. Paragraph 1: current organic state — what the site ranks for, where authority is concentrated, what the primary structural problem is (reference specific keywords and positions). Paragraph 2: the primary architectural decision — what silo structure was chosen and why, what the highest-priority content gap is. Paragraph 3 (if platform constraints exist): how the platform limits or shapes implementation, and what must be done before new pages go live. Pam reads this for every page brief — make it specific enough to inform page-level decisions, not just site-level framing.]
-\`\`\`
-
-### Then (only if Platform Constraints were provided above):
-\`\`\`
-## Platform Constraints
-[CMS type, URL slug limitations, any required workarounds for the recommended architecture.]
-\`\`\`
-
-### Then (only if any structured-data opportunities were deferred to brief constraints):
-\`\`\`
-## Deferred Targets
-
-For each opportunity surfaced by the keyword matrix, revenue clusters, or gap analysis that you chose not to build due to a binding constraint in the Strategy Brief, report:
-
-- **Opportunity:** The keyword, cluster, or gap that the structured data surfaced
-- **Signal:** Volume, CPC, or gap data that indicates the opportunity
-- **Constraint:** The specific Strategy Brief language that deferred this opportunity
-- **Decision:** Confirmation that no page was created for this opportunity
-
-If no opportunities were deferred, omit this section entirely.
-\`\`\`
-
-### Then for each silo (3-7 silos):
-\`\`\`
-### Silo N: [Silo Name]
-[1-2 sentence description]
-
-| URL Slug | Status | Silo | Role | Primary Keyword | Volume | Action |
-|----------|--------|------|------|-----------------|--------|--------|
-| service-slug | new/exists | Silo Name | pillar/cluster/support | target keyword | 1234 | create/optimize |
-\`\`\`
-
-**Pre-finalization self-check:** Before finalizing your silo tables, review them against the cannibalization patterns you are about to document in the Cannibalization Warnings section. If any pages in your own silo tables create cannibalization risk with other pages in your output — competing for the same primary keyword, near-duplicate intent coverage, parent/child topical overlap — consolidate or remove pages before finalizing the silo tables. The Cannibalization Warnings section should report resolved risks or cross-silo linking concerns, not flag risks you created and left unresolved in your own output.
-
-### Then:
-\`\`\`
-## Cannibalization Warnings
-[For each cannibalization risk: name the competing pages, the keyword they compete on, and the specific resolution (which page owns the keyword, what the other page should do). If misrouted pages exist, include them here with remediation instructions. If no cannibalization risks exist, write one sentence confirming clean topical separation across silos.]
-
-## Internal Linking Strategy
-[Minimum requirements: (1) identify the pillar-to-cluster linking pattern for each silo, (2) identify any cross-silo links that reinforce topical authority without creating cannibalization, (3) note any pages that currently have no internal links pointing to them (orphan risk). Be specific — name the pages and the recommended anchor text patterns.]
-\`\`\`
-${isRerun ? `
+  // --- Deprecation section (re-run only) ---
+  const deprecationSection = isRerun ? `
 ### Then (only if RE-RUN MODE ACTIVE):
 
 ## Deprecation Candidates
@@ -2665,78 +2648,21 @@ Output a JSON array (fenced in a json code block) of pages from the COMMITTED AR
   {"url_slug": "old-service-page", "reason": "Service discontinued", "action": "redirect to /services"}
 ]
 If no pages should be deprecated, output an empty array: []
-` : ''}
-## Buyer Journey Coverage Requirement (applies to ALL silos)
+` : '';
 
-For each silo, after the page table, include a coverage assessment block:
-
-### Silo N Coverage Assessment
-| Buyer Stage | Coverage | Pages Addressing | Gap |
-|-------------|----------|-----------------|-----|
-| Awareness (problem recognition, research queries) | Covered / Partial / Missing | [page slugs] | [what's missing] |
-| Consideration (comparison, evaluation, "how does X work") | Covered / Partial / Missing | [page slugs] | [what's missing] |
-| Decision (pricing, booking, contact, "best X near me") | Covered / Partial / Missing | [page slugs] | [what's missing] |
-| Retention (recertification, renewal, ongoing needs) | Present / Not applicable | [page slugs] | [if applicable] |
-
-Rules for coverage assessment:
-- "Covered" = at least one page in this silo directly addresses queries at this stage
-- "Partial" = stage is touched but not fully addressed (e.g., commercial page exists but no cost/comparison content)
-- "Missing" = no page addresses this stage — gap must be noted
-- If Consideration or Decision is "Missing", add at least one page to the silo table to address it before flagging it as a gap
-- Retention is optional — mark "Not applicable" for non-recurring services
-- Do not add pages for gap stages without keyword volume evidence; note the gap but mark as "low priority" if no volume data supports it
-
-## Rules
-1. URL slugs: lowercase, hyphenated, no leading slash (e.g. "plumber-boise" not "/plumber-boise").
-
-   URL SLUG STYLE RULES (strict — sync-michael parses this column by character and rejects anything that does not match):
-   - EXACTLY ONE slug per row. Never comma-separated lists, never "X, Y, Z", never "X and Y".
-   - Allowed characters: lowercase letters, digits, hyphens, and forward slashes (for nested paths like "online-emt-course/arizona"). Nothing else.
-   - FORBIDDEN in the url_slug column: parentheticals "(...)", commas ",", em dashes "—", en dashes "–", ampersands "&", slashes other than path separators, descriptive notes, CTAs, cross-references, annotations, or placeholder text like "—" used as a stand-in for "not applicable".
-   - Enrollment CTAs, scope notes, comparison angles, cross-page references, and any other annotation MUST go in the "Action Required" column, never in the slug.
-   - If a row has no valid slug, OMIT the row entirely. Do not emit "—" or "(none)" as a slug placeholder.
-
-   REJECTED EXAMPLES (do not produce these — they corrupt the parser):
-   | URL Slug | Status |
-   |----------|--------|
-   | aemt-course-online (enrollment CTA), upcoming-advanced-emt-classes | WRONG — two slugs plus a parenthetical in one cell |
-   | online-emt-course/cost, payment-plan-options, each geo cluster page with enrollment CTA | WRONG — comma list plus prose |
-   | aemt-course-online (what is AEMT, scope of practice), aemt-vs-emt | WRONG — parenthetical plus comma list |
-   | — | WRONG — em dash is not a slug |
-
-   CORRECT equivalents:
-   | URL Slug | Action Required |
-   |----------|-----------------|
-   | aemt-course-online | create; add enrollment CTA block |
-   | online-emt-course/cost | create; cross-link to /payment-plan-options/ and each state page |
-   | aemt-vs-emt | create; cover scope-of-practice comparison |
-
-2. Status: "new" for pages to create, "exists" for pages already on the site (match against existing URLs / crawl data)
-3. Each silo: 1 pillar + 2-8 cluster or support pages. Role column vocabulary is locked to exactly these values:
-     - "pillar" — the primary page for a silo; targets the highest-volume head term for that service category
-     - "cluster" — a focused page targeting a specific keyword variant, intent, or sub-service within the silo
-     - "support" — an informational or FAQ page that supports the pillar and cluster pages without competing with them
-     Do not use any other Role values. sync-michael parses on these exact strings.
-4. 3-7 silos total, organized by service category and intent
-4b. **Cluster coherence over page count.** Each silo must be topically complete — a pillar plus sufficient cluster pages to cover distinct commercial intent variants plus sufficient support pages to cover the buyer journey. Do not inflate page counts by splitting adjacent intents into separate pages, creating near-duplicate variants of the pillar or cluster pages, or adding support pages that do not address distinct buyer questions. A silo with 4 well-targeted pages covering the buyer journey is better than 8 pages with overlapping intents. Total site page count is a downstream operational decision managed by cluster activation — your job is topical completeness per cluster, not page volume per site.
-5. Primary keyword from actual keyword data where available. If the keyword matrix does not contain a suitable primary keyword for a page (common on sparse datasets), use the best-fit keyword from Jim's research narrative and note the Volume cell as "est." to indicate the figure is inferred rather than validated. Do not leave Primary Keyword blank or use a near-me variant as fallback.
-6. Volume must match the keyword data
-7. Action: "create" for new pages, "optimize" for existing pages
-8. Every high-volume cluster topic should map to at least one page
-9. Group related keywords into silos by semantic similarity and service category
-10. Keyword prioritization depends on the Visibility Posture from the Strategy Brief:
-    - "Local Authority with Gaps" or "New Market Entry": prioritize near-miss keywords (positions 11-20) — these are the fastest path to page-one wins
-    - "Multi-State Scaling" or "National Brand Building": prioritize expansion geo coverage over near-miss optimization — new market pages that don't exist yet are higher priority than moving existing rankings from position 15 to position 8. Near-miss keywords in the primary market are secondary.
-    - "Established Presence — Topical Expansion": balance both — near-miss wins in core market plus new topic cluster pages
-11. If Content Gap Intelligence is provided above, ensure every authority gap and unaddressed gap maps to at least one page in your architecture
-11b. MISROUTED PAGES: If the Strategy Brief or Jim's research identifies pages ranking for queries they cannot convert (e.g., an About page ranking for commercial keywords), the architecture must: (a) include a new dedicated page that correctly targets those queries, (b) note the misrouted page in Cannibalization Warnings with a specific remediation instruction (strip commercial signals, add internal link to the new dedicated page), and (c) set the new dedicated page as Action: "create" with the misrouted keywords as its Primary Keyword.
-12. If crawl data shows technical issues (broken pages, redirects), note them alongside affected URL slugs
-13. If Platform Constraints are provided, validate all URL slugs against CMS limitations. Flag any pattern not natively achievable with the workaround required.
-14. **Near-me slug prohibition.** Do not create pages whose URL slug contains "near-me" or equivalent geographic-proximity modifiers. When keyword data surfaces "near-me" query volume for a service+location combination, capture that intent through a properly-constructed geographic page using a location-modified primary keyword (e.g., \`/services/water-heater-repair/boise\` with primary keyword "water heater repair boise," not "water heater repair near me"). Near-me queries are a search pattern, not a slug pattern.
-15. Every silo must have at least one page covering Consideration stage and one covering Decision stage.
-    If keyword data doesn't support a dedicated page, combine stages on the pillar and note the constraint in the Coverage Assessment.
-${geoArchBlock ? '\n' + geoArchBlock + '\n' : ''}
-REMINDER: Your response IS the blueprint content — start with "## Executive Summary" and output the full architecture. No preamble, no narration, no summary of what you did.`;
+  // --- Load Michael's prompt template ---
+  const michaelTemplate = fs.readFileSync(
+    path.resolve(process.cwd(), 'configs/agents/michael/system-prompt.md'), 'utf-8'
+  );
+  const prompt = michaelTemplate
+    .replaceAll('{{DOMAIN}}', audit.domain)
+    .replaceAll('{{SERVICE_KEY}}', audit.service_key)
+    .replace('{{GEO_LABEL}}', michaelGeo.label)
+    .replace('{{CONTEXT_BLOCKS}}', contextBlocks)
+    .replace('{{RERUN_SECTION}}', isRerun ? rerunBlock : '')
+    .replace('{{SALES_MODE_SECTION}}', salesModeSection ? `${salesModeSection}\n` : '')
+    .replace('{{GEO_ARCH_BLOCK}}', geoArchBlock ? '\n' + geoArchBlock + '\n' : '')
+    .replace('{{DEPRECATION_SECTION}}', deprecationSection);
 
   console.log('  Generating architecture blueprint via Anthropic API (sonnet)...');
   let result = await callClaude(prompt, { model: 'sonnet', phase: 'michael' });
