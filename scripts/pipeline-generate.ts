@@ -2412,12 +2412,12 @@ ${semanticSummary.rows}`;
       return re.exec(briefContent)?.[1]?.trim() ?? '';
     };
     const visibilityPosture = extractSection('Visibility Posture');
-    const kwDirective = extractSection('Keyword Research Directive');
+    const kwDirective = extractSection('Entity Authority Directive');
     const archDirective = extractSection('Architecture Directive');
     const riskFlags = extractSection('Risk Flags');
     const parts: string[] = [];
     if (visibilityPosture) parts.push(`## Visibility Posture\n${visibilityPosture}`);
-    if (kwDirective) parts.push(`## Keyword Research Directive\n${kwDirective}`);
+    if (kwDirective) parts.push(`## Entity Authority Directive\n${kwDirective}`);
     if (archDirective) parts.push(`## Architecture Directive\n${archDirective}`);
     if (riskFlags) parts.push(`## Risk Flags\n${riskFlags}`);
     if (parts.length > 0) {
@@ -3527,7 +3527,10 @@ function buildGapAnalysisMd(domain: string, analysis: any): string {
     lines.push('| Topic | Client Status | Client Pos | Top Competitor | Comp Pos | Est. Volume | Revenue | Data Source |');
     lines.push('|-------|--------------|------------|----------------|----------|-------------|---------|-------------|');
     for (const g of analysis.authority_gaps) {
-      lines.push(`| ${g.topic} | ${g.client_status} | ${g.client_position ?? 'N/A'} | ${g.top_competitor} | ${g.competitor_position} | ${g.estimated_volume ?? 'N/A'} | ${g.revenue_opportunity ?? 'N/A'} | ${g.data_source ?? 'N/A'} |`);
+      const revOpp = typeof g.revenue_opportunity === 'object' && g.revenue_opportunity !== null
+        ? (g.revenue_opportunity.value !== null ? `$${g.revenue_opportunity.value}/mo (${g.revenue_opportunity.basis})` : g.revenue_opportunity.basis)
+        : g.revenue_opportunity ?? 'N/A';
+      lines.push(`| ${g.topic} | ${g.client_status} | ${g.client_position ?? 'N/A'} | ${g.top_competitor} | ${g.competitor_position} | ${g.estimated_volume ?? 'N/A'} | ${revOpp} | ${g.data_source ?? 'N/A'} |`);
     }
   }
 
@@ -3553,10 +3556,12 @@ function buildGapAnalysisMd(domain: string, analysis: any): string {
 
   if (analysis.priority_recommendations?.length > 0) {
     lines.push('\n## Priority Recommendations\n');
-    lines.push('| Rank | Action | Target Keyword | Est. Volume | Rationale |');
-    lines.push('|------|--------|---------------|-------------|-----------|');
+    lines.push('| Rank | Action | Target Topic | Representative Keywords | Est. Volume | Rationale |');
+    lines.push('|------|--------|-------------|------------------------|-------------|-----------|');
     for (const r of analysis.priority_recommendations) {
-      lines.push(`| ${r.rank} | ${r.action} | ${r.target_keyword} | ${r.estimated_volume ?? 'N/A'} | ${r.rationale} |`);
+      const topic = r.target_topic ?? r.target_keyword ?? '';
+      const keywords = r.representative_keywords?.join(', ') ?? r.target_keyword ?? '';
+      lines.push(`| ${r.rank} | ${r.action} | ${topic} | ${keywords} | ${r.estimated_volume ?? 'N/A'} | ${r.rationale} |`);
     }
   }
 
@@ -3951,11 +3956,11 @@ async function runKeywordResearch(sb: SupabaseClient, auditId: string, domain: s
   const briefPath = resolveArtifactPath(domain, 'research', 'strategy_brief.md');
   if (briefPath) {
     const briefContent = fs.readFileSync(briefPath, 'utf-8');
-    // Extract ## Keyword Research Directive section
-    const directiveMatch = briefContent.match(/## Keyword Research Directive\n([\s\S]*?)(?=\n## |\n---\s*$|$)/);
+    // Extract ## Entity Authority Directive section
+    const directiveMatch = briefContent.match(/## Entity Authority Directive\n([\s\S]*?)(?=\n## |\n---\s*$|$)/);
     if (directiveMatch) {
       strategyDirective = directiveMatch[1].trim();
-      console.log(`  Strategy brief: loaded keyword directive (${strategyDirective.length} chars)`);
+      console.log(`  Strategy brief: loaded entity authority directive (${strategyDirective.length} chars)`);
     }
   }
 
@@ -4351,12 +4356,12 @@ ${reportContent}`;
     .join('\n');
 
   const strategySection = strategyDirective ? `
-## Strategic Keyword Directive (from Strategy Brief — Phase 1b)
+## Entity Authority Directive (from Strategy Brief — Phase 1b)
 ${strategyDirective}
 
-Use this directive to inform your prioritization and analysis. The directive specifies which keyword buckets matter most and what to avoid.
+Use this directive to inform your prioritization and analysis. The directive specifies which entities and topics to build authority for and what to avoid.
 
-IMPORTANT: If the Keyword Research Directive above instructs you NOT to anchor to the current ranking footprint (typically for multi-state or regional clients), apply that constraint to your gap analysis. Do not flag absence of pages in expansion markets as service_gaps — those are architecture decisions, not keyword research gaps. Focus service_gaps on the primary service area only unless the directive explicitly instructs otherwise.
+IMPORTANT: If the Entity Authority Directive above instructs you NOT to anchor to the current ranking footprint (typically for multi-state or regional clients), apply that constraint to your gap analysis. Do not flag absence of pages in expansion markets as service_gaps — those are architecture decisions, not keyword research gaps. Focus service_gaps on the primary service area only unless the directive explicitly instructs otherwise.
 ` : '';
 
   const kwTemplate = fs.readFileSync(path.resolve(process.cwd(), 'configs/agents/keyword-research/system-prompt.md'), 'utf-8');
@@ -5485,7 +5490,7 @@ const QA_RUBRICS: Record<string, QARubric> = {
     artifactFilename: 'strategy_brief.md',
     artifactSubdir: 'research',
     checks: [
-      { name: 'all_sections_present', weight: 'critical', description: 'All 4 section headers present: Visibility Posture, Keyword Research Directive, Architecture Directive, Risk Flags' },
+      { name: 'all_sections_present', weight: 'critical', description: 'All 4 section headers present: Visibility Posture, Entity Authority Directive, Architecture Directive, Risk Flags' },
       { name: 'section_depth', weight: 'high', description: 'Each section has 50+ words of substantive content' },
       { name: 'no_preamble', weight: 'high', description: 'Output starts with a section header (## Visibility Posture), no conversational preamble' },
       { name: 'risk_severity_labels', weight: 'medium', description: 'Risk Flags section uses severity labels: [BLOCKING], [WARNING], or [INFO]' },
@@ -5545,7 +5550,7 @@ async function runDeterministicChecks(
         const briefPath = latestDir ? path.join(latestDir, 'strategy_brief.md') : null;
         if (briefPath && fs.existsSync(briefPath)) {
           const content = fs.readFileSync(briefPath, 'utf-8');
-          const requiredHeaders = ['Visibility Posture', 'Keyword Research Directive', 'Architecture Directive', 'Risk Flags'];
+          const requiredHeaders = ['Visibility Posture', 'Entity Authority Directive', 'Architecture Directive', 'Risk Flags'];
           const missingHeaders = requiredHeaders.filter((h) => !content.includes(`## ${h}`));
           if (missingHeaders.length > 0) {
             failures.push({

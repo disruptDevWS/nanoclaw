@@ -4,6 +4,24 @@ Non-obvious choices that would look wrong without context. Check here before "fi
 
 ---
 
+**2026-06-02: Entity Authority Directive replaces Keyword Research Directive**
+
+The strategy brief's Section 2 was renamed from "Keyword Research Directive" to "Entity Authority Directive". The market has shifted: AI Mode is Google's default (1B+ monthly users), information gain is a primary ranking signal, and AI-paraphrased content lost 71% of traffic. The old framing told downstream phases what keywords to target; the new framing tells them what entities the domain should be authoritative for, with keywords as evidence rather than targets. All regex consumers in pipeline-generate.ts (Michael injection, Jim extraction, keyword synthesis, QA rubric) updated. Strategy brief prompt extracted to `configs/agents/strategy-brief/system-prompt.md` in the same change.
+
+---
+
+**2026-06-02: revenue_opportunity structured object vs pure numeric**
+
+Gap agent's `authority_gaps[].revenue_opportunity` changed from a mixed-format string ("$X–$Y/mo est." or "No revenue estimate — ...") to a structured `{ value: number|null, basis: string }` object. This preserves numeric sortability (dashboard can sort by `.value`) while keeping the human-readable explanation in `.basis`. `buildGapAnalysisMd()` renders with backward-compat fallback for old string-format data.
+
+---
+
+**2026-06-02: information_gain_gaps deferred — coverage_note added instead**
+
+The plan originally called for a separate `information_gain_gaps` output key from the Gap agent. Deferred because the data available (URL + title from crawl) is insufficient for reliable inference about information gain. Instead, added `coverage_note` (one sentence) to each `authority_gaps` entry describing what the competitor covers that the client does not. Information gain self-assessment added to Oscar's playbook (Section 8 production notes: `[ORIGINAL INSIGHT]`, `[CLIENT INPUT NEEDED]`, `[COMMODITY CONTENT]` labels). `information_gain_gaps` tracked in FOLLOWUPS.md for when Section Coverage data is richer.
+
+---
+
 **2026-05-29: Legacy canonicalize mode removed — hybrid is the only mode**
 
 Both production clients (IMA, SMA) and forgegrowth.ai were already on hybrid mode since 2026-04-20. Six inactive/demo audits (ecohvac, foxhvac, boiseplumbers, boiseheating, talon, tvr) were still on `legacy` — migrated to `hybrid` via migration 024. The `canonicalize_mode` column default is now `'hybrid'`. All legacy Sonnet grouping code, shadow mode, and mode-switching conditionals have been removed from `pipeline-generate.ts`, `pipeline-server-standalone.ts`, `run-pipeline.sh`, and `run-canonicalize.ts`. The `build-legacy-payload.ts` function no longer accepts a mode parameter — it always returns classification-only fields (canonical fields are written by hybrid persist). Shadow columns (`shadow_canonical_key`, etc.) remain in the DB schema but are no longer written.

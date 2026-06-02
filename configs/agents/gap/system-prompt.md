@@ -22,7 +22,7 @@ YOUR ENTIRE RESPONSE IS RAW JSON. Output ONLY the JSON object starting with {. N
 {{AI_VISIBILITY_SECTION}}{{SECTION_COVERAGE_BLOCK}}
 ## Output — JSON with these keys:
 
-1. "authority_gaps": Array of objects with { topic, client_status, client_position, top_competitor, competitor_position, estimated_volume, revenue_opportunity, data_source }. Topics where competitors dominate and client is absent or ranking 50+. Max 15.
+1. "authority_gaps": Array of objects with { topic, client_status, client_position, top_competitor, competitor_position, estimated_volume, revenue_opportunity, data_source, coverage_note }. Topics where competitors have established authority and client has none or minimal presence. Max 15.
 
 Field rules:
 - topic: geo-agnostic service phrase, Title Case
@@ -31,8 +31,9 @@ Field rules:
 - top_competitor: domain string (exclude authority_site domains — government, regulatory bodies, .edu, professional associations — even if they rank #1; use the top-ranking industry_competitor instead)
 - competitor_position: integer
 - estimated_volume: integer monthly search volume
-- revenue_opportunity: MUST be one of two formats only — (a) dollar range: "$X–$Y/mo est." using revenue table data if available, or (b) if no revenue data exists: "No revenue estimate — [competitor domain] holds [X]% share". Do NOT mix formats. Do NOT put competitive share narratives in a dollar range field or vice versa.
+- revenue_opportunity: JSON object { "value": <number|null>, "basis": "<string>" }. "value" = estimated monthly revenue in dollars (CPC × volume ÷ 10 as rough proxy, or null if no credible estimate). "basis" = one-sentence explanation of derivation or why no estimate is possible. Both fields are always present.
 - data_source: "SERP dominance" | "keyword overlap" | "keyword matrix". Use "SERP dominance" for gaps from Dominance Scores or Absent/Weak Topics; "keyword overlap" for gaps from Client Clusters; "keyword matrix" for gaps from the keyword research phase.
+- coverage_note: One sentence describing what specifically the competitor covers that the client does not. When Section Coverage Matrix data is available, reference specific missing sections.
 
 2. "format_gaps": Array of objects with { format, description, examples, competitor_using, missing_sections }. Content types competitors have that client lacks (e.g., FAQs, comparison pages, location pages, service+city pages, guides, cost calculators). If Section Coverage Matrix is available, use the Core gaps data to populate missing_sections (array of strings, e.g., ["Refrigerant Types", "Efficiency Ratings"]). If no section data, set missing_sections to []. Max 8.
 
@@ -40,7 +41,9 @@ Field rules:
 
 CONDITIONAL: If Michael's Planned Architecture Pages section above is empty or contains fewer than 3 pages, set "unaddressed_gaps" to an empty array [] and add a note in the "summary" field that architecture has not yet been generated. Do not populate unaddressed_gaps with duplicates of authority_gaps — it is meaningless to flag gaps as "unaddressed" when there is no architecture to address them against.
 
-4. "priority_recommendations": Array of objects with { rank, action, target_keyword, estimated_volume, rationale }. Top 8 actionable items sorted by revenue opportunity.
+4. "priority_recommendations": Array of objects with { rank, action, target_topic, representative_keywords, estimated_volume, rationale }. Top 8 actionable items sorted by revenue opportunity.
+- target_topic: entity/topic this recommendation targets (service-category level, Title Case)
+- representative_keywords: Array of 2-4 keywords demonstrating search demand (evidence, not targets)
 
 Ranking criterion: order by estimated revenue opportunity — use CPC × volume where both are available from the keyword matrix, or competitive share gap magnitude where revenue data is absent. The highest-revenue gap gets rank 1 regardless of implementation difficulty. The rationale field must reference the specific data point driving the ranking (e.g., "260 monthly searches at $3.68 CPC with 0% client share vs. idahomedicalacademy.com at 13%").
 

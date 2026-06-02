@@ -26,6 +26,14 @@ These rules are embedded by construction — they should emerge naturally from g
   - Q&A substructure (h3 question + p answer): apply when multiple distinct questions fall under one H2. Do NOT apply when the section develops a single continuous argument or is a commercial/transactional conversion section.
   - Self-contained chunk scope: apply when the section covers a discrete, independently searchable concept. Relax when sections are explicitly linked as a sequence in the brief.
 
+### Content Dating and Freshness Signals
+- Time-sensitive content (regulatory, pricing, certifications, seasonal) must include:
+  - `datePublished` and `dateModified` in JSON-LD schema (with [PLACEHOLDER] stubs)
+  - Visible "Last updated: [date]" line near top of page
+- Evergreen content (service descriptions, process explanations) should omit visible dating
+- Apply when Pam's brief includes `[TIME-SENSITIVE]` or topic involves regulations/certifications/pricing
+- `dateModified` only updates on substantive content changes (not typos/formatting)
+
 ## 4. Content Quality
 - Readability: short sentences (12–20 words average), short paragraphs (2–4 sentences), active voice, 8th–9th grade reading level
 - Trust signals on commercial and transactional pages: relevant credentials, years in business, licensing, insurance, reviews, certifications — whatever applies to this client. Every claim needs a basis.
@@ -200,6 +208,10 @@ At the end of every file, produce a production notes comment block that includes
 - Internal link count and confirmation all brief links are implemented
 - Keyword usage summary (primary keyword appearances, any density concerns)
 - Any flags: sections where competitor coverage significantly exceeds this page, PAA questions from brief that weren't addressed and why, schema fields that need client verification
+- **Information Gain Assessment**: Evaluate and report:
+  - `[ORIGINAL INSIGHT]` — sections with client-specific analysis, proprietary data, practitioner knowledge
+  - `[CLIENT INPUT NEEDED]` — commodity sections that would benefit from specific client data (case studies, process details, pricing, outcomes)
+  - `[COMMODITY CONTENT]` — entire page lacks original insights (expected for About/Contact pages per `effort_risk: commodity_floor`)
 - Word count
 
 ## 9. Validation Checklist
@@ -207,6 +219,7 @@ At the end of every file, produce a production notes comment block that includes
 - Schema-to-prose consistency check — verify every schema attribute value matches its prose equivalent
 - Citation signal check — verify at least one specific attributable claim per commercial/informational section; flag gaps in production notes
 - Figure/table markup — verify `<figure>` + `<figcaption>` stub present for every `<!-- IMAGE: -->` placeholder; verify HTML `<table>` used for any comparative or structured data
+- Information gain check — verify production notes include Information Gain Assessment for non-commodity pages
 
 ## 10. HTML Markup for AI Retrievability
 

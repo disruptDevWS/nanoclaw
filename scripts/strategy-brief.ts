@@ -269,25 +269,11 @@ async function gatherInputs(sb: SupabaseClient, audit: any, domain: string): Pro
 // ============================================================
 
 function buildPrompt(inputs: BriefInputs): string {
-  const sections: string[] = [];
-
-  // Geo context
   const geoDesc = describeGeo(inputs.geoMode, inputs.marketGeos);
 
-  sections.push(`You are a strategic SEO analyst. Synthesize the inputs below into a strategy brief that will direct the keyword research, architecture, and content phases of an SEO audit pipeline.
+  // Build conditional blocks
+  const clientContextBlock = inputs.clientContext ? `\n${inputs.clientContext}\n` : '';
 
-## Business Context
-- Domain: ${inputs.domain}
-- Industry/Service: ${inputs.serviceKey || 'unknown'}
-- Geo Mode: ${inputs.geoMode}
-- Target Markets: ${geoDesc}
-`);
-
-  if (inputs.clientContext) {
-    sections.push(inputs.clientContext);
-  }
-
-  // Dashboard-only fields useful for strategic framing
   const extraLines: string[] = [];
   if (inputs.dashboardExtras.service_area) {
     extraLines.push(`Service area: ${inputs.dashboardExtras.service_area}`);
@@ -295,36 +281,34 @@ function buildPrompt(inputs: BriefInputs): string {
   if (inputs.dashboardExtras.notes) {
     extraLines.push(`Additional context: ${inputs.dashboardExtras.notes}`);
   }
-  if (extraLines.length > 0) {
-    sections.push(extraLines.join('\n'));
-  }
+  const dashboardExtrasBlock = extraLines.length > 0 ? `\n${extraLines.join('\n')}\n` : '';
 
+  let clientProfileBlock = '';
   if (inputs.clientProfile) {
     const cp = inputs.clientProfile;
-    const profileLines: string[] = ['## Client Profile (from Supabase)'];
+    const profileLines: string[] = ['\n## Client Profile (from Supabase)'];
     if (cp.canonical_name) profileLines.push(`Business name: ${cp.canonical_name}`);
     if (cp.canonical_address) profileLines.push(`Address: ${cp.canonical_address}`);
     if (cp.years_in_business) profileLines.push(`Years in business: ${cp.years_in_business}`);
     if (cp.usps?.length) profileLines.push(`USPs: ${cp.usps.join(', ')}`);
     if (cp.service_differentiators?.length) profileLines.push(`Differentiators: ${cp.service_differentiators.join(', ')}`);
-    sections.push(profileLines.join('\n'));
+    clientProfileBlock = profileLines.join('\n') + '\n';
   }
 
-  if (inputs.auditReport) {
-    sections.push(`## Technical Audit (Dwight — AUDIT_REPORT.md)
-${inputs.auditReport}`);
-  }
+  const auditReportBlock = inputs.auditReport
+    ? `\n## Technical Audit (Dwight — AUDIT_REPORT.md)\n${inputs.auditReport}\n`
+    : '';
 
+  let gscBlock = '';
   if (inputs.gscSummary) {
-    sections.push(`## Google Search Console Data (first-party, verified)
-${inputs.gscSummary}
-
-NOTE: GSC data is verified first-party search performance. Compare observed CTR against modeled CTR assumption. Where observed CTR is significantly below modeled CTR at equivalent positions, the priority is title/meta optimization, not ranking improvement.`);
+    gscBlock = `\n## Google Search Console Data (first-party, verified)\n${inputs.gscSummary}\n\nNOTE: GSC data is verified first-party search performance. Compare observed CTR against modeled CTR assumption. Where observed CTR is significantly below modeled CTR at equivalent positions, the priority is title/meta optimization, not ranking improvement.\n`;
   }
 
+  // Scout block — scope.json + research report or fallback
+  const scoutParts: string[] = [];
   if (inputs.scopeJson) {
     const scope = inputs.scopeJson;
-    const scopeLines: string[] = ['## Scout External Visibility Assessment (scope.json)'];
+    const scopeLines: string[] = ['\n## Scout External Visibility Assessment (scope.json)'];
     if (scope.services?.length) scopeLines.push(`Discovered services: ${scope.services.join(', ')}`);
     if (scope.locales?.length) scopeLines.push(`Discovered locales: ${scope.locales.join(', ')}`);
     if (scope.gap_summary) {
@@ -342,75 +326,28 @@ NOTE: GSC data is verified first-party search performance. Compare observed CTR 
     if (scope.total_opportunity_volume) {
       scopeLines.push(`Total opportunity volume: ${scope.total_opportunity_volume}/mo`);
     }
-    sections.push(scopeLines.join('\n'));
+    scoutParts.push(scopeLines.join('\n'));
   }
-
   if (inputs.scoutMarkdown) {
-    sections.push(`## Scout Research Report (competitive intelligence)
-${inputs.scoutMarkdown}`);
+    scoutParts.push(`\n## Scout Research Report (competitive intelligence)\n${inputs.scoutMarkdown}`);
   }
-
   if (!inputs.scopeJson && !inputs.scoutMarkdown) {
-    sections.push(`## Scout Data
-No Scout data available. Base visibility posture on Dwight's crawl signals only. Do not speculate about external visibility or competitor landscape.`);
+    scoutParts.push(`\n## Scout Data\nNo Scout data available. Base visibility posture on Dwight's crawl signals only. Do not speculate about external visibility or competitor landscape.`);
   }
+  const scoutBlock = scoutParts.join('\n') + '\n';
 
-  // Output instructions
-  sections.push(`## Task
-
-Produce a strategy brief with exactly these four sections. Each section must be actionable and specific to this business — no generic advice.
-
-### Section 1: Visibility Posture
-Characterize the gap between current footprint and target market using ONE of these labels:
-- "New Market Entry" — near-zero non-branded visibility in target markets
-- "Local Authority with Gaps" — established in core geo but missing topical coverage
-- "Established Presence — Topical Expansion" — strong core presence, needs breadth
-- "Multi-State Scaling" — local authority in one market, expanding to new states/regions
-- "National Brand Building" — building national presence from regional or niche base
-
-Then write 2-3 sentences explaining WHY this label fits based on the data: current ranking footprint, gap analysis, geo scope vs actual presence.
-
-### Section 2: Keyword Research Directive
-Provide explicit instructions for keyword matrix construction. Address:
-1. What keyword buckets to target, in priority order (e.g., "national unmodified terms," "state-level variants," "city-level terms")
-2. What NOT to optimize around — be specific to this business's situation
-3. Whether the current ranking footprint is a valid signal or a misleading anchor
-4. Any specific term patterns to include or exclude based on the business model
-
-GEO MODE GUIDANCE:
-- If geoMode is "local" or "single_market": flag any tendency to target national head terms the site cannot yet compete for; anchor recommendations to the primary service area.
-- If geoMode is "multi_state" or "regional": explicitly warn against anchoring the keyword matrix to the current ranking footprint if it is geographically narrow (e.g., one city). The current rankings are a baseline signal only — the expansion markets represent the primary opportunity and must be seeded independently. Direct the keyword matrix to treat expansion geos as first-class targets, not afterthoughts.
-
-### Section 3: Architecture Directive
-List 3-5 structural requirements for the site architecture. Format as a numbered list. Each item must follow this structure:
-[Requirement statement] — [one sentence explaining why this is required based on the data]
-
-Examples:
-- "State landing pages required before topical cluster build"
-- "Service hub pages should be geo-agnostic; location pages link to hubs"
-- "Brand entity resolution is prerequisite — consolidate name variants"
-- "Existing thin pages should be merged, not supplemented"
-
-REQUIRED CHECK: Review Scout's ranking profile for misrouted pages — pages ranking for commercial or transactional queries that the page's content and structure cannot convert (e.g., an About page ranking for "EMT training boise", a service area page absorbing all geo-modified queries). If misrouted pages exist, include a requirement addressing the content-intent realignment needed. This is one of the highest-leverage architecture interventions available and must not be omitted when the data supports it.
-
-### Section 4: Risk Flags
-List risks that will degrade downstream output if not surfaced. Use severity labels:
-- [BLOCKING] — must be resolved before architecture can proceed
-- [WARNING] — will reduce output quality if ignored
-- [INFO] — context that improves downstream decisions
-
-REQUIRED: Before listing flags, check for conflicts between Dwight's crawl findings and Scout's ranking data. Common conflict pattern: Dwight reports a page as technically clean while Scout shows it ranking for wrong-intent queries — the page is not broken, it is misaligned. Surface these conflicts explicitly as [WARNING] flags with a one-line description of the conflict and its implication for the architecture phase.
-
-Also flag: any technical issue Dwight identified as Priority 1 or 2 that has not already been addressed in Section 3 must appear here as [BLOCKING] or [WARNING]. Do not let critical technical findings from Dwight disappear between sections.
-
-YOUR ENTIRE RESPONSE IS THE STRATEGY BRIEF. Output ONLY the markdown content. Start with the first section header. Use ## (H2) for all four section headers. Section headers must be exactly:
-## Visibility Posture
-## Keyword Research Directive
-## Architecture Directive
-## Risk Flags
-No preamble, no code fences, no narration. Do not include "Section 1:", "Section 2:" etc. in the output headers — those labels are instructions only.`);
-
-  return sections.join('\n\n');
+  const template = fs.readFileSync(path.resolve(process.cwd(), 'configs/agents/strategy-brief/system-prompt.md'), 'utf-8');
+  return template
+    .replace('{{DOMAIN}}', inputs.domain)
+    .replace('{{SERVICE_KEY}}', inputs.serviceKey || 'unknown')
+    .replace('{{GEO_MODE}}', inputs.geoMode)
+    .replace('{{GEO_DESCRIPTION}}', geoDesc)
+    .replace('{{CLIENT_CONTEXT_BLOCK}}', clientContextBlock)
+    .replace('{{DASHBOARD_EXTRAS_BLOCK}}', dashboardExtrasBlock)
+    .replace('{{CLIENT_PROFILE_BLOCK}}', clientProfileBlock)
+    .replace('{{AUDIT_REPORT_BLOCK}}', auditReportBlock)
+    .replace('{{GSC_BLOCK}}', gscBlock)
+    .replace('{{SCOUT_BLOCK}}', scoutBlock);
 }
 
 function describeGeo(geoMode: string, marketGeos: any): string {
@@ -477,7 +414,7 @@ async function runStrategyBrief(cliArgs: CliArgs) {
   const result = await callClaude(prompt, { model: 'sonnet', phase: 'strategy-brief', maxTokens: 8192 });
 
   // 5. Validate section headers (warning-level — QA gate enforces)
-  const requiredHeaders = ['Visibility Posture', 'Keyword Research Directive', 'Architecture Directive', 'Risk Flags'];
+  const requiredHeaders = ['Visibility Posture', 'Entity Authority Directive', 'Architecture Directive', 'Risk Flags'];
   const missingHeaders = requiredHeaders.filter((h) => !result.includes(`## ${h}`));
   if (missingHeaders.length > 0) {
     console.warn(`  WARNING: Strategy brief missing sections: ${missingHeaders.join(', ')}`);

@@ -183,6 +183,12 @@
 | `jim` | Phase 3 (syncJim) | `research_summary_markdown`, `keyword_overview{}`, `position_distribution[]`, `branded_split{}`, `intent_breakdown[]`, `top_ranking_urls[]`, `competitor_analysis[]`, `competitor_summary{}`, `striking_distance[]`, `content_gap_observations[]`, `key_takeaways[]`. **Numeric columns now sourced from `research_data.json` (deterministic) when available; falls back to regex-parsed `research_summary.md` for backward compat.** | `useResearchSiteFindings()` → ResearchPage |
 | `gap` | Phase 5 | `keyword_overview` (JSONB with `authority_gaps[]`, `format_gaps[]`, `gap_summary`, `ai_citation_gaps[]`) | `useAuditSnapshots()`, `useAiCitationGaps()` |
 
+**Gap `keyword_overview` sub-key changes (Session 3):**
+- `authority_gaps[].coverage_note` (NEW) — one sentence describing what the competitor covers that the client does not
+- `authority_gaps[].revenue_opportunity` (FORMAT CHANGE) — was mixed-format string, now `{ value: number|null, basis: string }` object. `buildGapAnalysisMd()` has backward-compat fallback for old string format.
+- `priority_recommendations[].target_topic` (NEW, replaces `target_keyword`) — entity/topic at service-category level, Title Case
+- `priority_recommendations[].representative_keywords` (NEW) — array of 2-4 keywords as evidence. `target_keyword` still supported as fallback in `buildGapAnalysisMd()`.
+
 **Shared columns**: `id`, `audit_id`, `agent_name`, `snapshot_version`, `agent_run_id`, `row_count`, `created_at`
 
 **`prioritized_fixes[]` item schema** (Dwight snapshots):

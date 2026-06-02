@@ -5,6 +5,24 @@ Each entry is self-contained: picking it up 3 months later should not require re
 
 ---
 
+### [Pipeline/Dashboard] Gap `content_gap_observations` type mismatch
+
+- **Status:** Latent. Gap agent writes `content_gap_observations` as an array of objects (from `json:insights` block). Dashboard readers may expect an array of strings. No current breakage observed but a type coercion risk exists.
+- **Action:** Audit dashboard consumers of `content_gap_observations` and add type guards or update display logic.
+- **Scope estimate:** S
+- **Captured:** Session 3, 2026-06-02
+
+---
+
+### [Pipeline] `information_gain_gaps` as separate Gap output key
+
+- **Status:** Deferred. The data currently available to the Gap agent (URL + title from crawl) is insufficient for reliable information gain inference. Instead, `coverage_note` was added to `authority_gaps` entries and Oscar's playbook got information gain self-assessment labels (`[ORIGINAL INSIGHT]`, `[CLIENT INPUT NEEDED]`, `[COMMODITY CONTENT]`).
+- **Action:** When Section Coverage Matrix data is richer (e.g., includes section-level content hashes or topic depth scores), add `information_gain_gaps` as a first-class Gap output key with per-topic analysis of where the client can demonstrate original expertise vs where content is commodity.
+- **Scope estimate:** M — Gap prompt update + sync + dashboard display
+- **Captured:** Session 3, 2026-06-02
+
+---
+
 ### ~~[Dashboard] Clusters page `cluster_strategy` status filter~~ RESOLVED
 
 - **Resolved:** Session 2026-04-22 (Session C). Added `.eq('status', 'active')` to both `useClusterStrategy` and `useClusterStrategyPoll` queries in `lovable-repo/src/hooks/useClusterFocus.ts`. Deprecated strategies no longer shown.

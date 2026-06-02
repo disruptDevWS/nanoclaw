@@ -18,6 +18,7 @@ Each file contains the agent's identity and instructions with `{{PLACEHOLDER}}` 
 | Gap | `gap/system-prompt.md` | 10 | Competitive gap analysis |
 | QA | `qa/system-prompt.md` | 4 | Quality evaluation rubric |
 | Keyword Research | `keyword-research/system-prompt.md` | 6 | Keyword synthesis prompt |
+| Strategy Brief | `strategy-brief/system-prompt.md` | 10 | Phase 1b strategic framing — entity authority directive |
 
 ## Inline Agents (not yet extracted)
 

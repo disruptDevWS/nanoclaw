@@ -384,12 +384,12 @@ Client Brief (auto after Phase 6d, non-fatal)
 
 **Steps:**
 1. **Gather** — Loads AUDIT_REPORT.md (cross-date fallback), scope.json + scout markdown (optional), client_context from prospect-config.json (optional), client_profiles from Supabase (optional), audit metadata (geo_mode, market_geos, service_key)
-2. **Synthesize** — Single Sonnet call produces `strategy_brief.md` with four sections: Visibility Posture, Keyword Research Directive, Architecture Directive, Risk Flags
+2. **Synthesize** — Single Sonnet call produces `strategy_brief.md` with four sections: Visibility Posture, Entity Authority Directive, Architecture Directive, Risk Flags
 3. **Write** — Brief saved to `audits/{domain}/research/{date}/strategy_brief.md`
 
 **Downstream consumption:**
-- **Phase 2 (KeywordResearch):** Keyword Research Directive section injected into the Sonnet synthesis prompt (not the Haiku extraction prompt)
-- **Phase 6 (Michael):** Architecture Directive + Risk Flags + Keyword Research Directive sections injected (Visibility Posture dropped — framing, not actionable for architecture)
+- **Phase 2 (KeywordResearch):** Entity Authority Directive section injected into the Sonnet synthesis prompt (not the Haiku extraction prompt)
+- **Phase 6 (Michael):** Architecture Directive + Risk Flags + Entity Authority Directive sections injected (Visibility Posture dropped — framing, not actionable for architecture)
 - **Pam (content briefs):** Visibility Posture + Architecture Directive sections injected alongside market context
 
 **Cost:** ~$0.06 (Sonnet, ~14K tokens)
