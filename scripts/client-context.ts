@@ -119,7 +119,10 @@ export function buildClientContextPrompt(ctx: ClientContext, phase: 'keyword-res
 
   if (ctx.business_model) lines.push(`Business model: ${ctx.business_model}`);
   if (ctx.target_audience) lines.push(`Target audience: ${ctx.target_audience}`);
-  if (ctx.services?.length) lines.push(`Core services: ${ctx.services.join(', ')}`);
+  if (ctx.services?.length) {
+    lines.push(`Core services: ${ctx.services.join(', ')}`);
+    lines.push('CONSTRAINT: Core Services is the authoritative record of what this business currently offers. Only recommend entities, pages, or content for services listed above. If keyword or crawl data references a service not listed, note the discrepancy but do not treat it as an active offering. If crawl data shows pages for unlisted services, flag them as candidates for redirect or removal.');
+  }
   if (ctx.competitive_advantage) lines.push(`Competitive advantage: ${ctx.competitive_advantage}`);
 
   if (phase === 'michael' || phase === 'cluster-strategy') {
