@@ -355,29 +355,44 @@ async function runLocalPresence(cliArgs: CliArgs) {
   // 8. Combine Google + SERP citations (11 total)
   const allCitations = [googleCitation, ...citationResults];
 
-  // 9. Batch upsert citation_snapshots
-  const citationRows = allCitations.map((c) => ({
-    audit_id: audit.id,
-    snapshot_date: snapshotDate,
-    directory_name: c.directory_name,
-    directory_domain: c.directory_domain,
-    listing_found: c.listing_found,
-    listing_url: c.listing_url,
-    found_name: c.found_name,
-    found_address: c.found_address,
-    found_phone: c.found_phone,
-    nap_match_name: c.nap_match_name,
-    nap_match_address: c.nap_match_address,
-    nap_match_phone: c.nap_match_phone,
-    nap_consistent: c.nap_consistent,
-    data_source: c.data_source,
-    raw_snippet: c.raw_snippet,
-  }));
-
-  const { error: citErr } = await sb
+  // 9. Batch upsert citation_snapshots (skip manually overridden rows)
+  const { data: overridden } = await sb
     .from('citation_snapshots')
-    .upsert(citationRows, { onConflict: 'audit_id,snapshot_date,directory_name' });
-  if (citErr) throw new Error(`citation_snapshots upsert failed: ${citErr.message}`);
+    .select('directory_name')
+    .eq('audit_id', audit.id)
+    .eq('snapshot_date', snapshotDate)
+    .eq('manual_override', true);
+  const overriddenNames = new Set((overridden ?? []).map((r: any) => r.directory_name));
+
+  const citationRows = allCitations
+    .filter((c) => !overriddenNames.has(c.directory_name))
+    .map((c) => ({
+      audit_id: audit.id,
+      snapshot_date: snapshotDate,
+      directory_name: c.directory_name,
+      directory_domain: c.directory_domain,
+      listing_found: c.listing_found,
+      listing_url: c.listing_url,
+      found_name: c.found_name,
+      found_address: c.found_address,
+      found_phone: c.found_phone,
+      nap_match_name: c.nap_match_name,
+      nap_match_address: c.nap_match_address,
+      nap_match_phone: c.nap_match_phone,
+      nap_consistent: c.nap_consistent,
+      data_source: c.data_source,
+      raw_snippet: c.raw_snippet,
+    }));
+
+  if (citationRows.length > 0) {
+    const { error: citErr } = await sb
+      .from('citation_snapshots')
+      .upsert(citationRows, { onConflict: 'audit_id,snapshot_date,directory_name' });
+    if (citErr) throw new Error(`citation_snapshots upsert failed: ${citErr.message}`);
+  }
+  if (overriddenNames.size > 0) {
+    console.log(`  Skipped ${overriddenNames.size} manually overridden directories`);
+  }
 
   const foundCount = allCitations.filter((c) => c.listing_found).length;
   const napConsistentCount = allCitations.filter((c) => c.nap_consistent === true).length;
