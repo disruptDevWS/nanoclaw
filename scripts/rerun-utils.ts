@@ -25,8 +25,8 @@ export const isCommitted = (page: {
  * Used for startFrom comparison in detectRerunScenario.
  */
 export const PHASE_ORDER = [
-  '1', '1a', '1c', '1b', '2', '3', '3b', '3c', '3d',
-  '4', '5', '6', '6.5', '6b', '6c', '6d',
+  '1', '1c', '1b', '2', '3', '3b', '3c', '3d',
+  '4', '4b', '5', '6', '6b', '6c', '6d',
 ] as const;
 
 /**
