@@ -44,10 +44,20 @@ function mapDashboardContext(raw: Record<string, any>): ClientContext {
   if (raw.business_model) ctx.business_model = raw.business_model;
   if (raw.target_audience) ctx.target_audience = raw.target_audience;
   if (raw.core_services) {
-    ctx.services = raw.core_services.split(',').map((s: string) => s.trim()).filter(Boolean);
+    // Handle both simple comma-separated and structured multi-line formats
+    // (category headers, "- " bullet sub-items, parenthetical notes)
+    const cleanedServices = raw.core_services.replace(/\([^)]*\)/g, '');
+    ctx.services = cleanedServices
+      .split(/[\n,]/)
+      .map((s: string) => s.replace(/^[\s\-*•]+/, '').trim())
+      .filter((s: string) => s.length > 1);
   }
   if (raw.out_of_scope) {
-    ctx.out_of_scope = raw.out_of_scope.split(',').map((s: string) => s.trim()).filter(Boolean);
+    const cleanedScope = raw.out_of_scope.replace(/\([^)]*\)/g, '');
+    ctx.out_of_scope = cleanedScope
+      .split(/[\n,]/)
+      .map((s: string) => s.replace(/^[\s\-*•]+/, '').trim())
+      .filter((s: string) => s.length > 1);
   }
   if (raw.differentiators) ctx.competitive_advantage = raw.differentiators;
   return ctx;
