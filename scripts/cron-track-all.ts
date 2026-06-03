@@ -48,12 +48,12 @@ function loadEnv(): Record<string, string> {
 }
 
 // ============================================================
-// Run track-rankings.ts for a single domain
+// Run a tracker script for a single domain
 // ============================================================
 
-function runTracker(domain: string, email: string, force: boolean): Promise<{ domain: string; exitCode: number; output: string }> {
+function runScript(script: string, domain: string, email: string, force: boolean): Promise<{ domain: string; exitCode: number; output: string }> {
   return new Promise((resolve) => {
-    const args = ['tsx', 'scripts/track-rankings.ts', '--domain', domain, '--user-email', email];
+    const args = ['tsx', script, '--domain', domain, '--user-email', email];
     if (force) args.push('--force');
 
     const child = spawn('npx', args, {
@@ -114,9 +114,7 @@ async function main() {
 
   console.log(`\n=== Cron Track All: ${audits.length} completed audits ===\n`);
 
-  let tracked = 0;
-  let skipped = 0;
-  let failed = 0;
+  const stats = { rankings: { tracked: 0, skipped: 0, failed: 0 }, gsc: { tracked: 0, skipped: 0, failed: 0 } };
   const failedDomains: string[] = [];
 
   for (let i = 0; i < audits.length; i++) {
@@ -125,30 +123,56 @@ async function main() {
 
     if (!email) {
       console.log(`  [${i + 1}/${audits.length}] ${audit.domain} — SKIP (no user email found)`);
-      skipped++;
+      stats.rankings.skipped++;
+      stats.gsc.skipped++;
       continue;
     }
 
-    console.log(`  [${i + 1}/${audits.length}] ${audit.domain}...`);
-    const result = await runTracker(audit.domain, email, force);
+    // --- Rankings (DataForSEO) ---
+    console.log(`  [${i + 1}/${audits.length}] ${audit.domain} — rankings...`);
+    const rankResult = await runScript('scripts/track-rankings.ts', audit.domain, email, force);
 
-    if (result.exitCode === 0) {
-      // Check if it was skipped due to recency
-      if (result.output.includes('Skipping')) {
-        console.log(`    Skipped (recent snapshot)`);
-        skipped++;
+    if (rankResult.exitCode === 0) {
+      if (rankResult.output.includes('Skipping')) {
+        console.log(`    Rankings: skipped (recent snapshot)`);
+        stats.rankings.skipped++;
       } else {
-        console.log(`    Done`);
-        tracked++;
+        console.log(`    Rankings: done`);
+        stats.rankings.tracked++;
       }
     } else {
-      console.log(`    FAILED (exit code ${result.exitCode})`);
-      if (result.output) {
-        const lastLines = result.output.trim().split('\n').slice(-3).join('\n    ');
+      console.log(`    Rankings: FAILED (exit code ${rankResult.exitCode})`);
+      if (rankResult.output) {
+        const lastLines = rankResult.output.trim().split('\n').slice(-3).join('\n    ');
         console.log(`    ${lastLines}`);
       }
-      failed++;
-      failedDomains.push(audit.domain);
+      stats.rankings.failed++;
+      if (!failedDomains.includes(audit.domain)) failedDomains.push(audit.domain);
+    }
+
+    // Brief pause between scripts for the same domain
+    await sleep(5_000);
+
+    // --- GSC + GA4 ---
+    console.log(`  [${i + 1}/${audits.length}] ${audit.domain} — GSC...`);
+    const gscResult = await runScript('scripts/track-gsc.ts', audit.domain, email, force);
+
+    if (gscResult.exitCode === 0) {
+      if (gscResult.output.includes('Skipping') || gscResult.output.includes('skipped')) {
+        console.log(`    GSC: skipped (recent snapshot or no connection)`);
+        stats.gsc.skipped++;
+      } else {
+        console.log(`    GSC: done`);
+        stats.gsc.tracked++;
+      }
+    } else {
+      console.log(`    GSC: FAILED (exit code ${gscResult.exitCode})`);
+      if (gscResult.output) {
+        const lastLines = gscResult.output.trim().split('\n').slice(-3).join('\n    ');
+        console.log(`    ${lastLines}`);
+      }
+      stats.gsc.failed++;
+      if (!failedDomains.includes(audit.domain)) failedDomains.push(audit.domain);
     }
 
     // 30-second delay between domains to avoid DataForSEO rate limits
@@ -157,11 +181,14 @@ async function main() {
     }
   }
 
-  console.log(`\n=== Summary: ${tracked} tracked, ${skipped} skipped, ${failed} failed ===\n`);
+  const totalFailed = stats.rankings.failed + stats.gsc.failed;
+  console.log(`\n=== Summary ===`);
+  console.log(`  Rankings: ${stats.rankings.tracked} tracked, ${stats.rankings.skipped} skipped, ${stats.rankings.failed} failed`);
+  console.log(`  GSC:      ${stats.gsc.tracked} tracked, ${stats.gsc.skipped} skipped, ${stats.gsc.failed} failed\n`);
 
   // Log cron run to agent_runs for operational visibility
   const runDate = new Date().toISOString().slice(0, 10);
-  const status = failed > 0 ? 'completed_with_errors' : 'completed';
+  const status = totalFailed > 0 ? 'completed_with_errors' : 'completed';
   await sb.from('agent_runs').insert({
     audit_id: audits[0]?.id, // attach to first audit as anchor
     agent_name: 'cron_track_all',
@@ -169,9 +196,8 @@ async function main() {
     status,
     metadata: {
       total_audits: audits.length,
-      tracked,
-      skipped,
-      failed,
+      rankings: stats.rankings,
+      gsc: stats.gsc,
       failed_domains: failedDomains,
     },
   });

@@ -415,9 +415,16 @@ export async function runGscFetch(
   fs.writeFileSync(summaryPath, summary);
   console.log(`  Written: ${summaryPath}`);
 
-  // Upsert into gsc_page_snapshots
+  // Upsert into gsc_page_snapshots (deduplicate by page_url — GSC can return dupes)
   const snapshotDate = todayStr();
-  const snapshotRecords = pages.map((p) => ({
+  const deduped = new Map<string, typeof pages[0]>();
+  for (const p of pages) {
+    const existing = deduped.get(p.page_url);
+    if (!existing || p.clicks > existing.clicks) {
+      deduped.set(p.page_url, p);
+    }
+  }
+  const snapshotRecords = Array.from(deduped.values()).map((p) => ({
     audit_id: auditId,
     snapshot_date: snapshotDate,
     page_url: p.page_url,
