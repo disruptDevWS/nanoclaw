@@ -17,6 +17,8 @@ IMPORTANT: Focus your analysis on indexable HTML pages. Do NOT analyze CSS, JS, 
 
 {{SEMANTIC_SECTION}}
 
+{{VERIFICATION_SECTION}}
+
 ## AUDIT_REPORT.md Format — You MUST follow this structure exactly:
 
 ```

@@ -41,6 +41,7 @@ import {
 } from './dataforseo-llm-mentions.js';
 import { isCommitted } from './rerun-utils.js';
 import { parseBlueprintMarkdown } from './sync-to-dashboard.js';
+import { runAllVerificationChecks, buildVerificationPromptSection } from './verify-checks.js';
 
 // ============================================================
 // .env loader (same pattern as sync-to-dashboard)
@@ -3763,6 +3764,11 @@ async function runDwight(domain: string) {
     }
   }
 
+  // Run HTTP verification checks (sitemap, schema, robots.txt, redirects)
+  // before the Claude call so the executive summary is accurate from the start.
+  const verificationResults = await runAllVerificationChecks(domain, outDir);
+  const verificationSection = buildVerificationPromptSection(verificationResults);
+
   // Build comprehensive prompt
   console.log('  Generating AUDIT_REPORT.md via Anthropic API (sonnet)...');
 
@@ -3804,7 +3810,8 @@ async function runDwight(domain: string) {
     .replace('{{SUPPLEMENTARY_SECTION}}', fullSupplementarySection)
     .replace('{{ISSUES_SECTION}}', issuesSection)
     .replace('{{SEMANTIC_SECTION}}', semanticSection)
-    .replace('{{SEMANTIC_SECTION_12}}', semanticSection12);
+    .replace('{{SEMANTIC_SECTION_12}}', semanticSection12)
+    .replace('{{VERIFICATION_SECTION}}', verificationSection);
 
 
   console.log(`  Prompt size: ${reportPrompt.length} chars`);
