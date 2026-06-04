@@ -1093,7 +1093,6 @@ function buildPrompt(
     .replace('{{PERFORMANCE_CONTEXT}}', performanceContextSection)
     .replace('{{OPTIMIZE_CHANGE_SPEC}}', optimizeChangeSpec);
 }
-}
 
 // ============================================================
 // Schema type drift detection
