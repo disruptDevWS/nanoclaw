@@ -1,4 +1,4 @@
-# Oscar's SEO and AI Optimization Playbook
+# Oscar's SEO Playbook
 
 These rules are embedded by construction — they should emerge naturally from good writing, not be imposed as a compliance checklist.
 
@@ -9,18 +9,17 @@ These rules are embedded by construction — they should emerge naturally from g
 - `<section id="...">` for each major content area — ids should be descriptive slugs
 
 ## 2. On-Page SEO — Natural Integration
-- Primary keyword in H1 and in the first 100 words — not forced, reads naturally
+- Primary keyword in H1 and in the first 100 words — not forced, reads naturally. Use varied language naturally; don't repeat the same phrase robotically, but don't force synonym injection either
 - Section H2s carry topical keywords — they describe what the section covers, which naturally includes relevant terms
-- Semantic expansion throughout: synonyms, varied geo modifiers, related service terms — never repeat the same exact phrase more than needed for clarity
 - CTAs: at minimum in the hero section and final section, optionally mid-page after a trust-building section. Direct and specific — "Schedule your EMT course" not "Contact us today"
 
-## 3. AI and LLM Optimization — Entity and Extractability
-- Entity clarity: business name + location + primary service in the first 150 words. Make it easy for an LLM to answer "who does X in Y" from this page.
+## 3. Entity Clarity and Content Structure
+- Entity clarity: on commercial pages, make the entity identity clear early and naturally — who does what, where. The page should leave no ambiguity about the business, its primary service, and its location without requiring readers to hunt for it.
 - Attributive statements: claims should be clear and attributable — "Summit Medical Academy offers EMT training in Boise" not "training is available here"
 - Direct answers: for any PAA question or query fan-out item the brief identifies, answer it directly and completely in the first sentence of the relevant paragraph. Don't bury the answer.
 - Lists: use `<ol>` for sequential steps, `<ul>` for non-sequential items. Substantive list items — full sentences, not fragments. 3–7 items is the extractable sweet spot.
 - Schema alignment: page content entity names must match schema entity names exactly — if the schema says "EMT Training" the page should not call it "Emergency Medical Technician Courses"
-- Chunk self-containment: each `<section>` should be independently understandable — a reader or LLM retrieving only that chunk should know what it covers and who it's from without needing surrounding page context. This does NOT mean each section must restate the business name and location. It means each section's `<h2>` + opening sentence must establish sufficient context. Exception: sections that build on each other sequentially (process steps, numbered how-to content) are exempt from self-containment — but the `<h2>` must name the step, not just number it ("Step 3: Schedule Your Skills Assessment" passes; "Step 3" fails).
+- Section context clarity: each `<section>` should be independently understandable — a reader arriving at that section directly should know what it covers without needing surrounding page context. This does NOT mean each section must restate the business name and location. It means each section's `<h2>` + opening sentence must establish sufficient context. Exception: sections that build on each other sequentially (process steps, numbered how-to content) are exempt — but the `<h2>` must name the step, not just number it ("Step 3: Schedule Your Skills Assessment" passes; "Step 3" fails).
 - AI optimization patterns — apply conditionally, not uniformly. Evaluate each section against its intent and structural role before choosing a pattern:
   - Direct-answer opening: apply when the section targets a question-intent keyword, corresponds to a PAA item, or is explicitly flagged [OPPORTUNITY] or [AI CITATION GAP] in the brief. Do NOT apply when the section is context-setting, narrative, building an argument, or part of a sequential explanation.
   - Q&A substructure (h3 question + p answer): apply when multiple distinct questions fall under one H2. Do NOT apply when the section develops a single continuous argument or is a commercial/transactional conversion section.
@@ -200,7 +199,7 @@ SEO: keyword bolded everywhere, same exact geo modifier in every paragraph, FAQ 
 
 Structural: repeated information with different wording, sections that exist only to contain a keyword, H2s that don't describe what the section covers
 
-AI formatting: applying direct-answer openings, Q&A structure, or self-contained chunk framing to every section regardless of intent — this destroys narrative flow and is worse than no optimization. Image-of-table: describing tabular data in prose when a `<table>` would be more precise and machine-readable
+AI formatting: applying direct-answer openings, Q&A structure, or section context framing to every section regardless of intent — this destroys narrative flow and is worse than no optimization. Image-of-table: describing tabular data in prose when a `<table>` would be more precise and machine-readable
 
 ## 8. Production Notes — Flag for Human Editor
 At the end of every file, produce a production notes comment block that includes:
@@ -215,13 +214,13 @@ At the end of every file, produce a production notes comment block that includes
 - Word count
 
 ## 9. Validation Checklist
-- AI patterns applied conditionally (not uniformly) — verify each direct-answer opening and Q&A structure has a question-intent or [OPPORTUNITY]/[AI CITATION GAP] basis in the brief
-- Schema-to-prose consistency check — verify every schema attribute value matches its prose equivalent
-- Citation signal check — verify at least one specific attributable claim per commercial/informational section; flag gaps in production notes
-- Figure/table markup — verify `<figure>` + `<figcaption>` stub present for every `<!-- IMAGE: -->` placeholder; verify HTML `<table>` used for any comparative or structured data
 - Information gain check — verify production notes include Information Gain Assessment for non-commodity pages
+- Citation signal check — verify at least one specific attributable claim per commercial/informational section; flag gaps in production notes
+- Content patterns applied conditionally (not uniformly) — verify each direct-answer opening and Q&A structure has a question-intent or [OPPORTUNITY]/[AI CITATION GAP] basis in the brief
+- Figure/table markup — verify `<figure>` + `<figcaption>` stub present for every `<!-- IMAGE: -->` placeholder; verify HTML `<table>` used for any comparative or structured data
+- Schema-to-prose consistency check — verify every schema attribute value matches its prose equivalent
 
-## 10. HTML Markup for AI Retrievability
+## 10. HTML Markup and Media
 
 - Tables: use `<table>` with `<thead>` and `<tbody>` for comparative or structured data (program costs, certification levels, scheduling options, step comparisons). Never describe tabular data in prose when a table would be more precise.
 - Image placeholders: every `<!-- IMAGE: [description] -->` comment must be immediately followed by a `<figure>` + `<figcaption>` stub:
@@ -233,3 +232,4 @@ At the end of every file, produce a production notes comment block that includes
   ```
   This preserves the semantic relationship for when the human editor inserts the actual image. Do not use bare `<!-- IMAGE: -->` comments without the figure wrapper.
 - Alt text guidance: in the `<!-- IMAGE: -->` comment description, include the topic context and what the visual would show — this gives the human editor the information they need to write accurate alt text. Format: `<!-- IMAGE: [what it shows] — [why it's here / what it supports] -->`
+- Video recommendations: when a section covers a process, demonstration, facility, or team introduction where video would add genuine value beyond what text and images convey, add a `<!-- VIDEO: [description of what the video would show] — [why video specifically adds value here] -->` comment. This is a recommendation for the content team, not a placeholder system — not every page needs video. Flag only where video is a clear information-gain asset (e.g., training demonstrations, equipment walkthroughs, facility tours, technique explanations).
