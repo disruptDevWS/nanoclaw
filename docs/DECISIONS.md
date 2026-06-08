@@ -4,6 +4,21 @@ Non-obvious choices that would look wrong without context. Check here before "fi
 
 ---
 
+**2026-06-08: Oscar playbook aligned with Google AI optimization guidance (June 2026)**
+
+Google published "Guide to Optimizing for Generative AI Features on Google Search" (June 5, 2026). Key message: there is no separate AI optimization discipline — it's still SEO, and non-commodity content with unique expertise is the primary lever. The playbook was already well-aligned on substance (content effort dimensions, information gain directive, conditional AI pattern application). Changes were framing and priority calibration, not structural:
+
+- Section 3 renamed from "AI and LLM Optimization" → "Entity Clarity and Content Structure" — avoids positioning these as a separate discipline from good content.
+- "Chunk self-containment" → "Section context clarity" — Google explicitly says chunking for AI is unnecessary. The practice (contextual H2s + opening sentences) is good writing; the label invited over-optimization.
+- Entity clarity 150-word positional rule → qualitative principle — Google says no special writing positioning for AI. The underlying principle (clear entity identity early) stays; the word-count threshold was mechanical.
+- Semantic expansion demoted from standalone bullet to inline note — Google says AI understands synonyms. Active synonym injection directive risked artificial variety.
+- Validation checklist reordered: information gain first, schema last — Google says structured data isn't required for AI features. Schema still matters for rich results and non-Google surfaces, but shouldn't consume disproportionate attention vs. content quality.
+- Video recommendations added (Section 10) — Google elevates video alongside images for AI feature visibility. Added `<!-- VIDEO: -->` comment system for content team recommendations.
+
+Source: https://developers.google.com/search/docs/fundamentals/ai-optimization-guide
+
+---
+
 **2026-06-02: Perplexity not supported — Google AI Overview + ChatGPT only**
 
 DataForSEO LLM Mentions API only supports `google` (AI Overview) and `chat_gpt` platforms. Perplexity is not available. The pipeline tracks these two platforms only. Monitor DataForSEO roadmap for Perplexity support.
