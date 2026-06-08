@@ -220,7 +220,7 @@ export async function createOnPageTask(
 export async function pollTaskReady(
   env: Record<string, string>,
   taskId: string,
-  maxWaitMs = 30 * 60 * 1000, // 30 minutes default
+  maxWaitMs = 45 * 60 * 1000, // 45 minutes default
   pollIntervalMs = 15_000,     // 15 seconds
 ): Promise<void> {
   const creds = getCredentials(env);
