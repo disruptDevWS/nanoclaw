@@ -46,16 +46,24 @@ async function fetchGa4Report(
   slugs: string[],
   token: string,
   useKeyEvents: boolean,
+  dateOverride?: { startDate: string; endDate: string },
 ): Promise<{ rows: Ga4Row[]; metricName: string }> {
   const apiUrl = `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`;
 
   const conversionMetric = useKeyEvents ? 'keyEvents' : 'conversions';
   const metricLabel = useKeyEvents ? 'keyEvents' : 'conversions';
 
-  // 28-day lookback
-  const endDate = new Date();
-  const startDate = new Date(endDate);
-  startDate.setDate(startDate.getDate() - 28);
+  // Date range: use override or default 28-day lookback
+  let startDate: Date;
+  let endDate: Date;
+  if (dateOverride) {
+    startDate = new Date(dateOverride.startDate + 'T00:00:00');
+    endDate = new Date(dateOverride.endDate + 'T00:00:00');
+  } else {
+    endDate = new Date();
+    startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - 28);
+  }
 
   const body: Record<string, unknown> = {
     dateRanges: [{
@@ -209,6 +217,7 @@ export async function runGa4Fetch(
   auditId: string,
   slugs: string[],
   sb: SupabaseClient,
+  dateOverride?: { startDate: string; endDate: string },
 ): Promise<Ga4PageData[]> {
   // Get analytics connection
   const connection = await getAnalyticsConnection(sb, auditId);
@@ -225,11 +234,11 @@ export async function runGa4Fetch(
   const token = await getServiceAccountAccessToken([GA4_SCOPE]);
 
   // Try keyEvents first, fall back to conversions
-  let result = await fetchGa4Report(propertyId, slugs, token, true);
+  let result = await fetchGa4Report(propertyId, slugs, token, true, dateOverride);
 
   if (result.metricName === 'keyEvents_rejected') {
     console.log('  [ga4] Fallback: using deprecated "conversions" metric (keyEvents rejected)');
-    result = await fetchGa4Report(propertyId, slugs, token, false);
+    result = await fetchGa4Report(propertyId, slugs, token, false, dateOverride);
     console.log(`  [ga4] Using metric: conversions`);
   } else {
     console.log(`  [ga4] Using metric: keyEvents`);
@@ -275,13 +284,21 @@ const CONVERSION_EVENT_NAMES = [
 async function fetchGa4EventReport(
   propertyId: string,
   token: string,
+  dateOverride?: { startDate: string; endDate: string },
 ): Promise<Ga4Row[]> {
   const apiUrl = `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`;
 
-  // 28-day lookback (same window as page-level fetch)
-  const endDate = new Date();
-  const startDate = new Date(endDate);
-  startDate.setDate(startDate.getDate() - 28);
+  // Date range: use override or default 28-day lookback
+  let startDate: Date;
+  let endDate: Date;
+  if (dateOverride) {
+    startDate = new Date(dateOverride.startDate + 'T00:00:00');
+    endDate = new Date(dateOverride.endDate + 'T00:00:00');
+  } else {
+    endDate = new Date();
+    startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - 28);
+  }
 
   const body = {
     dateRanges: [{
@@ -332,6 +349,7 @@ async function fetchGa4EventReport(
 export async function runGa4EventFetch(
   auditId: string,
   sb: SupabaseClient,
+  dateOverride?: { startDate: string; endDate: string },
 ): Promise<Ga4EventData[]> {
   const connection = await getAnalyticsConnection(sb, auditId);
   if (!connection || !connection.ga4_property_id) {
@@ -343,7 +361,7 @@ export async function runGa4EventFetch(
   console.log(`  [ga4-events] Fetching conversion events for property ${propertyId}`);
 
   const token = await getServiceAccountAccessToken([GA4_SCOPE]);
-  const rows = await fetchGa4EventReport(propertyId, token);
+  const rows = await fetchGa4EventReport(propertyId, token, dateOverride);
 
   console.log(`  [ga4-events] Received ${rows.length} event rows`);
 

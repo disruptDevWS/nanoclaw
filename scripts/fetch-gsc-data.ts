@@ -358,6 +358,7 @@ export async function runGscFetch(
   auditId: string,
   outputDir: string,
   sb: SupabaseClient,
+  dateOverride?: { startDate: string; endDate: string; snapshotDate: string },
 ): Promise<boolean> {
   // Get analytics connection
   const connection = await getAnalyticsConnection(sb, auditId);
@@ -372,16 +373,17 @@ export async function runGscFetch(
   // Get access token
   const token = await getServiceAccountAccessToken([GSC_SCOPE]);
 
-  // Date range: 28 days, ending 3 days ago (GSC data delay)
-  const endDate = new Date();
-  endDate.setDate(endDate.getDate() - 3);
-  const startDate = new Date(endDate);
-  startDate.setDate(startDate.getDate() - 28);
-
-  const dateRange = {
-    start: startDate.toISOString().slice(0, 10),
-    end: endDate.toISOString().slice(0, 10),
-  };
+  // Date range: use override or default 28 days ending 3 days ago (GSC data delay)
+  let dateRange: { start: string; end: string };
+  if (dateOverride) {
+    dateRange = { start: dateOverride.startDate, end: dateOverride.endDate };
+  } else {
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() - 3);
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - 28);
+    dateRange = { start: startDate.toISOString().slice(0, 10), end: endDate.toISOString().slice(0, 10) };
+  }
   console.log(`  Date range: ${dateRange.start} to ${dateRange.end}`);
 
   // Fetch data
@@ -416,7 +418,7 @@ export async function runGscFetch(
   console.log(`  Written: ${summaryPath}`);
 
   // Upsert into gsc_page_snapshots (deduplicate by page_url — GSC can return dupes)
-  const snapshotDate = todayStr();
+  const snapshotDate = dateOverride?.snapshotDate ?? todayStr();
   const deduped = new Map<string, typeof pages[0]>();
   for (const p of pages) {
     const existing = deduped.get(p.page_url);
@@ -497,7 +499,11 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(`\nFATAL: ${err.message}\n`);
-  process.exit(1);
-});
+// Only run CLI entry point when executed directly (not imported)
+const isDirectRun = process.argv[1]?.replace(/\.js$/, '').endsWith('fetch-gsc-data');
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error(`\nFATAL: ${err.message}\n`);
+    process.exit(1);
+  });
+}
