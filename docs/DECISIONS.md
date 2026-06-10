@@ -1278,3 +1278,21 @@ Both prompts were inline in pipeline-generate.ts and generate-brief.ts respectiv
 **Cannibalization pairs excluded from candidates.** Similarity > 0.90 (strict >, same semantics as Phase 4c/syncDwight) is a near-duplicate — cross-linking such pairs reinforces cannibalization, so they're surfaced as a DO NOT LINK line in Pam's prompt and an amber callout in the dashboard drawer instead.
 
 **Never throws.** `computeRelatedPages()` warns and returns null on any failure; missing OPENAI_API_KEY skips computation with a warning. Brief generation must work without candidates — Pam's prompt falls back to siblings-only linking when the section is absent.
+
+---
+
+### 2026-06-10 — Session 4: pipeline_runs progress tracking + per-step timeouts + watchdogs
+
+**New `pipeline-progress.ts` script, not extending `update-pipeline-status.ts`.** update-pipeline-status writes the coarse `audits.agent_pipeline_status` value (4 states, dashboard contract since day one); progress tracking is a different table with a different lifecycle (per-phase JSONB, run rows, pause/complete/fail semantics). Mixing them would couple the legacy status contract to the new one. The new script copies update-pipeline-status's structure (loadEnv, listUsers user resolution, latest-audit-by-domain) and adds a strict stdout contract: `start` prints ONLY the run UUID (captured by the shell into `RUN_ID`); all logs go to stderr.
+
+**Shell records skips; UI does not infer them.** The 16 phase blocks in run-pipeline.sh explicitly call `phase_skip` in their else-branches (including the sales-mode 4/4b/4c/5 block). The dashboard renders exactly what's in the `phases` JSONB. Inferring skips client-side from mode/start_from would duplicate orchestrator logic in the UI and drift the moment PHASE_ORDER changes.
+
+**Watchdog kills, shell records.** The server watchdog (`armWatchdog`) SIGTERMs the child's process group; the shell's TERM trap then calls `pipeline_fail`, which records the failure with the correct `CURRENT_PHASE`. Only if the shell doesn't get there (60s grace) does the `/trigger-pipeline` watchdog's onTimeout flip the run to `timed_out` directly. The reconciliation loop is the final backstop for SIGKILL/server-restart cases (marks orphaned `running` rows failed). Three layers, each with a narrower view but stronger guarantee.
+
+**Single JSONB `phases` row per run, not per-phase rows.** A per-phase child table would need 16 INSERTs + JOIN reads + ordering logic. The single-row JSONB read-modify-write is race-free because the server's `inFlight` Set guarantees exactly one writer per domain (409 on concurrent trigger). The dashboard polls one row.
+
+**`set -o errtrace` is load-bearing.** Discovered during timeout testing: without errtrace, bash does NOT fire the ERR trap for failures inside shell functions (`run_step`) — the script exits silently under `set -e`, the run row sticks at `running`, and only Railway's reconciliation loop eventually marks the audit failed (which is exactly what we observed before diagnosing). Minimal repro confirmed; errtrace is set immediately after `set -euo pipefail` with a comment. Do not remove.
+
+**Per-step `timeout` over per-phase bash timers.** Coreutils `timeout --kill-after=30` wrapping each `npx tsx` step (33 sites) is one helper function and zero orchestration changes; exit 124 propagates exactly like an ordinary step failure (ERR trap → pipeline_fail with CURRENT_PHASE). `PHASE_STEP_TIMEOUT` default 900s, set to 1800s on Railway initially — Dwight crawls and Jim DataForSEO polling on large sites exceed 900s. Guarded by `command -v timeout` for non-coreutils environments.
+
+**Edge retry returns the final 5xx, never throws it.** `fetchWithRetry` ([1s, 4s, 16s] backoff) retries network throws and 5xx; anything < 500 (including 409 pipeline-already-running) returns immediately. After exhausting retries it returns the last 5xx Response rather than throwing, so run-audit's `!res.ok` branch and pipeline-controls' status passthrough keep working unchanged.

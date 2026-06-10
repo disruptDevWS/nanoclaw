@@ -2,7 +2,7 @@
 
 > **Purpose**: Authoritative map of every Supabase table, who writes it (pipeline), who reads it (dashboard), and which columns matter. Use this before adding columns, changing sync logic, or building new UI components.
 >
-> **Last updated**: 2026-04-21
+> **Last updated**: 2026-06-10
 
 ---
 
@@ -277,6 +277,27 @@ Written by syncDwight + syncMichael. Tracks agent execution history.
 | `metadata` | JSONB: `{page_count}` etc. |
 
 **Dashboard reads**: Implicit via relations
+
+---
+
+### `pipeline_runs` (migration 033)
+
+Per-phase progress tracking for full/sales pipeline runs (prospect mode excluded). **Writers**: shell via `scripts/pipeline-progress.ts` (start/phase-start/phase-done/phase-skip/pause/complete/fail) + pipeline server (watchdog `timed_out` flip, reconciliation `failed` flip). **Readers**: dashboard `usePipelineRun` / `usePipelineRuns`.
+
+| Column | Notes |
+|--------|-------|
+| `audit_id` | FK → `audits` (CASCADE delete) |
+| `domain`, `mode` | Run identity; `mode` = `full`/`sales` |
+| `start_from`, `stop_after` | Phase range flags passed to the run (null = full run) |
+| `status` | `running` / `completed` / `failed` / `timed_out` / `awaiting_review` |
+| `current_phase` | Phase ID currently executing (null when idle/done) |
+| `phases` | JSONB: `{"1":{"status":"completed","started_at":...,"completed_at":...},"4":{"status":"skipped"},"3b":{"status":"failed","error":...}}` |
+| `error_message` | Set on fail/timeout/reconcile |
+| `started_at`, `completed_at` | Run timestamps |
+
+RLS: service_role ALL; authenticated SELECT via audit ownership (`audits.user_id = auth.uid()`). Index on `(audit_id, started_at DESC)`. Single writer per domain guaranteed by server `inFlight` 409 → JSONB read-modify-write is race-free.
+
+**Dashboard reads**: AuditRunning 16-phase checklist (latest run, 2s poll while running); AuditSettings Run History table (last 20).
 
 ---
 
@@ -807,7 +828,7 @@ Server-side view computing position changes from `ranking_snapshots`.
 
 | Function | Action | Pipeline Server Endpoint | Request Shape | Response Shape |
 |----------|--------|-------------------------|---------------|----------------|
-| `run-audit` | (default) | `/trigger-pipeline` | `{audit_id}` | `{ok, status}` |
+| `run-audit` | (default) | `/trigger-pipeline` | `{audit_id, start_from?, stop_after?}` | `{ok, status}` |
 | `scout-config` | `write_config` | `/scout-config` | `{domain, config}` | `{ok}` |
 | `scout-config` | `trigger_scout` | `/trigger-pipeline` | `{domain}` | `{ok}` or `{status:'pipeline_already_running'}` |
 | `scout-config` | `read_report` | `/scout-report` | `{domain}` | `{markdown, scope, date, narrative}` |
@@ -837,6 +858,8 @@ Server-side view computing position changes from `ranking_snapshots`.
 **Auth patterns**:
 - `validateSuperAdmin`: JWT → `has_role('super_admin')` — used by `pipeline-controls`, `scout-config` (except `get_share_report`), `manage-users`
 - `resolveAuthContext`: JWT → user lookup + audit ownership check — used by `cluster-action`, `share-audit`
+
+**Retry**: `run-audit` and `pipeline-controls` call the pipeline server via `_shared/retry.ts` `fetchWithRetry` — retries on network throw or 5xx with backoff delays [1s, 4s, 16s]; never retries `< 500` (409 passes through). After exhausting retries, the last 5xx Response is returned (not thrown) so callers keep status-based handling.
 
 ---
 
@@ -898,6 +921,7 @@ Known cases where pipeline writes and dashboard reads use different column names
 | Hook | Table/Edge Fn | Interval | Condition |
 |------|--------------|----------|-----------|
 | `useAuditStatus` | `audits` | 2s | While `status = 'running'` |
+| `usePipelineRun` | `pipeline_runs` | 2s | While `status = 'running'` |
 | `useProspectStatus` | `prospects` | 2s | While `status = 'running'` |
 | `usePamRequests` | `pam_requests` | 3s | While `status = 'pending'/'processing'` |
 | `useOscarRequests` | `oscar_requests` | 3s | While `status = 'pending'/'processing'` |
@@ -913,6 +937,7 @@ The pipeline server runs `reconcileOrphanedJobs()` on startup (60s delay, then e
 | Table | Condition | Reset to | Guard |
 |-------|-----------|----------|-------|
 | `audits` | `status = 'running'` | `status = 'failed'`, `error_message` set | Skip if `inFlight.has(domain)` |
+| `pipeline_runs` | `status = 'running'` | `status = 'failed'`, `error_message` = "Pipeline interrupted (server restart ...)", `completed_at` set | Skip if `inFlight.has(domain)` |
 | `prospects` | `status = 'running'` | `status = 'failed'` | Skip if `inFlight.has(domain)` |
 | `pam_requests` | `status = 'processing'` AND `requested_at < now() - 10min` | `status = 'failed'`, `error_message` set | Time threshold only |
 | `oscar_requests` | `status = 'processing'` AND `requested_at < now() - 10min` | `status = 'failed'`, `error_message` set | Time threshold only |
@@ -921,4 +946,6 @@ The pipeline server runs `reconcileOrphanedJobs()` on startup (60s delay, then e
 
 **SIGTERM handling**: Server registers handlers for SIGTERM/SIGINT. On signal: stops accepting connections, clears reconciliation interval, exits with code 0 (or force-exits after 30s safety timeout). Does NOT attempt to signal or wait for detached child processes — Railway SIGKILLs the container after the drain period.
 
-**Shell trap**: `run-pipeline.sh` traps TERM/INT to call `update_status failed` before exiting, so pipelines that receive the signal during the drain window mark themselves as failed in Supabase.
+**Shell trap**: `run-pipeline.sh` traps ERR/TERM/INT to call `pipeline_fail` (= `update_status failed` + `pipeline-progress.ts fail`) before exiting, so pipelines that fail or receive a signal during the drain window mark both `audits` and `pipeline_runs` as failed in Supabase. Requires `set -o errtrace` (set in the script) for the ERR trap to fire inside functions.
+
+**Watchdogs**: every server spawn site arms a watchdog (`PIPELINE_RUN_TIMEOUT_MS` 3h for `/trigger-pipeline`, `PIPELINE_JOB_TIMEOUT_MS` 30 min for other jobs) that SIGTERMs the child's process group on expiry. The `/trigger-pipeline` watchdog additionally flips the latest `pipeline_runs` row `running`→`timed_out` and the audit →`failed` if the shell trap didn't get there first.

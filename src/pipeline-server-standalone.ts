@@ -35,6 +35,56 @@ const inFlight = new Set<string>();
 const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// ─── Watchdog timeouts ─────────────────────────────────────────
+// Whole-run backstop for /trigger-pipeline (per-step timeouts live in
+// run-pipeline.sh via PHASE_STEP_TIMEOUT); job timeout for all other spawns.
+const PIPELINE_RUN_TIMEOUT_MS = parseInt(process.env.PIPELINE_RUN_TIMEOUT_MS || `${3 * 60 * 60 * 1000}`, 10);
+const PIPELINE_JOB_TIMEOUT_MS = parseInt(process.env.PIPELINE_JOB_TIMEOUT_MS || `${30 * 60 * 1000}`, 10);
+
+/**
+ * Arms a kill timer on a spawned child. On expiry: SIGTERM the child's
+ * process group (children are spawned detached → group leaders), SIGKILL
+ * the group 30s later, and run optional onTimeout 60s later (the delay
+ * gives the shell's TERM trap first claim on status writes).
+ *
+ * Returns a disarm function — call it first in close/error handlers.
+ * The watchdog never touches inFlight: the kill causes the child's close
+ * handler to fire, which runs the existing cleanup.
+ */
+function armWatchdog(
+  child: ReturnType<typeof spawn>,
+  label: string,
+  ms: number,
+  onTimeout?: () => Promise<void> | void,
+): () => void {
+  const timer = setTimeout(() => {
+    console.error(`[watchdog] ${label} exceeded ${Math.round(ms / 1000)}s — killing process group`);
+    try {
+      if (child.pid) process.kill(-child.pid, 'SIGTERM');
+    } catch (err: any) {
+      console.error(`[watchdog] SIGTERM failed for ${label}: ${err.message}`);
+    }
+    const killTimer = setTimeout(() => {
+      try {
+        if (child.pid) process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        // Process group already gone
+      }
+    }, 30_000);
+    killTimer.unref();
+    if (onTimeout) {
+      const statusTimer = setTimeout(() => {
+        Promise.resolve(onTimeout()).catch((err: any) =>
+          console.error(`[watchdog] onTimeout error for ${label}:`, err?.message),
+        );
+      }, 60_000);
+      statusTimer.unref();
+    }
+  }, ms);
+  timer.unref();
+  return () => clearTimeout(timer);
+}
+
 function json(res: http.ServerResponse, status: number, body: Record<string, unknown>): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -120,6 +170,39 @@ async function handleTrigger(req: http.IncomingMessage, res: http.ServerResponse
   });
   child.unref();
 
+  const disarm = armWatchdog(child, `pipeline:${domain}`, PIPELINE_RUN_TIMEOUT_MS, async () => {
+    // Backstop: if the shell's TERM trap didn't record the failure, flip the
+    // latest still-running pipeline_runs row → timed_out and the audit → failed.
+    const sb = getSb();
+    if (!sb) return;
+    try {
+      const { data: run } = await (sb as any)
+        .from('pipeline_runs')
+        .select('id, audit_id, status')
+        .eq('domain', domain)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (run && run.status === 'running') {
+        await (sb as any)
+          .from('pipeline_runs')
+          .update({
+            status: 'timed_out',
+            error_message: `Pipeline exceeded ${Math.round(PIPELINE_RUN_TIMEOUT_MS / 60000)} min watchdog`,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', run.id);
+        await (sb as any)
+          .from('audits')
+          .update({ status: 'failed', error_message: 'Pipeline timed out' })
+          .eq('id', run.audit_id)
+          .eq('status', 'running');
+      }
+    } catch (err: any) {
+      console.error(`[watchdog] pipeline_runs timeout flip failed for ${domain}:`, err.message);
+    }
+  });
+
   const logLines: string[] = [];
   const collect = (stream: NodeJS.ReadableStream | null, prefix: string) => {
     if (!stream) return;
@@ -144,6 +227,7 @@ async function handleTrigger(req: http.IncomingMessage, res: http.ServerResponse
   collect(child.stderr, 'ERR');
 
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(domain);
     console.log(`Pipeline finished: ${domain} (exit ${code})`);
     if (code !== 0) {
@@ -152,6 +236,7 @@ async function handleTrigger(req: http.IncomingMessage, res: http.ServerResponse
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(domain);
     console.error(`Pipeline spawn error: ${domain}`, err);
   });
@@ -337,7 +422,10 @@ async function handleTrackRankings(req: http.IncomingMessage, res: http.ServerRe
   collect(child.stdout, 'OUT');
   collect(child.stderr, 'ERR');
 
+  const disarm = armWatchdog(child, `track:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(trackKey);
     console.log(`Track rankings finished: ${domain} (exit ${code})`);
     if (code !== 0) {
@@ -346,6 +434,7 @@ async function handleTrackRankings(req: http.IncomingMessage, res: http.ServerRe
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(trackKey);
     console.error(`Track rankings spawn error: ${domain}`, err);
   });
@@ -418,7 +507,10 @@ async function handleRecanonicalize(req: http.IncomingMessage, res: http.ServerR
   collect(child.stdout, 'OUT');
   collect(child.stderr, 'ERR');
 
+  const disarm = armWatchdog(child, `recanon:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(recanonKey);
     console.log(`Re-canonicalize finished: ${domain} (exit ${code})`);
     if (code !== 0) {
@@ -427,6 +519,7 @@ async function handleRecanonicalize(req: http.IncomingMessage, res: http.ServerR
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(recanonKey);
     console.error(`Re-canonicalize spawn error: ${domain}`, err);
   });
@@ -498,7 +591,10 @@ async function handleActivateCluster(req: http.IncomingMessage, res: http.Server
   collect(child.stdout, 'OUT');
   collect(child.stderr, 'ERR');
 
+  const disarm = armWatchdog(child, `activate:${domain}:${canonical_key}`, PIPELINE_JOB_TIMEOUT_MS);
+
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(activateKey);
     console.log(`Cluster activation finished: ${domain}/${canonical_key} (exit ${code})`);
     if (code !== 0) {
@@ -507,6 +603,7 @@ async function handleActivateCluster(req: http.IncomingMessage, res: http.Server
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(activateKey);
     console.error(`Cluster activation spawn error: ${domain}/${canonical_key}`, err);
   });
@@ -836,7 +933,10 @@ async function handleTrackLlmMentions(req: http.IncomingMessage, res: http.Serve
   collect(child.stdout, 'OUT');
   collect(child.stderr, 'ERR');
 
+  const disarm = armWatchdog(child, `llm-mentions:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(trackKey);
     console.log(`Track LLM mentions finished: ${domain} (exit ${code})`);
     if (code !== 0) {
@@ -845,6 +945,7 @@ async function handleTrackLlmMentions(req: http.IncomingMessage, res: http.Serve
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(trackKey);
     console.error(`Track LLM mentions spawn error: ${domain}`, err);
   });
@@ -976,7 +1077,10 @@ async function handleGenerateProspectBrief(req: http.IncomingMessage, res: http.
   collect(child.stdout, 'OUT');
   collect(child.stderr, 'ERR');
 
+  const disarm = armWatchdog(child, `prospect-brief:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(briefKey);
     console.log(`Prospect brief finished: ${domain} (exit ${code})`);
     if (code !== 0) {
@@ -985,6 +1089,7 @@ async function handleGenerateProspectBrief(req: http.IncomingMessage, res: http.
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(briefKey);
     console.error(`Prospect brief spawn error: ${domain}`, err);
   });
@@ -1056,7 +1161,10 @@ async function handleGenerateClientBrief(req: http.IncomingMessage, res: http.Se
   collect(child.stdout, 'OUT');
   collect(child.stderr, 'ERR');
 
+  const disarm = armWatchdog(child, `client-brief:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(briefKey);
     console.log(`Client brief finished: ${domain} (exit ${code})`);
     if (code !== 0) {
@@ -1065,6 +1173,7 @@ async function handleGenerateClientBrief(req: http.IncomingMessage, res: http.Se
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(briefKey);
     console.error(`Client brief spawn error: ${domain}`, err);
   });
@@ -1139,7 +1248,10 @@ async function handleTrackGsc(req: http.IncomingMessage, res: http.ServerRespons
   collect(child.stdout, 'OUT');
   collect(child.stderr, 'ERR');
 
+  const disarm = armWatchdog(child, `gsc:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(trackKey);
     console.log(`Track GSC finished: ${domain} (exit ${code})`);
     if (code !== 0) {
@@ -1148,6 +1260,7 @@ async function handleTrackGsc(req: http.IncomingMessage, res: http.ServerRespons
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(trackKey);
     console.error(`Track GSC spawn error: ${domain}`, err);
   });
@@ -1217,7 +1330,10 @@ async function handleGenerateBrief(req: http.IncomingMessage, res: http.ServerRe
   collect(child.stdout, 'OUT');
   collect(child.stderr, 'ERR');
 
+  const disarm = armWatchdog(child, `pam:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(briefKey);
     console.log(`Brief generation finished: ${domain} (exit ${code})`);
     if (code !== 0) {
@@ -1226,6 +1342,7 @@ async function handleGenerateBrief(req: http.IncomingMessage, res: http.ServerRe
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(briefKey);
     console.error(`Brief generation spawn error: ${domain}`, err);
   });
@@ -1295,7 +1412,10 @@ async function handleGenerateContent(req: http.IncomingMessage, res: http.Server
   collect(child.stdout, 'OUT');
   collect(child.stderr, 'ERR');
 
+  const disarm = armWatchdog(child, `oscar:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(oscarKey);
     console.log(`Content generation finished: ${domain} (exit ${code})`);
     if (code !== 0) {
@@ -1304,6 +1424,7 @@ async function handleGenerateContent(req: http.IncomingMessage, res: http.Server
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(oscarKey);
     console.error(`Content generation spawn error: ${domain}`, err);
   });
@@ -1347,9 +1468,12 @@ async function handleAiVisibilityAnalysis(req: http.IncomingMessage, res: http.S
 
   const requestJson = JSON.stringify({ domain, email, audit_id, keywords, competitor_domains });
   const child = spawn('npx', ['tsx', 'scripts/ai-visibility-analysis.ts', `--json=${requestJson}`], {
+    detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     cwd: process.cwd(),
   });
+
+  const disarm = armWatchdog(child, `ai-vis:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
 
   let stdout = '';
   let stderr = '';
@@ -1370,6 +1494,7 @@ async function handleAiVisibilityAnalysis(req: http.IncomingMessage, res: http.S
   });
 
   child.on('close', (code) => {
+    disarm();
     inFlight.delete(visKey);
 
     // Extract JSON result from stdout sentinels
@@ -1402,6 +1527,7 @@ async function handleAiVisibilityAnalysis(req: http.IncomingMessage, res: http.S
   });
 
   child.on('error', (err) => {
+    disarm();
     inFlight.delete(visKey);
     console.error(`AI visibility analysis spawn error:`, err);
     json(res, 500, { error: err.message });
@@ -1554,6 +1680,39 @@ async function reconcileOrphanedJobs(): Promise<void> {
     }
   } catch (err: any) {
     console.error(`[reconcile] Error checking audits:`, err.message);
+  }
+
+  // 1b. pipeline_runs stuck in 'running' (server restart / SIGKILL backstop —
+  // the shell's traps couldn't record the failure)
+  try {
+    const { data: stuckRuns } = await (sb as any)
+      .from('pipeline_runs')
+      .select('id, domain, status')
+      .eq('status', 'running');
+    if (stuckRuns && stuckRuns.length > 0) {
+      for (const run of stuckRuns) {
+        if (inFlight.has(run.domain)) {
+          console.log(`[reconcile] Skipping pipeline_run ${run.domain} — currently in-flight`);
+          continue;
+        }
+        const { error } = await (sb as any)
+          .from('pipeline_runs')
+          .update({
+            status: 'failed',
+            error_message: `Pipeline interrupted (server restart at ${serverStartedAt})`,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', run.id);
+        if (!error) {
+          console.log(`[reconcile] Reset orphaned pipeline_run: ${run.domain} (${run.id})`);
+          fixed++;
+        } else {
+          console.error(`[reconcile] Failed to reset pipeline_run ${run.id}:`, error.message);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error(`[reconcile] Error checking pipeline_runs:`, err.message);
   }
 
   // 2. Prospects stuck in 'running'

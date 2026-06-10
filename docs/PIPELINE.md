@@ -1334,6 +1334,47 @@ Cluster activation is an on-demand step that generates a strategy document for a
 
 ---
 
+## Run Progress Tracking (pipeline_runs)
+
+Every full/sales pipeline run records per-phase progress in the `pipeline_runs` Supabase table (migration 033). Prospect mode is excluded (it exits before the tracking block). The dashboard's AuditRunning page renders a live 16-phase checklist from this table; Audit Settings shows run history.
+
+**Lifecycle** (all writes via `scripts/pipeline-progress.ts`, invoked by `scripts/run-pipeline.sh`):
+
+1. `start <domain> <email> <mode> [start_from] [stop_after]` — resolves user + latest audit by domain, INSERTs a row (`status='running'`), prints **only** the run UUID to stdout (captured by the shell into `RUN_ID`). All informational logs go to stderr.
+2. `phase-start <run_id> <phase>` — merges `{status:'running', started_at}` into the `phases` JSONB, sets `current_phase`.
+3. `phase-done <run_id> <phase>` / `phase-skip <run_id> <phase>` — marks completed (preserving `started_at`, setting `completed_at`) or skipped.
+4. `pause <run_id>` — review gate: `status='awaiting_review'`.
+5. `complete <run_id>` — `status='completed'`, `current_phase=null`, `completed_at`.
+6. `fail <run_id> [phase] [message]` — `status='failed'`, `error_message`, failed phase entry. Called from the shell's `pipeline_fail` helper (ERR/TERM/INT traps + explicit QA-gate failures).
+
+**Non-fatal guarantee:** every progress call in run-pipeline.sh is wrapped with `|| true` and `2>/dev/null` — progress tracking failures never fail the pipeline. If `start` fails, `RUN_ID` is empty and all subsequent calls no-op.
+
+**Merge semantics** (`src/pipeline/progress-merge.ts`, pure + unit-tested): `running` sets `started_at` (preserved on re-entry); `completed`/`failed` preserve `started_at` and set `completed_at`; `skipped` has no timestamps; errors attach to the phase entry.
+
+**Race safety:** the server's `inFlight` Set guarantees one run per domain (409 on concurrent trigger), so the read-modify-write of the `phases` JSONB is race-free.
+
+**CRITICAL shell gotcha:** `run-pipeline.sh` sets `set -o errtrace` immediately after `set -euo pipefail`. Without it, the ERR trap does NOT fire for failures inside shell functions (e.g. `run_step`) — the script exits silently and the run row sticks at `running`. Do not remove it.
+
+### Per-Step Timeouts
+
+`run_step()` wraps all ~33 phase-step `npx tsx` invocations with coreutils `timeout --kill-after=30 "$PHASE_STEP_TIMEOUT"` (guarded by `command -v timeout`; falls back to direct execution). Default 900s, overridden to **1800s on Railway** via the `PHASE_STEP_TIMEOUT` env var. Timeout exit code 124 propagates like an ordinary failure → ERR trap → `pipeline_fail` with `CURRENT_PHASE` set. NOT wrapped: `update_status`, `progress` calls, the review-gate check, and prospect mode.
+
+### Server Watchdogs
+
+`armWatchdog(child, label, ms, onTimeout?)` in `src/pipeline-server-standalone.ts` backstops every spawn site:
+
+- `/trigger-pipeline`: `PIPELINE_RUN_TIMEOUT_MS` (default 3h). On expiry: SIGTERM to the child's process group (all spawns are `detached: true` → pgroup leaders), SIGKILL 30s later, then after 60s (giving the shell's TERM trap first claim) flips the domain's latest `pipeline_runs` row `running`→`timed_out` and the audit →`failed`.
+- All other endpoints (track-rankings, recanonicalize, activate-cluster, llm-mentions, prospect/client briefs, gsc, pam, oscar, ai-visibility): `PIPELINE_JOB_TIMEOUT_MS` (default 30 min), no onTimeout.
+- `disarm()` is called first in every close/error handler. The watchdog never touches `inFlight` — the kill triggers the close handler, which runs existing cleanup.
+
+**Reconciliation backstop:** the startup/periodic reconciliation loop marks `pipeline_runs` rows `running` whose domain is not in `inFlight` as `failed` ("Pipeline interrupted (server restart ...)"). Covers server restarts/SIGKILL where no trap could fire.
+
+### Resume From Phase
+
+Failures no longer force a Phase-1 restart. The dashboard's AuditRunning failure panel offers **"Resume from Phase X"** (first failed phase from `phases` JSONB, else `current_phase`) → `run-audit` edge function with `start_from` → server `/trigger-pipeline` `start_from` → shell `--start-from`. "Restart from beginning" remains available. The `pipeline-controls` `resume_pipeline` action (strategy review gate) still hardcodes `start_from: '2'` by design.
+
+---
+
 ## Pipeline Server Infrastructure
 
 The pipeline server (`src/pipeline-server-standalone.ts`) is an HTTP server that Supabase Edge Functions call to trigger pipeline runs, write scout configs, and read scout reports.
