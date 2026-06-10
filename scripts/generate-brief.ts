@@ -15,6 +15,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { callClaude as callClaudeAsync, initAnthropicClient } from './anthropic-client.js';
+import {
+  computeRelatedPages,
+  formatRelatedPagesSection,
+  type RelatedPagesResult,
+} from '../src/agents/linking/related-pages.js';
 
 // ============================================================
 // .env loader (same as sync-to-dashboard — never touch process.env)
@@ -219,6 +224,18 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
       .eq('audit_id', req.audit_id)
       .eq('silo', siloName);
     siblings = (data ?? []) as SiblingPage[];
+  }
+
+  // 4b. Embedding-derived related pages (verified internal link candidates)
+  let relatedPages: RelatedPagesResult | null = null;
+  if (process.env.OPENAI_API_KEY) {
+    relatedPages = await computeRelatedPages(sb, {
+      auditId: req.audit_id,
+      domain: req.domain,
+      slug: req.page_url,
+    });
+  } else {
+    console.log('  Skipping related-pages computation (OPENAI_API_KEY not set)');
   }
 
   // 5. Architecture blueprint excerpt
@@ -655,7 +672,7 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
     }
   }
 
-  return { auditMeta, brief, keywords, siblings, blueprintExcerpt, siloName, serpEnrichment, clientProfile, authorityGaps, formatGaps, aiCitationGaps, marketContext, strategyContext, primaryEntityType, entityMap, searchIntent, buyerStage, strategyRationale, canonicalKey, technicalBaselineSection, gbpEntitySection, siblingCoverageSection, performanceContextSection, clusterAiTargets, visibilityQueries };
+  return { auditMeta, brief, keywords, siblings, relatedPages, blueprintExcerpt, siloName, serpEnrichment, clientProfile, authorityGaps, formatGaps, aiCitationGaps, marketContext, strategyContext, primaryEntityType, entityMap, searchIntent, buyerStage, strategyRationale, canonicalKey, technicalBaselineSection, gbpEntitySection, siblingCoverageSection, performanceContextSection, clusterAiTargets, visibilityQueries };
 }
 
 function escapeRegex(s: string): string {
@@ -1078,6 +1095,7 @@ function buildPrompt(
     .replace('{{BLUEPRINT_EXCERPT}}', blueprintExcerpt || 'No architecture blueprint available.')
     .replace('{{SIBLINGS_TABLE}}', siblingsTable)
     .replace('{{SIBLING_COVERAGE}}', siblingCoverageSection)
+    .replace('{{RELATED_PAGES_SECTION}}', formatRelatedPagesSection(ctx.relatedPages))
     .replace('{{STRATEGY_CONTEXT}}', strategyContext ? `## Strategy Brief (Phase 1b)\n${strategyContext}\n` : '')
     .replace('{{BUYER_STAGE_SECTION}}', buyerStageSection)
     .replace('{{KEYWORD_TABLE}}', keywordTable)
@@ -1200,7 +1218,8 @@ async function upsertExecutionPage(
   sb: SupabaseClient,
   auditId: string,
   slug: string,
-  parsed: ReturnType<typeof parseOutput>
+  parsed: ReturnType<typeof parseOutput>,
+  relatedPages: RelatedPagesResult | null
 ) {
   const normalizedSlug = slug.replace(/^\/+/, '');
 
@@ -1221,6 +1240,8 @@ async function upsertExecutionPage(
     content_outline_markdown: parsed.outlineMd,
     target_word_count: wordCount,
     status: 'brief_ready' as const,
+    // Only set when computed — never null out a previous run's candidates
+    ...(relatedPages ? { related_pages: relatedPages } : {}),
   };
 
   const { data: existing } = await sb
@@ -1313,7 +1334,7 @@ async function processRequest(sb: SupabaseClient, req: PamRequest) {
     writeOutputFiles(req.domain, slug, parsed);
 
     // 6. Upsert into execution_pages
-    await upsertExecutionPage(sb, req.audit_id, slug, parsed);
+    await upsertExecutionPage(sb, req.audit_id, slug, parsed, ctx.relatedPages);
 
     // 7. Mark complete
     await sb.from('pam_requests').update({
@@ -1338,6 +1359,14 @@ async function processRequest(sb: SupabaseClient, req: PamRequest) {
 
 async function main() {
   const env = loadEnv();
+
+  // Propagate env for embeddings service (reads process.env directly)
+  process.env.SUPABASE_URL = process.env.SUPABASE_URL || env.SUPABASE_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY;
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn('OPENAI_API_KEY not set — related-pages link candidates will be skipped');
+  }
 
   // Initialize Anthropic SDK
   const anthropicKey = env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || env.ANTHROPIC_KEY || process.env.ANTHROPIC_KEY;

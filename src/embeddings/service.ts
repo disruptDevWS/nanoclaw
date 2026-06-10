@@ -40,7 +40,8 @@ export type ContentType =
   | 'page_section'
   | 'page_meta'
   | 'cluster_seed'
-  | 'client_context';
+  | 'client_context'
+  | 'exec_page';
 
 export interface FindSimilarOptions {
   threshold?: number;

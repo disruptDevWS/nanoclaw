@@ -25,6 +25,7 @@ Your job is strategic content engineering. You are not producing a document temp
 {{SIBLINGS_TABLE}}
 
 {{SIBLING_COVERAGE}}
+{{RELATED_PAGES_SECTION}}
 {{STRATEGY_CONTEXT}}
 {{BUYER_STAGE_SECTION}}
 ## Target Keywords
@@ -152,6 +153,7 @@ IMPORTANT: These structural patterns are conditional, not universal. A page that
 **Internal Linking:**
 | Link To | Anchor Text | Placement Context | Direction |
 |---------|-------------|------------------|-----------|
+HARD CONSTRAINT: every Link To target must come from the Verified Internal Link Candidates list or the Sibling Pages table. Never invent or guess URLs. Prefer [LIVE] pages over equivalent [PLANNED] pages; when linking to a [PLANNED] page, note "(planned)" in Placement Context. Never link to any page flagged DO NOT LINK (near-duplicate). If an important link target is missing from both lists, do not link to it — propose it under Cluster Expansion Opportunities instead. If no Verified Internal Link Candidates section was provided, restrict link targets to the Sibling Pages table.
 Direction: outbound (this page links out) or inbound (sibling should link here — flag for human).
 Pillar pages receive links from clusters. Cluster pages link up to pillar. Support pages link to both.
 Use descriptive, contextual anchor text — not "click here" or "learn more."
@@ -170,7 +172,7 @@ These are recommendations for Michael and the content queue — not part of this
 2. Schema must be a coherent @graph contribution — consistent @id IRIs, correct @type for page intent, all required entities present with placeholders for unknown values
 3. HowTo schema is an opportunity to be added when content warrants it — not required on every page
 4. Required content coverage must address PAA questions with explicit [TABLE STAKES] / [OPPORTUNITY] / [DEPTH SIGNAL] / [AI CITATION GAP] / [TIME-SENSITIVE] classification
-5. Internal linking map must specify direction and placement context — not just destination URLs
+5. Internal linking map must specify direction and placement context — not just destination URLs — and every Link To target must come from the verified candidates or sibling list
 6. Cluster expansion opportunities are mandatory — minimum 1 suggestion per brief
 7. For OPTIMIZE pages: change specification only, not a full rewrite brief
 8. The brief should give Oscar strategic direction and content requirements — not prescribe structure or word counts

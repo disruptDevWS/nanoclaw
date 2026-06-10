@@ -1262,3 +1262,19 @@ Both prompts were inline in pipeline-generate.ts and generate-brief.ts respectiv
 **Disk CSV primary, agent_technical_pages fallback.** Phase 6c parses `audits/{domain}/auditor/{date}/internal_all.csv` from disk, so in-pipeline runs are guaranteed the artifact. Standalone re-runs on a machine without disk artifacts (e.g. the audit ran on Railway) fall back to paginated `agent_technical_pages` — same data, synced from the same CSV. Verified: IMA's local CSV is a 1-row stub from a blocked crawl (Status Code 0), and the fallback transparently handled it; EcoHVAC verified the disk path.
 
 **Thresholds.** Density: 0.80 keyword↔content cosine (keyword↔heading similarity runs lower than 4b's heading↔heading 0.85); borderline 0.72–0.83 matches are logged for tuning and a `--threshold` CLI flag allows override — IMA's first run logged 186 borderline matches, so expect a calibration pass. Cannibalization: strict `> 0.90`, matching syncDwight's `NEAR_DUP_THRESHOLD`. Current-state only (DELETE+INSERT, no snapshots) — cannibalization is a fix-it list, not a trend.
+
+---
+
+### 2026-06-10 — Session 3: Embedding-grounded internal linking — retrieval grounds, LLM judges
+
+**Grounded retrieval, not replacement.** Pam's Internal Linking Map was LLM-invented: she only saw same-silo siblings plus a narrative blueprint excerpt, and nothing validated her link targets existed — hallucinated slugs, invisible cross-silo candidates, live crawled pages never linkable. The fix is NOT to have embeddings *produce* the linking map (anchor text, placement, direction are editorial judgment), but to constrain the *target universe*: embeddings produce a verified candidate list (top 8 semantically related pages, live crawl + planned execution_pages), and Pam is hard-constrained (user decision) to pick Link To targets only from candidates + siblings. Verified on first real brief (/service-area/weiser-id): all 6 outbound targets came from the candidate list, all marked "(planned)".
+
+**Brief-time, not batch.** Candidates are computed inside `gatherContext()` per brief request rather than as a pipeline phase. The pool changes as briefs/pages are added — computing at use time means candidates are always current, and there's no staleness/invalidation problem. Cost is one embedBatch per brief, mostly cache hits (`page_meta:{url}` ids shared with Phase 4c; `exec_page:{audit}:{slug}` cached after first brief).
+
+**Own column, not page_brief.** `syncMichael()` wholesale-overwrites `page_brief` JSONB on strategic re-runs, but never DELETEs execution_pages rows — a separate `related_pages` column (migration 032) survives re-runs. Only set when computed; skipped/failed computation never nulls a previous run's candidates.
+
+**0.50 floor is a tunable guess.** Title-ish texts (title | h1 | meta description) run lower-similarity than full content. Observed distributions: Weiser /towing-services median 0.48, IMA /emt-course-boise-idaho median 0.53 over a 526-page pool — the floor sits near the median and admitted zero junk in both tests. Distribution (min/median/max) is logged on every run as the tuning mechanism. Utility pages can legitimately clear the floor when their meta text is topical (/contact titled "towing company Weiser Idaho phone number" scored 0.79 — correct behavior).
+
+**Cannibalization pairs excluded from candidates.** Similarity > 0.90 (strict >, same semantics as Phase 4c/syncDwight) is a near-duplicate — cross-linking such pairs reinforces cannibalization, so they're surfaced as a DO NOT LINK line in Pam's prompt and an amber callout in the dashboard drawer instead.
+
+**Never throws.** `computeRelatedPages()` warns and returns null on any failure; missing OPENAI_API_KEY skips computation with a warning. Brief generation must work without candidates — Pam's prompt falls back to siblings-only linking when the section is absent.

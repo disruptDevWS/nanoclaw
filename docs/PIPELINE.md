@@ -972,6 +972,7 @@ Oscar (generate-content.ts) — polls oscar_requests
 9. **Keywords** — `audit_keywords` sharing the page's `canonical_key` (Session B: join via `canonical_key`, with volume-based fallback if empty). Includes `primary_entity_type`. (Demoted from position #2 to #9 — entity context takes priority over raw keyword data.)
 10. `client_profiles` — brand voice, USPs, differentiators (optional)
 11. DataForSEO SERP Advanced — PAA questions, People Also Search, top organic competitors (optional, per primary keyword)
+12. **Verified Internal Link Candidates** (Session 3) — `computeRelatedPages()` in `src/agents/linking/related-pages.ts` embeds the source page against live crawled pages (`loadPageMeta`: disk CSV → `agent_technical_pages` fallback) + non-deprecated `execution_pages` (cross-silo), ranks by cosine similarity (floor 0.50, cap 8), excludes near-duplicates (>0.90 → DO NOT LINK risks). Injected via `{{RELATED_PAGES_SECTION}}`. Pam is hard-constrained to pick Link To targets ONLY from these candidates + the sibling pages table. Requires `OPENAI_API_KEY` (embeddings) — skipped with a warning if absent; brief generation proceeds without candidates and Pam falls back to siblings-only linking.
 
 **Entity + buyer journey context:** If the page has a `primary_entity_type` (from audit_clusters), it's injected into the Page Identity block. If `entity_map` exists on the cluster's strategy, the full entity definition is injected. If `buyer_stage` is set (cluster strategy pages), a Buyer Journey Context block is added.
 
@@ -984,7 +985,7 @@ Oscar (generate-content.ts) — polls oscar_requests
 - `content/{date}/{slug}/schema.json` — JSON-LD @graph (Organization, WebSite, WebPage, Service, FAQPage)
 - `content/{date}/{slug}/content_outline.md` — section-by-section outline, word counts, keyword placement, internal linking map
 
-**Supabase writes:** `execution_pages` UPDATE (metadata_markdown, schema_json, content_outline_markdown, meta_title, meta_description, h1_recommendation, intent_classification, target_word_count, status → 'brief_ready')
+**Supabase writes:** `execution_pages` UPDATE (metadata_markdown, schema_json, content_outline_markdown, meta_title, meta_description, h1_recommendation, intent_classification, target_word_count, status → 'brief_ready', and `related_pages` JSONB when computed — never nulled out if computation was skipped/failed)
 
 **Prompt structure:** Uses sentinel markers (`---METADATA_START---`/`---METADATA_END---`, `---SCHEMA_START---`/`---SCHEMA_END---`, `---OUTLINE_START---`/`---OUTLINE_END---`) to parse three output sections from a single Claude call.
 

@@ -552,6 +552,7 @@ Written by syncMichael (Phase 6b) and Cluster Strategy (on-demand), updated by P
 | `content_outline_markdown` | Pam | |
 | `schema_json` | Pam | JSON-LD |
 | `content_html` | Oscar | Production HTML (65K token budget, streaming) |
+| `related_pages` | Pam (generate-brief.ts) | JSONB — embedding-derived verified internal link candidates. Shape: `{computed_at, model, source, candidates: [{target, kind: 'live'\|'planned', title, similarity, status?, silo?}], cannibalization_risks: [{target, similarity}]}`. Lives OUTSIDE `page_brief` because syncMichael wholesale-overwrites `page_brief` on re-runs — survives strategic re-runs. Only set when computed (never nulled). Read by dashboard brief drawer (ExecutionPage.tsx "Related Pages" block). Migration 032. |
 | `published_at` | Dashboard | Set when status → published |
 | `snapshot_version` | syncMichael | |
 
@@ -623,7 +624,7 @@ Polymorphic vector store for OpenAI text-embedding-3-small (1536 dimensions). Mi
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | UUID PK | Auto-generated |
-| `content_type` | TEXT NOT NULL | `keyword`, `page_section`, `page_meta`, `cluster_seed`, `client_context` |
+| `content_type` | TEXT NOT NULL | `keyword`, `page_section`, `page_meta`, `cluster_seed`, `client_context`, `exec_page` (Session 3 — planned execution pages; contentId namespace `exec_page:{audit_id}:{slug}`) |
 | `content_id` | TEXT NOT NULL | Opaque identifier (e.g., `{audit_id}:{keyword_id}`) |
 | `content_hash` | TEXT NOT NULL | SHA-256 of `text_input`, enables cache-hit path before calling OpenAI |
 | `text_input` | TEXT NOT NULL | Original text that was embedded |
@@ -635,7 +636,7 @@ Polymorphic vector store for OpenAI text-embedding-3-small (1536 dimensions). Mi
 **Indexes**: `content_hash + model_version` (cache lookup), HNSW cosine on active model version (partial), `content_type + model_version` (filtered queries)
 **RPC**: `find_similar_embeddings(query_embedding, match_content_type, match_model_version, match_threshold, match_limit, exclude_content_id)` — cosine similarity search filtered by type and model version.
 
-**Pipeline writes**: `src/embeddings/service.ts` — `embedSingle()`, `embedBatch()`. Called by: (1) `scripts/embed-keywords.ts` at Phase 2 and Phase 3b (embed-at-ingestion cache pre-warm), (2) hybrid canonicalize Phase 3c `pre-cluster.ts` (gets cache hits from Phase 2/3b).
+**Pipeline writes**: `src/embeddings/service.ts` — `embedSingle()`, `embedBatch()`. Called by: (1) `scripts/embed-keywords.ts` at Phase 2 and Phase 3b (embed-at-ingestion cache pre-warm), (2) hybrid canonicalize Phase 3c `pre-cluster.ts` (gets cache hits from Phase 2/3b), (3) Phase 4c density/cannibalization (`page_meta:{normalizedUrl}` ids), (4) `src/agents/linking/related-pages.ts` at brief time (`exec_page:{audit_id}:{slug}` + cache hits on Phase 4c `page_meta` ids).
 **Pipeline reads**: `getEmbedding()`, `getEmbeddingsBatch()`, `findSimilar()`, `computePairwiseSimilarity()`. Used by hybrid pre-clustering for centroid computation and similarity scoring.
 **Dashboard**: No access (service_role only RLS).
 

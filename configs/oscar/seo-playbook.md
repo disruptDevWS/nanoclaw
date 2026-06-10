@@ -191,6 +191,7 @@ dimensions column indicates additional emphasis per page type.
 - Anchor text: descriptive and specific — "our EMT certification requirements guide" not "click here" or "learn more"
 - Relative paths only
 - Links should appear in natural reading positions — not clustered at the bottom
+- Links marked "(planned)" in the brief's map point to pages not yet live — embed them with relative paths as usual, and flag each one in Production Notes for human verification at publish time
 
 ## 7. Anti-Patterns — Never Do These
 Writing: "When it comes to...", "whether you need X or Y", "In fact,", "Don't hesitate to...", "we understand that...", rhetorical questions as section openers, em dashes more than once per 500 words, ending sections with "contact us today"
