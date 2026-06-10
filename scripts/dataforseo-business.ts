@@ -326,14 +326,41 @@ export async function fetchGBPListing(
   };
 }
 
+// ── Title similarity scoring ─────────────────────────────────
+
+/** Tokenize a string into lowercase alphanumeric words */
+function tokenize(str: string): string[] {
+  return str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+}
+
+/**
+ * Score how well a SERP result title matches the business name.
+ * Returns 0–1 where 1 = perfect match.
+ * Uses token overlap: what fraction of business name words appear in the title.
+ */
+function titleMatchScore(businessName: string, title: string): number {
+  const bizTokens = tokenize(businessName);
+  if (bizTokens.length === 0) return 0;
+  const titleTokens = new Set(tokenize(title));
+  const matches = bizTokens.filter((t) => titleTokens.has(t)).length;
+  return matches / bizTokens.length;
+}
+
 // ── SERP Citation Scan ────────────────────────────────────────
+
+interface SerpCandidate {
+  url: string;
+  title: string;
+  snippet: string | null;
+  titleScore: number;
+}
 
 export async function searchDirectoryListing(
   env: Record<string, string>,
   businessName: string,
   cityState: string,
   directoryDomain: string,
-): Promise<{ found: boolean; url: string | null; snippet: string | null }> {
+): Promise<{ found: boolean; url: string | null; snippet: string | null; title: string | null; titleScore: number }> {
   const creds = getCredentials(env);
   const keyword = `"${businessName}" "${cityState}" site:${directoryDomain}`;
 
@@ -360,20 +387,43 @@ export async function searchDirectoryListing(
   const organic = items.filter((i: any) => i.type === 'organic');
 
   if (organic.length === 0) {
-    return { found: false, url: null, snippet: null };
+    return { found: false, url: null, snippet: null, title: null, titleScore: 0 };
   }
 
-  const top = organic[0];
+  // Score top 5 results by title similarity to business name, pick the best
+  const candidates: SerpCandidate[] = organic.slice(0, 5).map((item: any) => ({
+    url: item.url ?? '',
+    title: item.title ?? '',
+    snippet: item.description ?? item.snippet ?? null,
+    titleScore: titleMatchScore(businessName, item.title ?? ''),
+  }));
+
+  // Sort by score descending; break ties by original rank (array order)
+  candidates.sort((a, b) => b.titleScore - a.titleScore);
+  const best = candidates[0];
+
+  // Require at least 50% token overlap to count as "found"
+  // (prevents returning a completely unrelated business)
+  if (best.titleScore < 0.5) {
+    return { found: false, url: best.url, snippet: best.snippet, title: best.title, titleScore: best.titleScore };
+  }
+
   return {
     found: true,
-    url: top.url ?? null,
-    snippet: top.description ?? top.snippet ?? null,
+    url: best.url,
+    snippet: best.snippet,
+    title: best.title,
+    titleScore: best.titleScore,
   };
 }
 
 /**
  * Run citation scan across all SERP directories.
  * Returns one CitationResult per directory.
+ *
+ * For each directory, searches SERP with site: filter and scores up to 5
+ * results by title similarity to the business name. Requires ≥50% token
+ * overlap to count as "found" — prevents returning wrong-business listings.
  */
 export async function scanCitations(
   env: Record<string, string>,
@@ -393,17 +443,18 @@ export async function scanCitations(
       let foundPhone: string | null = null;
       let foundAddress: string | null = null;
 
-      if (serp.found && serp.snippet) {
-        // Extract NAP from SERP snippet
-        foundPhone = extractPhoneFromText(serp.snippet);
-        // Name is typically the page title / first line — use business name from snippet if present
-        const snippetLower = serp.snippet.toLowerCase();
-        if (snippetLower.includes(businessName.toLowerCase().split(' ')[0])) {
-          foundName = businessName; // SERP mentions the business
-        }
-        // Address: look for city/state mention
-        if (snippetLower.includes(cityState.toLowerCase().split(',')[0].trim().toLowerCase())) {
-          foundAddress = serp.snippet.slice(0, 200); // best-effort from snippet
+      if (serp.found) {
+        // Use the SERP title as the found name (more accurate than snippet parsing)
+        foundName = serp.title;
+
+        if (serp.snippet) {
+          foundPhone = extractPhoneFromText(serp.snippet);
+          // Address: look for city/state mention in snippet
+          const snippetLower = serp.snippet.toLowerCase();
+          const cityLower = cityState.toLowerCase().split(',')[0].trim().toLowerCase();
+          if (cityLower && snippetLower.includes(cityLower)) {
+            foundAddress = serp.snippet.slice(0, 200);
+          }
         }
       }
 
@@ -427,7 +478,9 @@ export async function scanCitations(
         raw_snippet: serp.snippet,
       });
 
-      console.log(`    ${dir.name}: ${serp.found ? 'FOUND' : 'not found'}${napCheck.consistent === true ? ' (NAP consistent)' : napCheck.consistent === false ? ' (NAP mismatch)' : ''}`);
+      const scoreNote = serp.titleScore > 0 ? ` (title score: ${(serp.titleScore * 100).toFixed(0)}%)` : '';
+      const rejected = !serp.found && serp.title ? ` — rejected "${serp.title}"${scoreNote}` : '';
+      console.log(`    ${dir.name}: ${serp.found ? `FOUND${scoreNote}` : `not found${rejected}`}${napCheck.consistent === true ? ' (NAP consistent)' : napCheck.consistent === false ? ' (NAP mismatch)' : ''}`);
     } catch (err: any) {
       console.error(`    ${dir.name}: ERROR — ${err.message}`);
       results.push({
