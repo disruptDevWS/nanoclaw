@@ -38,6 +38,7 @@ export function _resetOpenAI(): void {
 export type ContentType =
   | 'keyword'
   | 'page_section'
+  | 'page_meta'
   | 'cluster_seed'
   | 'client_context';
 

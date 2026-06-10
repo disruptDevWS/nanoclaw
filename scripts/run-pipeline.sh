@@ -16,6 +16,7 @@
 #   audit_rollups       — Phase 3b (preliminary), Phase 3d (canonical, authoritative)
 #   audit_topic_competitors — Phase 4
 #   audit_topic_dominance   — Phase 4
+#   cannibalization_warnings — Phase 4c (also UPDATEs audit_clusters density columns)
 #   agent_architecture_pages  — Phase 6b
 #   agent_architecture_blueprint — Phase 6b
 #   execution_pages     — Phase 6b (UPSERT)
@@ -37,6 +38,8 @@
 # Phase 3c: canonicalize — Claude Haiku semantic topic grouping → canonical_key/topic
 # Phase 3d: rebuild clusters — re-aggregate using canonical_key (post-canonicalize)
 # Phase 4:  Competitors — DataForSEO SERP per topic → audit_topic_competitors/dominance
+# Phase 4b: Section extraction — competitor/client H2-H3 headings → competitor_sections + coverage scores
+# Phase 4c: Coverage density + cannibalization — keyword↔content embeddings → audit_clusters density scores + cannibalization_warnings
 # Phase 5:  Gap — Competitive gap synthesis → content_gap_analysis.md + audit_snapshots
 # Phase 6:  Michael — Reads ALL disk artifacts → architecture_blueprint.md
 # Phase 6b: sync michael — architecture_blueprint.md → Supabase
@@ -100,7 +103,7 @@ for i in "$@"; do
 done
 
 # Phase ordering for --start-from / --stop-after
-PHASE_ORDER=(1 1c 1b 2 3 3b 3c 3d 4 4b 5 6 6b 6c 6d)
+PHASE_ORDER=(1 1c 1b 2 3 3b 3c 3d 4 4b 4c 5 6 6b 6c 6d)
 should_run_phase() {
   local phase="$1"
   [[ -z "$START_FROM" && -z "$STOP_AFTER" ]] && return 0
@@ -295,6 +298,13 @@ if [[ "$MODE" != "sales" ]]; then
   echo "--- Phase 4b: Competitor Section Extraction ---"
   npx tsx scripts/fetch-competitor-sections.ts --domain "$DOMAIN" --user-email "$EMAIL"
   else echo "  [SKIP] Phase 4b: Section Extraction"; fi
+
+  # ─── Phase 4c: Coverage Density + Cannibalization ───────────
+  if should_run_phase 4c; then
+  echo ""
+  echo "--- Phase 4c: Coverage Density + Cannibalization ---"
+  npx tsx scripts/compute-density.ts --domain "$DOMAIN" --user-email "$EMAIL"
+  else echo "  [SKIP] Phase 4c: Coverage Density"; fi
 
   # ─── Phase 5: Content Gap Analysis ──────────────────────────
   if should_run_phase 5; then

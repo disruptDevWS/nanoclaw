@@ -1248,3 +1248,17 @@ The existing `role` column (pillar/cluster/support) on `agent_architecture_pages
 ### 2026-06-02 — Michael and Pam prompt extraction to configs/agents/
 
 Both prompts were inline in pipeline-generate.ts and generate-brief.ts respectively. Extracted to `configs/agents/michael/system-prompt.md` (8 placeholders) and `configs/agents/pam/system-prompt.md` (30+ placeholders). Michael was previously listed as "~40% static, deeply coupled to re-run/sales/geo logic" — the re-run/sales/geo blocks are now pre-computed in the runtime code and injected as {{RERUN_SECTION}}, {{SALES_MODE_SECTION}}, {{GEO_ARCH_BLOCK}} placeholders. Pam's many interpolations are replaced with pre-built section strings and a .replace() chain.
+
+---
+
+### 2026-06-10 — Phase 4c: density_score separate from coverage_score, disk-CSV-primary, 0.80/0.90 thresholds
+
+**Separate columns, not an overload.** `coverage_score` (4b) measures % of *competitor headings* the client covers — a competitive-parity signal. `density_score` (4c) measures % of the cluster's *keywords* semantically covered by the client's existing content — a demand-coverage signal. Different denominators, different consumers. Overloading one column would make trends uninterpretable, so 4c gets its own `density_score`, `competitor_density_score`, `density_updated_at` on `audit_clusters` (migration 031). All three must appear in the `rebuildClustersAndRollups()` SELECT/scoreMap/restore trio or they're wiped on 3d rebuilds.
+
+**Site-wide client corpus.** A keyword counts as covered if ANY client page covers it, not just pages mapped to that cluster — cluster→URL mapping is lossy (ranking_url is sparse), and from the user's perspective "do we have content for this?" is a site-level question. Competitor corpus stays per-cluster because competitor sections were fetched per-topic in 4b.
+
+**Page content = title + h1 + meta description (zero API cost).** Full-body extraction would need DataForSEO instant_pages per client URL (~$0.005/URL × every page). Dwight's crawl already has title/h1/meta for every page; for cannibalization (are two pages targeting the same thing?) the head metadata IS the targeting signal.
+
+**Disk CSV primary, agent_technical_pages fallback.** Phase 6c parses `audits/{domain}/auditor/{date}/internal_all.csv` from disk, so in-pipeline runs are guaranteed the artifact. Standalone re-runs on a machine without disk artifacts (e.g. the audit ran on Railway) fall back to paginated `agent_technical_pages` — same data, synced from the same CSV. Verified: IMA's local CSV is a 1-row stub from a blocked crawl (Status Code 0), and the fallback transparently handled it; EcoHVAC verified the disk path.
+
+**Thresholds.** Density: 0.80 keyword↔content cosine (keyword↔heading similarity runs lower than 4b's heading↔heading 0.85); borderline 0.72–0.83 matches are logged for tuning and a `--threshold` CLI flag allows override — IMA's first run logged 186 borderline matches, so expect a calibration pass. Cannibalization: strict `> 0.90`, matching syncDwight's `NEAR_DUP_THRESHOLD`. Current-state only (DELETE+INSERT, no snapshots) — cannibalization is a fix-it list, not a trend.

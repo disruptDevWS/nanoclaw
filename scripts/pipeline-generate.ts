@@ -3357,6 +3357,52 @@ A topic with NO CLIENT PAGES means the client has no URL mapped to that topic â€
     console.log(`  Note: Could not load section coverage data (non-fatal): ${err.message}`);
   }
 
+  // Load Phase 4c density scores + cannibalization warnings (if available)
+  let densityBlock = '';
+  try {
+    const { data: densityRows } = await (sb as any)
+      .from('audit_clusters')
+      .select('canonical_key, canonical_topic, density_score, competitor_density_score')
+      .eq('audit_id', auditId)
+      .not('density_score', 'is', null);
+
+    if (densityRows && densityRows.length > 0) {
+      const lines = densityRows.map((r: any) => {
+        const comp = r.competitor_density_score != null ? `${r.competitor_density_score}%` : 'n/a';
+        return `${r.canonical_topic || r.canonical_key}: client ${r.density_score}% vs competitor ${comp}`;
+      }).join('\n');
+      densityBlock += `\n## Keyword Coverage Density (client vs competitor)
+${lines}
+
+NOTE: Density = % of the cluster's keywords semantically covered by existing page content.
+A cluster where the competitor density far exceeds client density signals a depth gap even when pages exist.
+`;
+      console.log(`  Loaded ${densityRows.length} density scores for gap prompt`);
+    }
+
+    const { data: cannibRows } = await (sb as any)
+      .from('cannibalization_warnings')
+      .select('canonical_key, page_a_url, page_b_url, similarity')
+      .eq('audit_id', auditId)
+      .order('similarity', { ascending: false })
+      .limit(20);
+
+    if (cannibRows && cannibRows.length > 0) {
+      const lines = cannibRows.map((r: any) =>
+        `${r.canonical_key}: ${r.page_a_url} â†” ${r.page_b_url} (similarity ${r.similarity})`
+      ).join('\n');
+      densityBlock += `\n## Cannibalization Conflicts (client pages competing in the same cluster)
+${lines}
+
+NOTE: These page pairs have near-duplicate content targeting the same topic cluster.
+Recommend consolidation or differentiation rather than new pages for these clusters.
+`;
+      console.log(`  Loaded ${cannibRows.length} cannibalization warnings for gap prompt`);
+    }
+  } catch (err: any) {
+    console.log(`  Note: Could not load density/cannibalization data (non-fatal): ${err.message}`);
+  }
+
   const gapTemplate = fs.readFileSync(path.resolve(process.cwd(), 'configs/agents/gap/system-prompt.md'), 'utf-8');
   const prompt = gapTemplate
     .replace('{{DOMAIN}}', domain)
@@ -3368,7 +3414,7 @@ A topic with NO CLIENT PAGES means the client has no URL mapped to that topic â€
     .replace('{{PLANNED_SUMMARY}}', plannedSummary)
     .replace('{{CRAWLED_INVENTORY}}', crawledInventory)
     .replace('{{AI_VISIBILITY_SECTION}}', aiVisibilitySection)
-    .replace('{{SECTION_COVERAGE_BLOCK}}', sectionCoverageBlock);
+    .replace('{{SECTION_COVERAGE_BLOCK}}', sectionCoverageBlock + densityBlock);
 
   console.log('  Generating content gap analysis via Anthropic API...');
   let gapAnalysis: any;

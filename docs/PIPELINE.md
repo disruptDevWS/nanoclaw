@@ -174,10 +174,20 @@ Phase 4b (Section Extraction)            ← skipped in sales mode
              audit_clusters (coverage_score, coverage_competitor_count)
       │
       ▼
+Phase 4c (Coverage Density + Cannibalization) ← skipped in sales mode
+  READS:     Supabase ← audit_clusters, audit_keywords (canonical_key, ranking_url),
+             competitor_sections (from 4b); disk internal_all.csv (primary)
+             or agent_technical_pages (fallback)
+  EXTERNAL:  OpenAI embeddings (cached in embeddings table — near-zero cost)
+  PRODUCES:  Supabase → audit_clusters (density_score, competitor_density_score,
+             density_updated_at), cannibalization_warnings (DELETE+INSERT)
+      │
+      ▼
 Phase 5 (Gap)                            ← skipped in sales mode
   READS:     Supabase ← audit_topic_competitors, audit_topic_dominance,
              audit_keywords, audit_clusters, agent_architecture_pages,
-             cluster_section_coverage (from Phase 4b)
+             cluster_section_coverage (from Phase 4b),
+             audit_clusters density columns + cannibalization_warnings (from 4c)
   PRODUCES:  content_gap_analysis.md + Supabase → audit_snapshots
       │
       ▼
@@ -721,6 +731,40 @@ Fetches competitor and client page HTML via DataForSEO `/on_page/instant_pages`,
 
 ---
 
+### Phase 4c: Coverage Density + Cannibalization Detection
+
+**Script:** `scripts/compute-density.ts` | **No LLM** (embeddings only, cache-heavy)
+
+Two embedding-powered scores per cluster, computed after Phase 4b so Gap can consume them:
+
+1. **Coverage Density** — % of the cluster's *keywords* (not competitor headings) semantically covered by the client's existing page content (0–100), plus a per-cluster competitor comparison score. Distinct from `coverage_score` (4b), which measures competitor-heading coverage.
+2. **Cannibalization Detection** — client page pairs within the same cluster whose content embeddings (`{title} | {h1} | {meta description}`) exceed 0.90 similarity (strict `>`).
+
+**CLI:** `npx tsx scripts/compute-density.ts --domain <d> --user-email <e> [--threshold 0.80] [--skip-cannibalization]`
+
+**Inputs:**
+- `audit_clusters` (canonical_key), `audit_keywords` (id, keyword, canonical_key, ranking_url — paginated), `competitor_sections` (from 4b)
+- Page metadata: **disk primary** (`audits/{domain}/auditor/{latest-date}/internal_all.csv`, same guarantee Phase 6c relies on), **`agent_technical_pages` fallback** (paginated, status 200) for standalone re-runs where disk artifacts don't exist (e.g. pipeline ran on Railway). Source is logged (`disk`/`supabase`).
+
+**Logic:**
+1. Client corpus is **site-wide**: all `competitor_sections` rows with `is_client=true` (any canonical_key) + one `"{title} | {h1}"` text per crawled page. Competitor corpus is per-cluster (`is_client=false`, canonical_key match).
+2. Embed keywords (content_type `keyword`, contentId = audit_keywords.id — cache hits from 3c) and corpus texts (`page_section` reusing 4b contentIds; page texts as `page_meta`).
+3. Per keyword: max cosine similarity vs client corpus, covered if ≥ 0.80 (`DENSITY_THRESHOLD`). `density_score = round(100 × covered/total)`. Same vs competitor corpus → `competitor_density_score` (null if no competitor sections).
+4. Borderline matches (0.72–0.83) logged for threshold tuning.
+5. Cannibalization: group client-host `ranking_url`s by canonical_key (URLs normalized: lowercase host, strip www/query/fragment/trailing slash), clusters with 2+ distinct URLs → pairwise similarity of page-meta embeddings (content_type `page_meta`, contentId `page_meta:{normalizedUrl}`), pairs with sim > 0.90 flagged.
+
+**Density status (per cluster):** `scored` | `no_client_content` | `no_keywords` — non-scored clusters are skipped, never written.
+
+**Re-run safety:** density columns UPDATEd in place; `DELETE FROM cannibalization_warnings WHERE audit_id = $1` then batch INSERT (500 rows).
+
+**Supabase writes:**
+- `audit_clusters` — `density_score`, `competitor_density_score`, `density_updated_at` (preserved across 3d rebuilds via the score-restore block in `rebuildClustersAndRollups()`)
+- `cannibalization_warnings` — audit_id, canonical_key, page_a_url, page_b_url, similarity
+
+**Budget:** ~$0 (embeddings cached from 3c/4b; new page_meta embeddings ~fractions of a cent).
+
+---
+
 ### Phase 5: Gap — Content Gap Analysis
 
 **Function:** `runGap()` | **Model:** Claude Sonnet (async)
@@ -728,6 +772,8 @@ Fetches competitor and client page HTML via DataForSEO `/on_page/instant_pages`,
 Synthesizes all competitive intelligence + keyword data into a structured gap analysis.
 
 **Supabase reads:** `audit_topic_competitors`, `audit_topic_dominance`, `audit_keywords`, `audit_clusters`, `agent_architecture_pages`
+
+**Phase 4c injection:** density columns from `audit_clusters` (`density_score IS NOT NULL`) and top-20 `cannibalization_warnings` rows are appended as `## Keyword Coverage Density` and `## Cannibalization Conflicts` prompt blocks (try/catch — absence never breaks Gap).
 
 **Output JSON keys:** `authority_gaps` (with `data_source` provenance), `format_gaps`, `unaddressed_gaps`, `priority_recommendations`, `summary`, `ai_citation_gaps` (conditional, from `llm_mentions.json` — topic, client/competitor mention counts, gap_severity, recommended_action)
 

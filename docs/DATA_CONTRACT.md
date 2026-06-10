@@ -623,7 +623,7 @@ Polymorphic vector store for OpenAI text-embedding-3-small (1536 dimensions). Mi
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | UUID PK | Auto-generated |
-| `content_type` | TEXT NOT NULL | `keyword`, `page_section`, `cluster_seed`, `client_context` |
+| `content_type` | TEXT NOT NULL | `keyword`, `page_section`, `page_meta`, `cluster_seed`, `client_context` |
 | `content_id` | TEXT NOT NULL | Opaque identifier (e.g., `{audit_id}:{keyword_id}`) |
 | `content_hash` | TEXT NOT NULL | SHA-256 of `text_input`, enables cache-hit path before calling OpenAI |
 | `text_input` | TEXT NOT NULL | Original text that was embedded |
@@ -780,6 +780,25 @@ Server-side view computing position changes from `ranking_snapshots`.
 **Writer**: Phase 4b (denormalized copy from cluster_section_coverage)
 **Dashboard reads**: `useAuditClusters()` → ClustersPage (Coverage column + badge)
 **Preservation**: `rebuildClustersAndRollups()` preserves coverage_score through DELETE+INSERT cycle
+
+### `audit_clusters` (density columns, migration 031)
+
+**Additional columns**: `density_score` FLOAT, `competitor_density_score` FLOAT, `density_updated_at` TIMESTAMPTZ
+**Writer**: Phase 4c (`compute-density.ts`) — % of cluster keywords semantically covered by client page content (≥0.80 cosine vs site-wide client corpus); competitor score uses per-cluster competitor sections (null if none). Distinct from `coverage_score` (4b: competitor-heading coverage).
+**Dashboard reads**: `useAuditClusters()` → ClustersPage (Density column, `DensityScoreBadge`)
+**Consumer**: `runGap()` injects density block into prompt
+**Preservation**: `rebuildClustersAndRollups()` preserves density columns through DELETE+INSERT cycle (SELECT + scoreMap + restore block)
+
+### `cannibalization_warnings` (migration 031)
+
+**Writer**: Phase 4c (`compute-density.ts`)
+**Key columns**: `id` UUID PK, `audit_id` UUID FK→audits (CASCADE), `canonical_key`, `page_a_url`, `page_b_url`, `similarity` FLOAT, `created_at`
+**Semantics**: Client page pairs within the same cluster whose `{title} | {h1} | {meta description}` embeddings exceed 0.90 cosine similarity (strict `>`). Current state only — no snapshots.
+**Dashboard reads**: `useCannibalizationWarnings()` → ClustersPage (warning banner + per-row tooltip)
+**Consumer**: `runGap()` injects top-20 pairs into prompt
+**Re-run**: DELETE all rows for audit_id before insert
+**RLS**: service_role ALL; authenticated SELECT via audit ownership; GRANTs per post-Oct-2026 pattern
+**Indexes**: `(audit_id)`, `(audit_id, canonical_key)`
 
 ---
 

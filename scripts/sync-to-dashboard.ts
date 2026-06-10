@@ -747,7 +747,7 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
   // Preserve cluster activation + hidden status + computed scores before delete
   const { data: existingStatuses } = await sb
     .from('audit_clusters')
-    .select('canonical_key, status, activated_at, activated_by, target_publish_date, notes, hidden_reason, primary_entity_type, authority_score, authority_score_updated_at, coverage_score, coverage_competitor_count, coverage_score_updated_at')
+    .select('canonical_key, status, activated_at, activated_by, target_publish_date, notes, hidden_reason, primary_entity_type, authority_score, authority_score_updated_at, coverage_score, coverage_competitor_count, coverage_score_updated_at, density_score, competitor_density_score, density_updated_at')
     .eq('audit_id', auditId);
   const statusMap = new Map(
     (existingStatuses ?? [])
@@ -757,7 +757,7 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
   // Also preserve computed scores for inactive clusters (scores exist independently of activation)
   const scoreMap = new Map(
     (existingStatuses ?? [])
-      .filter((r: any) => r.canonical_key && (r.authority_score != null || r.coverage_score != null))
+      .filter((r: any) => r.canonical_key && (r.authority_score != null || r.coverage_score != null || r.density_score != null))
       .map((r: any) => [r.canonical_key, r]),
   );
 
@@ -888,6 +888,11 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
           updates.coverage_score = (prev as any).coverage_score;
           updates.coverage_competitor_count = (prev as any).coverage_competitor_count;
           updates.coverage_score_updated_at = (prev as any).coverage_score_updated_at;
+        }
+        if ((prev as any).density_score != null) {
+          updates.density_score = (prev as any).density_score;
+          updates.competitor_density_score = (prev as any).competitor_density_score;
+          updates.density_updated_at = (prev as any).density_updated_at;
         }
         if (Object.keys(updates).length > 0) {
           await (sb as any).from('audit_clusters').update(updates)
