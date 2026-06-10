@@ -36,6 +36,7 @@ export const PHASE_MAX_TOKENS: Record<string, number> = {
   validator: 16384,
   scout_topic: 4096,
   scout_report: 16384,
+  'cluster-strategy': 16384,
   brief: 16384,
   content: 65536,
   'content-qa': 4096,
