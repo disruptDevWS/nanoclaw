@@ -4,6 +4,31 @@ Non-obvious choices that would look wrong without context. Check here before "fi
 
 ---
 
+**2026-06-10: Citation SERP verification — title scoring instead of blind first-result**
+
+The citation scan (`dataforseo-business.ts`) searches `"Business Name" "City, State" site:directory.com` via DataForSEO SERP API. Previously took `organic[0]` as the listing URL with no verification. This produced wrong-business results (e.g. a doctor's office on Manta instead of IMA's actual listing) because the SERP `site:` query doesn't guarantee the first result is the right business.
+
+Fix: score top 5 organic results by token overlap between the SERP title and the business name. Require ≥50% match to accept as "found". This threshold was chosen because:
+- Business names with 2-3 words (most local businesses) need at least half their tokens to match — catches obvious wrong-business results.
+- Directory titles typically include the business name verbatim (e.g. "Idaho Medical Academy | Manta"), so legitimate listings score 80-100%.
+- 50% allows for directories that abbreviate or append extra words (e.g. "IMA - Idaho Medical Academy Reviews" still matches).
+
+DataForSEO's Business Listings API (`/v3/business_data/business_listings/search/live`) was evaluated but only covers Google Maps data — not cross-directory (Yelp, Manta, BBB, etc.). The SERP `site:` approach remains the only cost-effective programmatic way to check arbitrary directories without per-directory API integrations.
+
+Rejected alternatives: (1) fetching each URL and parsing page content — too slow and expensive at 10+ HTTP requests per audit. (2) Switching to BrightLocal/Moz Local APIs — adds vendor dependency for a feature that runs once per audit.
+
+---
+
+**2026-06-10: RLS policy audit — PostgREST silent failure pattern**
+
+Discovered that multiple dashboard write operations (cluster delete, citation edit/add/delete) were silently failing because the underlying Supabase tables only had SELECT RLS policies for authenticated users. PostgREST returns HTTP 200 with an empty array for UPDATE/DELETE that affects 0 rows due to RLS — no error is surfaced to the client.
+
+Added full CRUD policies (UPDATE/INSERT/DELETE) to: `audit_clusters`, `cluster_strategy`, `execution_pages`, `agent_architecture_pages`, `citation_snapshots`. All use the standard ownership pattern: `EXISTS (SELECT 1 FROM audits WHERE audits.id = <table>.audit_id AND audits.user_id = auth.uid())`.
+
+**Rule going forward**: Before adding any new dashboard write operation (mutation), verify that the target table has the appropriate RLS policy for the operation type. Do not assume — query `pg_policies` or the Management API to confirm.
+
+---
+
 **2026-06-08: Oscar playbook aligned with Google AI optimization guidance (June 2026)**
 
 Google published "Guide to Optimizing for Generative AI Features on Google Search" (June 5, 2026). Key message: there is no separate AI optimization discipline — it's still SEO, and non-commodity content with unique expertise is the primary lever. The playbook was already well-aligned on substance (content effort dimensions, information gain directive, conditional AI pattern application). Changes were framing and priority calibration, not structural:
