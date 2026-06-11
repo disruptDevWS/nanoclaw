@@ -558,6 +558,11 @@ REMINDER: Your response IS the cluster strategy document — start with "### 0. 
     search_intent: searchIntent,
     generated_at: new Date().toISOString(),
     model_used: 'claude-opus-4-6',
+    // Regenerating always reactivates: without these, a conflict-update on a
+    // previously deprecated row leaves status='deprecated' and the dashboard
+    // (which filters on status='active') never shows the fresh strategy.
+    status: 'active',
+    deprecated_at: null,
   }, { onConflict: 'audit_id,canonical_key' });
 
   if (stratErr) throw new Error(`cluster_strategy upsert failed: ${stratErr.message}`);

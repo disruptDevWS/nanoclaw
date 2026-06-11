@@ -764,12 +764,10 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
   // Preserve execution_pages cluster_active state
   const activeClusterKeys = new Set(statusMap.keys());
 
-  // Clear existing clusters + rollups
-  await sb.from('audit_clusters').delete().eq('audit_id', auditId);
-  await sb.from('audit_rollups').delete().eq('audit_id', auditId);
-
   // Pull ALL keywords with a canonical_key (full topic map, not just near-miss)
   // Paginated fetch (Supabase PostgREST max-rows=1000)
+  // Fetched BEFORE the delete so an empty keyword set can bail out without
+  // destroying existing state (see guard below).
   const kwRows: any[] = [];
   {
     const PAGE_SIZE = 1000;
@@ -787,6 +785,32 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
       offset += PAGE_SIZE;
     }
   }
+
+  // Guard: an empty rebuild means keywords aren't canonicalized yet (e.g. the
+  // jim sync runs before Phase 3c canonicalize on a re-run), not that every
+  // cluster ceased to exist. Proceeding would delete real clusters, orphan
+  // activations, and deprecate active strategies — state the later
+  // recanonicalize rebuild cannot restore. Leave everything untouched.
+  if (kwRows.length === 0) {
+    console.warn(`  [${label}] 0 keywords with canonical_key — skipping cluster rebuild (existing clusters, activations, and strategies left untouched)`);
+    if ((existingStatuses ?? []).length > 0) {
+      await sb.from('agent_runs').insert({
+        audit_id: auditId,
+        agent_name: label,
+        run_date: new Date().toISOString().slice(0, 10),
+        status: 'completed',
+        metadata: {
+          warning: 'skipped_empty_cluster_rebuild',
+          existing_cluster_count: (existingStatuses ?? []).length,
+        },
+      });
+    }
+    return { clusterCount: 0, nearMissCount: 0 };
+  }
+
+  // Clear existing clusters + rollups
+  await sb.from('audit_clusters').delete().eq('audit_id', auditId);
+  await sb.from('audit_rollups').delete().eq('audit_id', auditId);
 
   let clusterMap = buildClusterMap(kwRows as any[]);
 

@@ -654,7 +654,7 @@ Written by `generate-cluster-strategy.ts` (on-demand, per-cluster via `/activate
 | `ai_optimization_targets` | JSONB — structured AI/search targets from Section 5: `[{query, target_type, structural_pattern, applies_to_page, condition, rationale}]` |
 | `search_intent` | TEXT — cluster dominant intent: `commercial`, `informational`, `transactional`, `navigational`, `mixed`. From entity map Section 0. Consumed by Pam for content-type guidance. Migration 022. |
 | `visibility_queries` | JSONB — AI visibility measurement queries from Section 7: `[{query, query_type, target_cluster, platforms}]`. Migration 026. |
-| `status` | TEXT: `active` (default), `deprecated`. Deprecated by `rebuildClustersAndRollups()` when canonical_key no longer exists in rebuilt clusters. Migration 014. |
+| `status` | TEXT: `active` (default), `deprecated`. Deprecated by `rebuildClustersAndRollups()` when canonical_key no longer exists in rebuilt clusters (rebuild skips entirely when 0 canonicalized keywords — empty-rebuild guard, 2026-06-11). Reactivated by the `generate-cluster-strategy.ts` upsert (`status='active'`, `deprecated_at=NULL`) — regeneration always un-deprecates. Migration 014. |
 | `deprecated_at` | TIMESTAMPTZ, set when status → `deprecated`. NULL for active strategies. |
 | `model_used` | |
 
