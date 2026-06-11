@@ -23,12 +23,10 @@ Each entry is self-contained: picking it up 3 months later should not require re
 
 ---
 
-### [Pipeline/Dashboard] Gap `content_gap_observations` type mismatch
+### ~~[Pipeline/Dashboard] Gap `content_gap_observations` type mismatch~~ RESOLVED (Session 6, 2026-06-11)
 
-- **Status:** Latent. Gap agent writes `content_gap_observations` as an array of objects (from `json:insights` block). Dashboard readers may expect an array of strings. No current breakage observed but a type coercion risk exists.
-- **Action:** Audit dashboard consumers of `content_gap_observations` and add type guards or update display logic.
-- **Scope estimate:** S
-- **Captured:** Session 3, 2026-06-02
+- **Resolution:** `runGap()` now writes formatted strings into `content_gap_observations` (objects stay in `keyword_overview.authority_gaps`); ResearchPage filters non-strings defensively for legacy gap snapshots. Also fixed in the same session: `revenue_opportunity` `{value, basis}` objects rendered as `[object Object]` in Pam's brief gap table and cluster-strategy prompts — all consumers now use `formatRevenueOpportunity()` (`src/agents/gap/format-revenue.ts`); cluster-strategy gap lines referenced nonexistent `gap_description`/`notes` fields, now use `coverage_note`.
+- **Captured:** Session 3, 2026-06-02 · **Resolved:** Session 6, 2026-06-11
 
 ---
 

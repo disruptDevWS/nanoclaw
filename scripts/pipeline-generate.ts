@@ -26,6 +26,7 @@ import * as path from 'node:path';
 import { embedAuditKeywords } from './embed-keywords.js';
 import { embedBatch, cosineSimilarity } from '../src/embeddings/index.js';
 import type { EmbeddingResult } from '../src/embeddings/index.js';
+import { formatRevenueOpportunity } from '../src/agents/gap/format-revenue.js';
 import {
   callClaude,
   callClaudeAsync,
@@ -3310,6 +3311,9 @@ async function runGap(sb: SupabaseClient, auditId: string, domain: string) {
   const crawledUrls = (crawledPages ?? []) as any[];
   const crawledInventory = crawledUrls.length > 0
     ? crawledUrls.slice(0, 100).map((p) => `${p.url} — ${p.title || p.h1 || '(no title)'}`).join('\n')
+      + (crawledUrls.length > 100
+        ? `\n(+${crawledUrls.length - 100} more crawled pages not listed — this inventory is partial; do not infer a format is absent solely because it is missing from this list)`
+        : '')
     : 'No crawled page inventory available.';
 
   // Load client context for full-mode prompt injection
@@ -3496,6 +3500,16 @@ Recommend consolidation or differentiation rather than new pages for these clust
 
   const agentRunId = run?.id ?? null;
 
+  // content_gap_observations is a string[] column contract shared with Jim's
+  // snapshot (dashboard renders "Title: body" strings). The full structured
+  // gap objects live in keyword_overview.authority_gaps below.
+  const gapObservations = (gapAnalysis.authority_gaps ?? []).map((g: any) => {
+    const status = g.client_status ? `${g.client_status}` : 'gap';
+    const competitor = g.top_competitor ? ` — top competitor ${g.top_competitor}` : '';
+    const note = g.coverage_note ? `. ${g.coverage_note}` : '';
+    return `${g.topic ?? 'Unknown topic'}: client ${status}${competitor}${note}`;
+  });
+
   await sb.from('audit_snapshots').insert({
     audit_id: auditId,
     agent_name: 'gap',
@@ -3503,7 +3517,7 @@ Recommend consolidation or differentiation rather than new pages for these clust
     agent_run_id: agentRunId,
     row_count: gapAnalysis.authority_gaps?.length ?? 0,
     research_summary_markdown: gapMd,
-    content_gap_observations: gapAnalysis.authority_gaps ?? [],
+    content_gap_observations: gapObservations,
     key_takeaways: gapAnalysis.priority_recommendations ?? [],
     keyword_overview: {
       authority_gaps: gapAnalysis.authority_gaps ?? [],
@@ -3534,10 +3548,7 @@ function buildGapAnalysisMd(domain: string, analysis: any): string {
     lines.push('| Topic | Client Status | Client Pos | Top Competitor | Comp Pos | Est. Volume | Revenue | Data Source |');
     lines.push('|-------|--------------|------------|----------------|----------|-------------|---------|-------------|');
     for (const g of analysis.authority_gaps) {
-      const revOpp = typeof g.revenue_opportunity === 'object' && g.revenue_opportunity !== null
-        ? (g.revenue_opportunity.value !== null ? `$${g.revenue_opportunity.value}/mo (${g.revenue_opportunity.basis})` : g.revenue_opportunity.basis)
-        : g.revenue_opportunity ?? 'N/A';
-      lines.push(`| ${g.topic} | ${g.client_status} | ${g.client_position ?? 'N/A'} | ${g.top_competitor} | ${g.competitor_position} | ${g.estimated_volume ?? 'N/A'} | ${revOpp} | ${g.data_source ?? 'N/A'} |`);
+      lines.push(`| ${g.topic} | ${g.client_status} | ${g.client_position ?? 'N/A'} | ${g.top_competitor} | ${g.competitor_position} | ${g.estimated_volume ?? 'N/A'} | ${formatRevenueOpportunity(g.revenue_opportunity)} | ${g.data_source ?? 'N/A'} |`);
     }
   }
 

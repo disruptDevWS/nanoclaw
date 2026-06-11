@@ -185,9 +185,11 @@
 
 **Gap `keyword_overview` sub-key changes (Session 3):**
 - `authority_gaps[].coverage_note` (NEW) — one sentence describing what the competitor covers that the client does not
-- `authority_gaps[].revenue_opportunity` (FORMAT CHANGE) — was mixed-format string, now `{ value: number|null, basis: string }` object. `buildGapAnalysisMd()` has backward-compat fallback for old string format.
+- `authority_gaps[].revenue_opportunity` (FORMAT CHANGE) — was mixed-format string, now `{ value: number|null, basis: string }` object. ALL consumers must use `formatRevenueOpportunity()` from `src/agents/gap/format-revenue.ts` (handles both formats, pipe-escapes, truncates) — raw interpolation renders `[object Object]`. Consumers: `buildGapAnalysisMd()`, Pam's `buildContentGapSection()` (generate-brief.ts), cluster strategy gap section (generate-cluster-strategy.ts).
 - `priority_recommendations[].target_topic` (NEW, replaces `target_keyword`) — entity/topic at service-category level, Title Case
 - `priority_recommendations[].representative_keywords` (NEW) — array of 2-4 keywords as evidence. `target_keyword` still supported as fallback in `buildGapAnalysisMd()`.
+
+**`content_gap_observations` column contract (Session 6, 2026-06-11):** string[] for ALL agents. Jim writes narrative strings (json:insights); Gap now writes formatted strings derived from authority_gaps ("Topic: client absent — top competitor X. coverage_note") — it previously wrote raw objects, which legacy gap snapshots still contain. Dashboard's ResearchPage filters non-strings defensively. Full gap objects remain in `keyword_overview.authority_gaps`.
 
 **Shared columns**: `id`, `audit_id`, `agent_name`, `snapshot_version`, `agent_run_id`, `row_count`, `created_at`
 

@@ -786,10 +786,13 @@ Synthesizes all competitive intelligence + keyword data into a structured gap an
 - Near-me keywords excluded from `revenue_opportunity` estimates
 - Authority gaps include `data_source` ("SERP dominance" | "keyword overlap") for provenance
 - Topics must be complete service phrases, not truncated fragments
+- `revenue_opportunity` is a structured `{ value, basis }` object (legacy snapshots before 2026-06 hold free-text strings) — all consumers format via `formatRevenueOpportunity()` in `src/agents/gap/format-revenue.ts`, which handles both formats, pipe-escapes for markdown tables, and truncates long basis text
+- `unaddressed_gaps` is forced to `[]` when Michael's architecture has <3 pages (always true on a fresh pipeline run, where Gap runs before Michael) — prevents meaningless duplication of authority_gaps
+- Crawled page inventory is capped at 100 URLs; when truncated, the prompt notes the inventory is partial so format gaps aren't inferred from absence in the list
 
 **Prompt framing:** JSON-only output with "YOUR ENTIRE RESPONSE IS RAW JSON" top/bottom framing.
 
-**Output:** `research/{date}/content_gap_analysis.md` + `audit_snapshots`
+**Output:** `research/{date}/content_gap_analysis.md` + `audit_snapshots`. The snapshot's `content_gap_observations` column gets formatted strings ("Topic: client absent — top competitor X. coverage_note") matching the string[] contract shared with Jim's snapshot; the full structured gap objects live in `keyword_overview.authority_gaps`.
 
 ---
 

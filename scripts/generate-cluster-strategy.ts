@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { callClaude, initAnthropicClient } from './anthropic-client.js';
 import { loadClientContextAsync, buildClientContextPrompt } from './client-context.js';
+import { formatRevenueOpportunity } from '../src/agents/gap/format-revenue.js';
 
 // ============================================================
 // CLI argument parsing
@@ -270,7 +271,11 @@ async function main() {
   const gapFormat = Array.isArray(gapData.format_gaps) ? gapData.format_gaps.slice(0, 10) : [];
 
   const gapSection = gapAuthority.length > 0
-    ? `## Authority Gaps\n${gapAuthority.map((g: any) => `- ${g.topic ?? g.keyword ?? 'unknown'}: ${g.gap_description ?? g.notes ?? ''}`).join('\n')}`
+    ? `## Authority Gaps\n${gapAuthority.map((g: any) => {
+        const detail = g.coverage_note ?? g.gap_description ?? g.notes ?? '';
+        const competitor = g.top_competitor ? ` (top competitor: ${g.top_competitor}, revenue: ${formatRevenueOpportunity(g.revenue_opportunity)})` : '';
+        return `- ${g.topic ?? g.keyword ?? 'unknown'}${competitor}: ${detail}`;
+      }).join('\n')}`
     : '';
 
   const formatGapSection = gapFormat.length > 0

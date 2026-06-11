@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { callClaude as callClaudeAsync, initAnthropicClient } from './anthropic-client.js';
+import { formatRevenueOpportunity } from '../src/agents/gap/format-revenue.js';
 import {
   computeRelatedPages,
   formatRelatedPagesSection,
@@ -887,7 +888,7 @@ function buildContentGapSection(authorityGaps: any[], formatGaps: any[]): string
     parts.push('| Topic | Top Competitor | Est. Volume | Revenue Opportunity | Data Source |');
     parts.push('|-------|---------------|------------|--------------------:|-------------|');
     for (const g of authorityGaps) {
-      parts.push(`| ${g.topic ?? g.keyword ?? '—'} | ${g.top_competitor ?? g.competitor ?? '—'} | ${g.estimated_volume ?? '—'} | ${g.revenue_opportunity ?? '—'} | ${g.data_source ?? '—'} |`);
+      parts.push(`| ${g.topic ?? g.keyword ?? '—'} | ${g.top_competitor ?? g.competitor ?? '—'} | ${g.estimated_volume ?? '—'} | ${formatRevenueOpportunity(g.revenue_opportunity)} | ${g.data_source ?? '—'} |`);
     }
   }
 
