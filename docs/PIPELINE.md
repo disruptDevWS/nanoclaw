@@ -1019,7 +1019,7 @@ Oscar (generate-content.ts) — polls oscar_requests
 - `content/{date}/{slug}/page.html` — production-ready semantic HTML
 - `content/_debug/{slug}-oscar-raw.html` — raw Claude output (debug)
 
-**Supabase writes:** `execution_pages` UPDATE (content_html, status → 'in_progress'). Dashboard maps `in_progress` → "Draft Ready".
+**Supabase writes:** `execution_pages` UPDATE (content_html, status → 'draft_ready'). (Wrote legacy 'in_progress' before migration 035; the dashboard still maps legacy values for display.)
 
 **Token budget:** Uses `PHASE_MAX_TOKENS.content` = 65536 tokens. Must be called with `callClaudeAsync(prompt, { model: 'sonnet', phase: 'content' })` — passing `'sonnet'` as a string only sets the model and falls through to default 8192 tokens. Streaming is automatically enabled for requests >16K tokens (Anthropic API requirement for long-running operations).
 
@@ -1050,10 +1050,16 @@ Oscar (generate-content.ts) — polls oscar_requests
 
 ```
 not_started  → sync-michael creates execution_pages row with page_brief
+               (or operator dialog / cluster-strategy add)
 brief_ready  → Pam generates metadata + schema + outline
-review       → Oscar generates page.html
-published    → (manual, via dashboard)
+draft_ready  → Oscar generates content_html (was legacy 'in_progress' — data
+               normalized by migration 035)
+in_review    → manual, via dashboard (was legacy 'review')
+published    → manual, via dashboard — PublishUrlDialog captures published_url
+               + published_at; bulk publish auto-derives the URL from the slug
 ```
+
+Content-back-in: a human can replace Oscar's `content_html` from the dashboard drawer (Replace Draft HTML) — `content_edited_at` is stamped so edited drafts are distinguishable from raw agent output. The original draft remains in the pipeline's disk artifacts. Published pages show live GSC metrics in the drawer (matched on the `published_url` pathname against `gsc_page_snapshots.page_url`, which stores PATHS, not full URLs).
 
 ---
 

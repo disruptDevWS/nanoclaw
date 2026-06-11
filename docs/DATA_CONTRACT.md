@@ -616,7 +616,11 @@ Written by syncMichael (Phase 6b) and Cluster Strategy (on-demand), updated by P
 
 **Dashboard polls**: 3s interval while pending/processing
 
-**`execution_pages.source` values** (TEXT, no CHECK): `michael` (architecture blueprint), `cluster_strategy` (buyer-journey expansion), `manual` (dashboard cluster add), `operator` (operator-directed dialog, Session 7-8). syncMichael's strategic-rerun deprecation only touches `source='michael'` rows. **`execution_pages.status` CHECK** (migration 034): `not_started | brief_ready | in_progress | draft_ready | review | in_review | published | deprecated` — `draft_ready`/`in_review` added because the dashboard status dropdown writes them (previously rejected by the CHECK).
+**`execution_pages.source` values** (TEXT, no CHECK): `michael` (architecture blueprint), `cluster_strategy` (buyer-journey expansion), `manual` (dashboard cluster add), `operator` (operator-directed dialog, Session 7-8). syncMichael's strategic-rerun deprecation only touches `source='michael'` rows. **`execution_pages.status` CHECK** (migration 034): `not_started | brief_ready | in_progress | draft_ready | review | in_review | published | deprecated` — `draft_ready`/`in_review` added because the dashboard status dropdown writes them (previously rejected by the CHECK). Migration 035 normalized legacy data (`in_progress`→`draft_ready`, `review`→`in_review`) and Oscar now writes `draft_ready`; legacy values remain CHECK-valid for safety.
+
+**Session 9 columns (migration 035):**
+- `execution_pages.published_url` (TEXT) — live URL captured by the dashboard's PublishUrlDialog (or auto-derived `https://domain/slug` on bulk publish). Joins the page to GSC performance: the drawer's Search Performance block matches the URL's **pathname** against `gsc_page_snapshots.page_url` (which stores paths like `/emt-seattle`, NOT full URLs).
+- `execution_pages.content_edited_at` (TIMESTAMPTZ) — stamped when a human replaces `content_html` via the dashboard's Replace Draft HTML editor (content-back-in). NULL = unedited agent draft.
 
 ---
 

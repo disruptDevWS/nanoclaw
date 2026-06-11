@@ -452,8 +452,9 @@ async function processOscarRequest(sb: SupabaseClient, req: OscarRequest) {
       .maybeSingle();
 
     if (existing) {
-      await sb.from('execution_pages').update({ status: 'in_progress', content_html: finalHtml }).eq('id', (existing as any).id);
-      console.log(`  Updated execution_page → in_progress (displays as draft_ready)`);
+      // 'draft_ready' since migration 035 (legacy rows wrote 'in_progress')
+      await sb.from('execution_pages').update({ status: 'draft_ready', content_html: finalHtml }).eq('id', (existing as any).id);
+      console.log(`  Updated execution_page → draft_ready`);
     }
 
     // 13. Mark oscar_request complete (polling mode only)
