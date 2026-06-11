@@ -178,6 +178,14 @@ run_step() {
 CURRENT_PHASE=""
 RUN_ID="$(npx tsx scripts/pipeline-progress.ts start "$DOMAIN" "$EMAIL" "$MODE" "$START_FROM" "$STOP_AFTER" 2>/dev/null || true)"
 progress() { [[ -n "$RUN_ID" ]] && npx tsx scripts/pipeline-progress.ts "$@" 2>/dev/null || true; }
+
+# QA feedback: runQA writes audits/$DOMAIN/qa_feedback/<phase>.md on failure.
+# Echo the retry flag only when feedback exists so re-runs see what went wrong.
+qa_feedback_arg() {
+  local f="audits/$DOMAIN/qa_feedback/$1.md"
+  [[ -f "$f" ]] && echo "--qa-feedback $f"
+  return 0
+}
 phase_start() { CURRENT_PHASE="$1"; progress phase-start "$RUN_ID" "$1"; }
 phase_done()  { progress phase-done "$RUN_ID" "$1"; CURRENT_PHASE=""; }
 phase_skip()  { progress phase-skip "$RUN_ID" "$1"; }
@@ -204,7 +212,7 @@ run_step npx tsx scripts/pipeline-generate.ts dwight --domain "$DOMAIN" --user-e
 echo "--- QA: Dwight ---"
 QA_RESULT=$(run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase dwight 2>&1) || {
   echo "  QA ENHANCE for Dwight — re-running with feedback..."
-  run_step npx tsx scripts/pipeline-generate.ts dwight --domain "$DOMAIN" --user-email "$EMAIL"
+  run_step npx tsx scripts/pipeline-generate.ts dwight --domain "$DOMAIN" --user-email "$EMAIL" $(qa_feedback_arg dwight)
   run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase dwight || {
     echo "  QA FAILED for Dwight after retry"
     pipeline_fail "QA failed for Dwight"
@@ -240,7 +248,7 @@ run_step npx tsx scripts/strategy-brief.ts --domain "$DOMAIN" --user-email "$EMA
 echo "--- QA: Strategy Brief ---"
 QA_RESULT=$(run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase strategy-brief 2>&1) || {
   echo "  QA ENHANCE for Strategy Brief — re-running..."
-  run_step npx tsx scripts/strategy-brief.ts --domain "$DOMAIN" --user-email "$EMAIL" --force
+  run_step npx tsx scripts/strategy-brief.ts --domain "$DOMAIN" --user-email "$EMAIL" --force $(qa_feedback_arg strategy-brief)
   run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase strategy-brief || {
     echo "  QA FAILED for Strategy Brief after retry — halting (upstream-critical)"
     pipeline_fail "QA failed for Strategy Brief"
@@ -269,6 +277,19 @@ echo ""
 echo "--- Phase 2: Keyword Research (Service × City Matrix) ---"
 run_step npx tsx scripts/pipeline-generate.ts keyword-research --domain "$DOMAIN" --user-email "$EMAIL"
 
+# QA gate: Keyword Research (deterministic — seed count + service coverage)
+echo "--- QA: Keyword Research ---"
+QA_RESULT=$(run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase keyword-research 2>&1) || {
+  echo "  QA ENHANCE for Keyword Research — re-running with feedback..."
+  run_step npx tsx scripts/pipeline-generate.ts keyword-research --domain "$DOMAIN" --user-email "$EMAIL" $(qa_feedback_arg keyword-research)
+  run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase keyword-research || {
+    echo "  QA FAILED for Keyword Research after retry — halting (upstream-critical)"
+    pipeline_fail "QA failed for Keyword Research"
+    exit 1
+  }
+}
+echo "  QA PASSED: Keyword Research"
+
 update_status research
 phase_done 2
 else echo "  [SKIP] Phase 2: Keyword Research"; phase_skip 2; fi
@@ -287,7 +308,7 @@ run_step npx tsx scripts/pipeline-generate.ts jim --domain "$DOMAIN" --user-emai
 echo "--- QA: Jim ---"
 QA_RESULT=$(run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase jim 2>&1) || {
   echo "  QA ENHANCE for Jim — re-running with feedback..."
-  run_step npx tsx scripts/pipeline-generate.ts jim --domain "$DOMAIN" --user-email "$EMAIL" $SEED_ARGS $MODE_ARGS
+  run_step npx tsx scripts/pipeline-generate.ts jim --domain "$DOMAIN" --user-email "$EMAIL" $SEED_ARGS $MODE_ARGS $(qa_feedback_arg jim)
   run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase jim || {
     echo "  QA FAILED for Jim after retry"
     pipeline_fail "QA failed for Jim"
@@ -366,7 +387,7 @@ if [[ "$MODE" != "sales" ]]; then
   echo "--- QA: Gap ---"
   QA_RESULT=$(run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase gap 2>&1) || {
     echo "  QA ENHANCE for Gap — re-running with feedback..."
-    run_step npx tsx scripts/pipeline-generate.ts gap --domain "$DOMAIN" --user-email "$EMAIL"
+    run_step npx tsx scripts/pipeline-generate.ts gap --domain "$DOMAIN" --user-email "$EMAIL" $(qa_feedback_arg gap)
     run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase gap || {
       echo "  QA FAILED for Gap after retry"
       pipeline_fail "QA failed for Gap"
@@ -393,7 +414,7 @@ run_step npx tsx scripts/pipeline-generate.ts michael --domain "$DOMAIN" --user-
 echo "--- QA: Michael ---"
 QA_RESULT=$(run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase michael 2>&1) || {
   echo "  QA ENHANCE for Michael — re-running with feedback..."
-  run_step npx tsx scripts/pipeline-generate.ts michael --domain "$DOMAIN" --user-email "$EMAIL" $MODE_ARGS
+  run_step npx tsx scripts/pipeline-generate.ts michael --domain "$DOMAIN" --user-email "$EMAIL" $MODE_ARGS $(qa_feedback_arg michael)
   run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase michael || {
     echo "  QA FAILED for Michael after retry"
     pipeline_fail "QA failed for Michael"
@@ -435,6 +456,19 @@ phase_start 6d
 echo ""
 echo "--- Phase 6d: Local Presence Diagnostic (GBP + Citations) ---"
 run_step npx tsx scripts/local-presence.ts --domain "$DOMAIN" --user-email "$EMAIL" --force
+
+# QA gate: Local Presence (deterministic — citation sanity + wrong-business URLs).
+# Non-fatal: a bad citation scan shouldn't fail the audit at the finish line,
+# but the QA row in audit_qa_results flags it for review.
+echo "--- QA: Local Presence ---"
+QA_RESULT=$(run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase local-presence 2>&1) || {
+  echo "  QA ENHANCE for Local Presence — re-running citation scan..."
+  run_step npx tsx scripts/local-presence.ts --domain "$DOMAIN" --user-email "$EMAIL" --force
+  run_step npx tsx scripts/pipeline-generate.ts qa --domain "$DOMAIN" --user-email "$EMAIL" --phase local-presence || {
+    echo "  WARNING: QA failed for Local Presence after retry (non-fatal) — citation data may contain false positives"
+  }
+}
+echo "  QA complete: Local Presence"
 phase_done 6d
 else echo "  [SKIP] Phase 6d: Local Presence"; phase_skip 6d; fi
 

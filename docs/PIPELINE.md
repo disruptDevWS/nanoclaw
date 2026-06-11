@@ -463,8 +463,11 @@ Client Brief (auto after Phase 6d, non-fatal)
 **Output files:**
 - `research/{date}/keyword_research_raw.json`
 - `research/{date}/keyword_research_summary.md`
+- `research/{date}/keyword_research_meta.json` — services/locations/platform + `covered_services` + counts, consumed by the Phase 2 QA gate's service-coverage check
 
 **Supabase writes:** `audit_keywords` (INSERT, source='keyword_research'), `agent_runs`, `embeddings` (UPSERT, cache pre-warm)
+
+**QA Gate (deterministic):** After Phase 2, `runQA(phase='keyword-research')` checks (a) ≥1 keyword seeded into `audit_keywords` — catches the silent path where synthesis returns 0 opportunities even though validation succeeded, and (b) ≥25% of extracted services have a validated keyword. On FAIL, Phase 2 re-runs with `--qa-feedback`; a second FAIL halts the pipeline (upstream-critical — everything downstream depends on the keyword seed).
 
 **Embed-at-ingestion:** After keyword seeding, calls `embedAuditKeywords()` from `scripts/embed-keywords.ts` to pre-warm the `embeddings` table cache. Non-fatal — failures are logged as warnings. Pre-warms Phase 3c canonicalize (cache hits instead of fresh OpenAI calls).
 
@@ -924,6 +927,8 @@ All cross-phase reads use `resolveArtifactPath()` with date fallback for operati
 
 **Recency:** 6-day check (same as track-rankings). `--force` overrides.
 
+**QA Gate (deterministic, non-fatal):** After Phase 6d, `runQA(phase='local-presence')` checks (a) citation_snapshots rows exist for the latest snapshot date, and (b) every `listing_found` row's `listing_url` is on its `directory_domain` (wrong-business false positives; `manual_override` rows skipped). On FAIL, the citation scan re-runs once; a second FAIL logs a WARNING but does not fail the pipeline — the FAIL row in `audit_qa_results` flags the data for review.
+
 ---
 
 ## Post-Pipeline: On-Demand Content Agents
@@ -1015,7 +1020,7 @@ Oscar (generate-content.ts) — polls oscar_requests
 
 **HTML extraction:** `extractHtmlContent()` strips Claude preamble/postamble — looks for first `<!--` through last `-->`, falls back to code fence stripping.
 
-**Slop scan QA gate:** After HTML extraction, `scanForSlop()` from `scripts/slop-scanner.ts` checks for banned phrases (consolidated from `system-prompt.md` + `seo-playbook.md`). If violations found: builds sentence-level rewrite prompt (JSON format, ~500 tokens), calls Sonnet via `content-qa` phase (4096 max tokens), applies replacements via string substitution. Cap at one retry — if violations remain after rewrite, uses rewritten version and logs warnings. Non-fatal: rewrite failure falls through to original HTML.
+**Slop scan QA gate:** After HTML extraction, `scanForSlop()` from `scripts/slop-scanner.ts` checks for banned phrases parsed live from `configs/oscar/system-prompt.md` (AI-isms line) + `configs/oscar/seo-playbook.md` (Anti-Patterns "Writing:" line) by `src/content/banned-phrases.ts` — editing those config lines updates the scanner automatically; a built-in fallback list is used if parsing yields nothing. If violations found: builds sentence-level rewrite prompt (JSON format, ~500 tokens), calls Sonnet via `content-qa` phase (4096 max tokens), applies replacements via string substitution. Cap at one retry — if violations remain after rewrite, uses rewritten version and logs warnings. Non-fatal: rewrite failure falls through to original HTML.
 
 ---
 
@@ -1332,6 +1337,25 @@ Cluster activation is an on-demand step that generates a strategy document for a
 
 **Source preservation:** sync jim's DELETE preserves `source='keyword_research'` rows so KeywordResearch-seeded keywords survive re-syncs.
 
+### QA Gates & Feedback Loop
+
+Seven phases are QA-gated: 1 (Dwight), 1b (Strategy Brief), 2 (Keyword Research), 3 (Jim), 5 (Gap), 6 (Michael), 6d (Local Presence). Each gate runs `pipeline-generate.ts qa --phase <phase>` after the phase completes.
+
+**Gate types:**
+- **Rubric phases** (dwight, strategy-brief, jim, gap, michael): deterministic pre-flight checks first, then Haiku evaluates the artifact against the phase's `QA_RUBRICS` entry.
+- **Deterministic-only phases** (`keyword-research`, `local-presence` — in `DETERMINISTIC_ONLY_PHASES`): no artifact rubric or LLM call; pass/fail comes entirely from `runDeterministicChecks()`.
+
+**Deterministic checks per phase:**
+- `strategy-brief` — section headers present, 50+ words per section, no conversational preamble
+- `keyword-research` — ≥1 keyword seeded into `audit_keywords` (source='keyword_research'); service coverage ≥25% of extracted services have a validated keyword (reads `keyword_research_meta.json`)
+- `jim` — keyword seed count (defense-in-depth re-check of the Phase 2 gate)
+- `michael` — cluster count ≥50% of canonical topic count
+- `local-presence` — citation_snapshots rows exist for the latest snapshot; every found listing's URL is on its directory's domain (wrong-business false-positive detection; `manual_override` rows skipped)
+
+**Feedback loop (Session 5):** On QA FAIL, `runQA()` writes the failed checks + feedback to `audits/{domain}/qa_feedback/{phase}.md`. The shell retry invocation passes `--qa-feedback <path>` (via the `qa_feedback_arg` helper — flag only added when the file exists), and the regenerating agent prepends a "PREVIOUS ATTEMPT FEEDBACK (QA REVIEW)" block to its prompt (`withQaFeedback()` in pipeline-generate.ts; inline equivalent in strategy-brief.ts). The feedback file is deleted on the next PASS so stale feedback never leaks into later runs.
+
+**Failure severity:** All gates retry once with feedback. After a failed retry, gates 1/1b/2/3/5/6 halt the pipeline (`pipeline_fail`); the 6d gate is **non-fatal** — it logs a WARNING and the FAIL row in `audit_qa_results` flags the citation data for review, but a bad citation scan does not fail an otherwise-complete audit.
+
 ---
 
 ## Run Progress Tracking (pipeline_runs)
@@ -1450,7 +1474,7 @@ The pipeline server runs on Railway's managed infrastructure. Supabase Edge Func
 | — | Oscar | **sonnet** | `callClaude()` | Production HTML from brief (65K tokens, streaming) |
 | — | Cluster Strategy | **opus** | `callClaude()` | Strategic cluster analysis (on-demand, per-cluster) |
 
-**SDK migration:** All phases use `@anthropic-ai/sdk` via `scripts/anthropic-client.ts`. Per-phase `max_tokens` configured in `PHASE_MAX_TOKENS` (e.g., sonnet phases: 16384, haiku phases: 4096, content: 65536). Requests with `max_tokens > 16384` automatically use streaming (`client.messages.stream().finalMessage()`). No more Claude CLI binary, env var stripping, or `stripClaudePreamble()`.
+**SDK migration:** All phases use `@anthropic-ai/sdk` via `scripts/anthropic-client.ts`. Per-phase `max_tokens` configured in `PHASE_MAX_TOKENS` (e.g., sonnet phases: 16384, haiku phases: 4096, content: 65536, pam: 32768). Every `phase:` string passed to `callClaude()`/`callClaudeAsync()` must have an entry — missing phases silently fall through to the 8192 default and risk truncation. Requests with `max_tokens > 16384` automatically use streaming (`client.messages.stream().finalMessage()`). No more Claude CLI binary, env var stripping, or `stripClaudePreamble()`.
 
 ## Supabase Tables
 
@@ -1549,5 +1573,5 @@ All paths relative to `audits/{domain}/`. Cross-phase reads use `resolveArtifact
    - Write to disk in `audits/{domain}/{subdir}/{date}/`
 2. Add the phase to `scripts/run-pipeline.sh` in the correct position
 3. If the phase writes to Supabase, add a sync function in `scripts/sync-to-dashboard.ts`
-4. If QA-gated, add a rubric in the `QA_RUBRICS` object and a `runQA()` call after the phase
+4. If QA-gated, add a rubric in the `QA_RUBRICS` object (or, for checks that need no LLM judgment, add the phase to `DETERMINISTIC_ONLY_PHASES` + a block in `runDeterministicChecks()`) and a QA gate block in run-pipeline.sh with a `$(qa_feedback_arg <phase>)` retry
 5. Update this file (PIPELINE.md) in the same commit — this is a contract, not optional documentation

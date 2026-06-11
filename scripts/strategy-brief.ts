@@ -31,6 +31,7 @@ interface CliArgs {
   domain: string;
   userEmail: string;
   force: boolean;
+  qaFeedback?: string;
 }
 
 function parseArgs(): CliArgs {
@@ -60,6 +61,7 @@ function parseArgs(): CliArgs {
     domain: flags.domain,
     userEmail: flags['user-email'],
     force: flags.force === 'true',
+    qaFeedback: flags['qa-feedback'],
   };
 }
 
@@ -407,11 +409,26 @@ async function runStrategyBrief(cliArgs: CliArgs) {
   }
 
   // 4. Build prompt and call Sonnet
-  const prompt = buildPrompt(inputs);
+  let prompt = buildPrompt(inputs);
+
+  // QA retry: prepend previous-attempt feedback so the re-run corrects it
+  if (cliArgs.qaFeedback && fs.existsSync(cliArgs.qaFeedback)) {
+    const feedback = fs.readFileSync(cliArgs.qaFeedback, 'utf-8').trim();
+    console.log(`  QA feedback loaded (${feedback.length} chars) — injecting into prompt`);
+    prompt = `## PREVIOUS ATTEMPT FEEDBACK (QA REVIEW)
+Your previous attempt at this brief failed QA review. The specific failures are listed below. Correct every one of them in this attempt — do not repeat the same mistakes.
+
+${feedback}
+
+---
+
+${prompt}`;
+  }
+
   console.log(`  Prompt: ${prompt.length} chars (~${Math.round(prompt.length / 4)} tokens)`);
   console.log('  Generating strategy brief via Anthropic API (sonnet)...');
 
-  const result = await callClaude(prompt, { model: 'sonnet', phase: 'strategy-brief', maxTokens: 8192 });
+  const result = await callClaude(prompt, { model: 'sonnet', phase: 'strategy-brief' });
 
   // 5. Validate section headers (warning-level — QA gate enforces)
   const requiredHeaders = ['Visibility Posture', 'Entity Authority Directive', 'Architecture Directive', 'Risk Flags'];

@@ -1,34 +1,16 @@
 /**
  * Slop Scanner — post-generation QA gate for Oscar output.
  *
- * Detects banned phrases from system-prompt.md + seo-playbook.md,
- * builds sentence-level rewrite prompts, and applies string-substitution fixes.
+ * Detects banned phrases parsed live from system-prompt.md + seo-playbook.md
+ * (see src/content/banned-phrases.ts), builds sentence-level rewrite prompts,
+ * and applies string-substitution fixes.
  */
 
-// --- Banned phrase registry ---
+import { loadBannedPhrases, type BannedPhrase } from '../src/content/banned-phrases.js';
 
-export interface BannedPhrase {
-  pattern: RegExp;
-  label: string;
-  source: 'system-prompt' | 'seo-playbook';
-}
+export type { BannedPhrase };
 
-export const BANNED_PHRASES: BannedPhrase[] = [
-  // From configs/oscar/system-prompt.md line 50
-  { pattern: /\bnavigating\b/gi, label: 'navigating', source: 'system-prompt' },
-  { pattern: /\blandscape\b/gi, label: 'landscape', source: 'system-prompt' },
-  { pattern: /\bleverage\b/gi, label: 'leverage', source: 'system-prompt' },
-  { pattern: /\bdelve\b/gi, label: 'delve', source: 'system-prompt' },
-  { pattern: /it[''\u2019]s worth noting/gi, label: "it's worth noting", source: 'system-prompt' },
-  { pattern: /in today[''\u2019]s world/gi, label: "in today's world", source: 'system-prompt' },
-  // From configs/oscar/seo-playbook.md lines 190-191
-  { pattern: /when it comes to/gi, label: 'when it comes to', source: 'seo-playbook' },
-  { pattern: /whether you need .{1,40} or /gi, label: 'whether you need X or Y', source: 'seo-playbook' },
-  { pattern: /\bin fact,/gi, label: 'In fact,', source: 'seo-playbook' },
-  { pattern: /don[''\u2019]t hesitate to/gi, label: "don't hesitate to", source: 'seo-playbook' },
-  { pattern: /we understand that/gi, label: 'we understand that', source: 'seo-playbook' },
-  { pattern: /contact us today/gi, label: 'contact us today (section ender)', source: 'seo-playbook' },
-];
+export const BANNED_PHRASES: BannedPhrase[] = loadBannedPhrases();
 
 // --- Types ---
 

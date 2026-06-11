@@ -280,6 +280,23 @@ Written by syncDwight + syncMichael. Tracks agent execution history.
 
 ---
 
+### `audit_qa_results`
+
+Written by `runQA()` in `pipeline-generate.ts` — one row per QA gate evaluation (including retries).
+
+| Column | Notes |
+|--------|-------|
+| `audit_id` | FK to audits |
+| `phase` | `dwight` / `strategy-brief` / `keyword-research` / `jim` / `gap` / `michael` / `local-presence` |
+| `verdict` | `pass` / `enhance` / `fail` |
+| `checks` | JSONB array: `{name, passed, feedback}` per check |
+| `feedback` | Aggregated failure feedback (also written to `audits/{domain}/qa_feedback/{phase}.md` on FAIL for retry injection) |
+| `attempt_number` | 1-based |
+
+`keyword-research` and `local-presence` are deterministic-only (no LLM evaluation). **Dashboard reads**: none yet.
+
+---
+
 ### `pipeline_runs` (migration 033)
 
 Per-phase progress tracking for full/sales pipeline runs (prospect mode excluded). **Writers**: shell via `scripts/pipeline-progress.ts` (start/phase-start/phase-done/phase-skip/pause/complete/fail) + pipeline server (watchdog `timed_out` flip, reconciliation `failed` flip). **Readers**: dashboard `usePipelineRun` / `usePipelineRuns`.

@@ -89,6 +89,7 @@ interface CliArgs {
   prospectConfig?: string;
   phase?: string;
   mode: 'sales' | 'full';
+  qaFeedback?: string;
 }
 
 function parseArgs(): CliArgs {
@@ -128,6 +129,7 @@ function parseArgs(): CliArgs {
     prospectConfig: flags['prospect-config'],
     phase: flags.phase,
     mode,
+    qaFeedback: flags['qa-feedback'],
   };
 }
 
@@ -136,6 +138,38 @@ function parseArgs(): CliArgs {
 // ============================================================
 
 const AUDITS_BASE = path.resolve(process.cwd(), 'audits');
+
+// ── QA feedback injection (Session 5) ────────────────────────
+// On QA failure, runQA writes the feedback to qaFeedbackPath(). The shell
+// retry invocation passes --qa-feedback <path>, which loads it here so the
+// regenerating agent sees what the previous attempt got wrong.
+
+let qaFeedbackText: string | null = null;
+
+export function qaFeedbackPath(domain: string, phase: string): string {
+  return path.join(AUDITS_BASE, domain, 'qa_feedback', `${phase}.md`);
+}
+
+function setQaFeedback(filePath: string): void {
+  if (!fs.existsSync(filePath)) {
+    console.log(`  Note: --qa-feedback file not found (${filePath}) — proceeding without feedback`);
+    return;
+  }
+  qaFeedbackText = fs.readFileSync(filePath, 'utf-8').trim();
+  console.log(`  QA feedback loaded (${qaFeedbackText.length} chars) — injecting into prompt`);
+}
+
+function withQaFeedback(prompt: string): string {
+  if (!qaFeedbackText) return prompt;
+  return `## PREVIOUS ATTEMPT FEEDBACK (QA REVIEW)
+Your previous attempt at this task failed QA review. The specific failures are listed below. Correct every one of them in this attempt — do not repeat the same mistakes.
+
+${qaFeedbackText}
+
+---
+
+${prompt}`;
+}
 
 function todayStr(): string {
   const d = new Date();
@@ -2000,7 +2034,7 @@ Rules:
 - SPARSE DATA RULE: Never omit a required section due to thin data. For sections that cannot be meaningfully populated, write 1-2 sentences acknowledging the data constraint and what it implies. Compress — do not omit.
 - COLUMN INTEGRITY RULE: Do not add extra columns or change column order in any table. Sync parsers key on exact column schemas.`;
 
-  let summaryMd = await callClaude(narrativePrompt, { model: 'sonnet', phase: 'jim' });
+  let summaryMd = await callClaude(withQaFeedback(narrativePrompt), { model: 'sonnet', phase: 'jim' });
   const summaryPath = path.join(researchDir, 'research_summary.md');
 
   // Detect output truncation — verify required sections present.
@@ -2009,7 +2043,7 @@ Rules:
   const hasSection8 = /## 8\./m.test(summaryMd);
   if (!hasHeader || !hasSection8) {
     console.log(`  Warning: research_summary.md appears truncated (header=${hasHeader}, section8=${hasSection8}) — retrying...`);
-    summaryMd = await callClaude(narrativePrompt, { model: 'sonnet', phase: 'jim' });
+    summaryMd = await callClaude(withQaFeedback(narrativePrompt), { model: 'sonnet', phase: 'jim' });
     const retryHasHeader = summaryMd.trimStart().startsWith('# Research Summary');
     const retryHasSection8 = /## 8\./m.test(summaryMd);
     if (!retryHasHeader || !retryHasSection8) {
@@ -2666,7 +2700,7 @@ If no pages should be deprecated, output an empty array: []
     .replace('{{DEPRECATION_SECTION}}', deprecationSection);
 
   console.log('  Generating architecture blueprint via Anthropic API (sonnet)...');
-  let result = await callClaude(prompt, { model: 'sonnet', phase: 'michael' });
+  let result = await callClaude(withQaFeedback(prompt), { model: 'sonnet', phase: 'michael' });
   console.log(`  Blueprint: ${result.length} chars`);
 
   // Pre-flight validation: structural shape + slug corruption ratio.
@@ -2705,7 +2739,7 @@ If no pages should be deprecated, output an empty array: []
           `(${check.rejectedSlugCount} rejected / ${check.validSlugCount} valid) — retrying...`,
       );
     }
-    result = await callClaude(prompt, { model: 'sonnet', phase: 'michael' });
+    result = await callClaude(withQaFeedback(prompt), { model: 'sonnet', phase: 'michael' });
     console.log(`  Retry blueprint: ${result.length} chars`);
     check = checkBlueprint(result);
     if (!check.hasExecSummary || !check.hasSiloTable) {
@@ -3419,7 +3453,7 @@ Recommend consolidation or differentiation rather than new pages for these clust
   console.log('  Generating content gap analysis via Anthropic API...');
   let gapAnalysis: any;
   try {
-    const result = await callClaude(prompt, { model: 'sonnet', phase: 'gap' });
+    const result = await callClaude(withQaFeedback(prompt), { model: 'sonnet', phase: 'gap' });
     gapAnalysis = JSON.parse(stripCodeFences(result));
     console.log(`  Gap analysis: ${gapAnalysis.authority_gaps?.length ?? 0} authority gaps, ${gapAnalysis.format_gaps?.length ?? 0} format gaps, ${gapAnalysis.unaddressed_gaps?.length ?? 0} unaddressed, ${gapAnalysis.priority_recommendations?.length ?? 0} recommendations`);
   } catch (err: any) {
@@ -3861,7 +3895,7 @@ async function runDwight(domain: string) {
 
 
   console.log(`  Prompt size: ${reportPrompt.length} chars`);
-  const report = await callClaude(reportPrompt, { model: 'sonnet', phase: 'dwight' });
+  const report = await callClaude(withQaFeedback(reportPrompt), { model: 'sonnet', phase: 'dwight' });
   const reportPath = path.join(outDir, 'AUDIT_REPORT.md');
   fs.writeFileSync(reportPath, report, 'utf-8');
   validateArtifact(reportPath, 'AUDIT_REPORT.md', 5000);
@@ -4011,7 +4045,7 @@ ${reportContent}`;
   console.log('  Extracting services + locations from AUDIT_REPORT.md via Haiku...');
   let extraction: { services: string[]; locations: string[]; platform: string };
   try {
-    const extractResult = await callClaude(extractionPrompt, { model: 'haiku', phase: 'keyword-research-extract' });
+    const extractResult = await callClaude(withQaFeedback(extractionPrompt), { model: 'haiku', phase: 'keyword-research-extract' });
     extraction = JSON.parse(stripCodeFences(extractResult));
   } catch (err: any) {
     throw new Error(`Service/location extraction failed: ${err.message}`);
@@ -4356,7 +4390,7 @@ IMPORTANT: If the Entity Authority Directive above instructs you NOT to anchor t
   console.log('  Generating keyword research synthesis via Anthropic API (sonnet)...');
   let synthesis: any;
   try {
-    const synthResult = await callClaude(synthesisPrompt, { model: 'sonnet', phase: 'keyword-research-synth' });
+    const synthResult = await callClaude(withQaFeedback(synthesisPrompt), { model: 'sonnet', phase: 'keyword-research-synth' });
     synthesis = JSON.parse(stripCodeFences(synthResult));
   } catch (err: any) {
     throw new Error(`Keyword research synthesis failed: ${err.message}`);
@@ -4406,6 +4440,18 @@ IMPORTANT: If the Entity Authority Directive above instructs you NOT to anchor t
     // Pre-warm embedding cache for Phase 3c canonicalize (non-fatal)
     await embedAuditKeywords(sb, auditId, 'keyword_research', 'phase-2');
   }
+
+  // Persist run metadata for the deterministic Phase 2 QA gate (service coverage)
+  const coveredServices = [...new Set(validated.map((v) => v.service))];
+  const metaPath = path.join(researchDir, 'keyword_research_meta.json');
+  fs.writeFileSync(metaPath, JSON.stringify({
+    services,
+    locations,
+    platform,
+    validated_count: validated.length,
+    covered_services: coveredServices,
+    opportunities_count: opportunities.length,
+  }, null, 2), 'utf-8');
 
   console.log(`  KeywordResearch complete — ${validated.length} validated keywords, ${opportunities.length} opportunities`);
 }
@@ -5504,25 +5550,100 @@ interface QAResult {
 async function runDeterministicChecks(
   sb: SupabaseClient,
   auditId: string,
+  domain: string,
   phase: string,
 ): Promise<Array<{ name: string; passed: boolean; feedback: string }>> {
   const failures: Array<{ name: string; passed: boolean; feedback: string }> = [];
 
+  if (phase === 'keyword-research') {
+    // Phase 2 QA gate: catches the silent 0-seed path (synthesis returned no
+    // opportunities) and service-coverage collapse before Jim burns API spend.
+    const { count } = await sb
+      .from('audit_keywords')
+      .select('id', { count: 'exact', head: true })
+      .eq('audit_id', auditId)
+      .eq('source', 'keyword_research');
+    if ((count ?? 0) === 0) {
+      failures.push({
+        name: 'keyword_seed_count',
+        passed: false,
+        feedback: 'Phase 2 seeded 0 keywords into audit_keywords — synthesis returned no opportunities. Re-check the validated keyword table and produce keyword_opportunities for every service with volume.',
+      });
+    }
+
+    // Service coverage: keyword_research_meta.json records which extracted
+    // services ended up with at least one validated keyword.
+    const metaPath = resolveArtifactPath(domain, 'research', 'keyword_research_meta.json');
+    if (metaPath) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const services: string[] = meta.services ?? [];
+        const covered = new Set<string>((meta.covered_services ?? []).map((s: string) => s.toLowerCase()));
+        if (services.length > 0) {
+          const uncovered = services.filter((s) => !covered.has(s.toLowerCase()));
+          const coverage = (services.length - uncovered.length) / services.length;
+          if (coverage < 0.25) {
+            failures.push({
+              name: 'service_coverage',
+              passed: false,
+              feedback: `Only ${services.length - uncovered.length}/${services.length} extracted services have a validated keyword (services without volume: ${uncovered.slice(0, 10).join(', ')}). The service extraction likely produced labels that do not match how people search — re-extract services strictly from crawl evidence and prefer common industry terms over site-specific phrasing.`,
+            });
+          }
+        }
+      } catch (err: any) {
+        console.log(`  Note: could not evaluate service coverage (${err.message}) — skipping check`);
+      }
+    }
+  }
+
+  if (phase === 'local-presence') {
+    // Phase 6d QA gate: citation scan sanity + wrong-business false positives
+    const { data: latestRows } = await sb
+      .from('citation_snapshots')
+      .select('snapshot_date')
+      .eq('audit_id', auditId)
+      .order('snapshot_date', { ascending: false })
+      .limit(1);
+    const latestDate = latestRows?.[0]?.snapshot_date;
+    if (!latestDate) {
+      failures.push({
+        name: 'citation_rows_exist',
+        passed: false,
+        feedback: 'Local presence produced no citation_snapshots rows — GBP lookup or SERP scan likely failed entirely.',
+      });
+    } else {
+      const { data: rows } = await sb
+        .from('citation_snapshots')
+        .select('directory_name, directory_domain, listing_found, listing_url, manual_override')
+        .eq('audit_id', auditId)
+        .eq('snapshot_date', latestDate);
+      const mismatches: string[] = [];
+      for (const r of rows ?? []) {
+        if (!r.listing_found || !r.listing_url || r.manual_override) continue;
+        try {
+          const host = new URL(r.listing_url).hostname.replace(/^www\./, '');
+          const expected = String(r.directory_domain ?? '').replace(/^www\./, '');
+          if (expected && host !== expected && !host.endsWith(`.${expected}`)) {
+            mismatches.push(`${r.directory_name} (${r.listing_url})`);
+          }
+        } catch {
+          mismatches.push(`${r.directory_name} (unparseable URL: ${r.listing_url})`);
+        }
+      }
+      if (mismatches.length > 0) {
+        failures.push({
+          name: 'citation_domain_mismatch',
+          passed: false,
+          feedback: `${mismatches.length} citation(s) marked found but the listing URL is not on the directory's domain — likely wrong-business false positives: ${mismatches.slice(0, 5).join('; ')}`,
+        });
+      }
+    }
+  }
+
   if (phase === 'strategy-brief') {
     // Strategy Brief: deterministic section header + depth checks
-    const briefDir = path.join(AUDITS_BASE, '..', 'audits');
-    // Resolve artifact via standard pattern
-    const baseDir = path.join(AUDITS_BASE, '', ''); // placeholder — actual path resolved in runQA
-    // We read the artifact here since we have access to domain via audit lookup
-    // Note: The full artifact is loaded later in runQA — here we need to get the audit's domain
-    // Since we only have auditId, query the audit to get domain
-    const { data: auditRow } = await sb
-      .from('audits')
-      .select('domain')
-      .eq('id', auditId)
-      .maybeSingle();
-    if (auditRow?.domain) {
-      const researchBase = path.join(AUDITS_BASE, auditRow.domain, 'research');
+    {
+      const researchBase = path.join(AUDITS_BASE, domain, 'research');
       if (fs.existsSync(researchBase)) {
         const dateDirs = fs.readdirSync(researchBase).filter((e: string) => /^\d{4}-\d{2}-\d{2}$/.test(e)).sort();
         const latestDir = dateDirs.length > 0 ? path.join(researchBase, dateDirs[dateDirs.length - 1]) : null;
@@ -5571,7 +5692,8 @@ async function runDeterministicChecks(
   }
 
   if (phase === 'jim') {
-    // Phase 2 QA: fail if 0 validated keywords were seeded
+    // Defense-in-depth: the Phase 2 gate checks this at seed time; re-verify
+    // here in case rows were deleted between phases
     const { count } = await sb
       .from('audit_keywords')
       .select('id', { count: 'exact', head: true })
@@ -5619,6 +5741,38 @@ async function runDeterministicChecks(
   return failures;
 }
 
+// Phases gated by deterministic checks only — no artifact rubric / LLM evaluation.
+const DETERMINISTIC_ONLY_PHASES = new Set(['keyword-research', 'local-presence']);
+
+/**
+ * Persist QA feedback to disk on failure (consumed by the shell retry via
+ * --qa-feedback), and clear any stale feedback file on pass.
+ */
+function writeQaFeedbackFile(domain: string, phase: string, result: QAResult): void {
+  try {
+    const fbPath = qaFeedbackPath(domain, phase);
+    if (result.verdict === 'fail') {
+      fs.mkdirSync(path.dirname(fbPath), { recursive: true });
+      const failedChecks = result.checks
+        .filter((c) => !c.passed)
+        .map((c) => `- [${c.name}] ${c.feedback}`);
+      const body = [
+        `QA verdict: FAIL for phase "${phase}".`,
+        '',
+        ...failedChecks,
+        '',
+        result.feedback ? `Overall: ${result.feedback}` : '',
+      ].join('\n').trim();
+      fs.writeFileSync(fbPath, body + '\n', 'utf-8');
+      console.log(`  QA feedback written to ${path.relative(process.cwd(), fbPath)}`);
+    } else if (fs.existsSync(fbPath)) {
+      fs.unlinkSync(fbPath);
+    }
+  } catch (err: any) {
+    console.log(`  Warning: could not write QA feedback file: ${err.message}`);
+  }
+}
+
 async function runQA(
   sb: SupabaseClient,
   auditId: string,
@@ -5627,10 +5781,12 @@ async function runQA(
   attemptNumber = 1,
 ): Promise<QAResult> {
   const rubric = QA_RUBRICS[phase];
-  if (!rubric) throw new Error(`No QA rubric defined for phase: ${phase}`);
+  if (!rubric && !DETERMINISTIC_ONLY_PHASES.has(phase)) {
+    throw new Error(`No QA rubric defined for phase: ${phase}`);
+  }
 
   // Run deterministic pre-flight checks
-  const deterministicFailures = await runDeterministicChecks(sb, auditId, phase);
+  const deterministicFailures = await runDeterministicChecks(sb, auditId, domain, phase);
   if (deterministicFailures.length > 0) {
     for (const f of deterministicFailures) {
       console.log(`  QA DETERMINISTIC FAIL: ${f.name} — ${f.feedback}`);
@@ -5650,6 +5806,29 @@ async function runQA(
         attempt_number: attemptNumber,
       });
     } catch { /* non-fatal */ }
+    writeQaFeedbackFile(domain, phase, result);
+    return result;
+  }
+
+  // Deterministic-only phases: all checks passed, no LLM evaluation needed
+  if (!rubric) {
+    const result: QAResult = {
+      verdict: 'pass',
+      checks: [{ name: 'deterministic_checks', passed: true, feedback: 'All deterministic checks passed' }],
+      feedback: '',
+    };
+    try {
+      await sb.from('audit_qa_results').insert({
+        audit_id: auditId,
+        phase,
+        verdict: result.verdict,
+        checks: result.checks,
+        feedback: result.feedback,
+        attempt_number: attemptNumber,
+      });
+    } catch { /* non-fatal */ }
+    writeQaFeedbackFile(domain, phase, result);
+    console.log(`  QA verdict: PASS (deterministic)`);
     return result;
   }
 
@@ -5669,11 +5848,13 @@ async function runQA(
   }
 
   if (!artifactPath) {
-    return {
+    const result: QAResult = {
       verdict: 'fail',
       checks: [{ name: 'artifact_exists', passed: false, feedback: `Artifact not found: ${rubric.artifactFilename}` }],
       feedback: `Artifact not found at ${baseDir}/*/${rubric.artifactFilename}`,
     };
+    writeQaFeedbackFile(domain, phase, result);
+    return result;
   }
 
   const artifactContent = fs.readFileSync(artifactPath, 'utf-8');
@@ -5728,6 +5909,7 @@ async function runQA(
     console.log(`  QA feedback: ${qaResult.feedback.slice(0, 200)}`);
   }
 
+  writeQaFeedbackFile(domain, phase, qaResult);
   return qaResult;
 }
 
@@ -5780,6 +5962,8 @@ async function main() {
   const { audit } = await resolveAudit(sb, args.domain, args.userEmail);
   console.log(`  Audit: ${audit.id} (${audit.status})`);
 
+  if (args.qaFeedback) setQaFeedback(args.qaFeedback);
+
   if (args.mode === 'sales') {
     await sb.from('audits').update({ mode: 'sales' }).eq('id', audit.id);
     console.log(`  Mode: sales`);
@@ -5809,7 +5993,7 @@ async function main() {
       break;
     case 'qa': {
       if (!args.phase) {
-        console.error('--phase is required for qa subcommand (dwight|jim|gap|michael)');
+        console.error('--phase is required for qa subcommand (dwight|strategy-brief|keyword-research|jim|gap|michael|local-presence)');
         process.exit(1);
       }
       const qaResult = await runQA(sb, audit.id, args.domain, args.phase);
