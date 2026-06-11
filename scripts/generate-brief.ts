@@ -136,6 +136,7 @@ interface PamRequest {
   silo_name: string | null;
   page_role: string | null;
   target_keywords: any;
+  operator_notes: string | null;
   action_type: string;
   domain: string;
   status: string;
@@ -977,6 +978,26 @@ function buildPrompt(
   const pageRole = req.page_role ?? brief?.role ?? 'service page';
   const coverageRole = (brief as any)?.coverage_role ?? 'commercial';
 
+  // Operator-directed requests carry explicit targets that override
+  // audit-derived inference. Placed at the top of the prompt for authority.
+  const operatorKeywords = Array.isArray(req.target_keywords)
+    ? (req.target_keywords as any[]).filter((k) => typeof k === 'string' && k.trim())
+    : [];
+  const operatorDirectivesSection = (operatorKeywords.length > 0 || req.operator_notes)
+    ? [
+        '## OPERATOR DIRECTIVES (authoritative — these override inferred targeting)',
+        'A human operator requested this page directly. Honor these inputs exactly:',
+        operatorKeywords.length > 0
+          ? `- Target keywords (in priority order): ${operatorKeywords.join(', ')}. The first keyword is the primary keyword for this page.`
+          : '',
+        req.operator_notes
+          ? `- Operator notes / campaign intent:\n${req.operator_notes}`
+          : '',
+        'Where these directives conflict with audit-derived context below, the directives win. Do not substitute a different primary keyword.',
+        '',
+      ].filter(Boolean).join('\n')
+    : '';
+
   const domain = auditMeta.domain;
   const service_key = auditMeta.service_key;
   const market_city = auditMeta.market_city;
@@ -1079,6 +1100,7 @@ function buildPrompt(
   );
 
   return template
+    .replace('{{OPERATOR_DIRECTIVES}}', operatorDirectivesSection)
     .replace('{{ACTION_TYPE}}', actionType === 'create' ? 'CREATE — brand new page' : 'OPTIMIZE — existing page')
     .replaceAll('{{DOMAIN}}', domain)
     .replaceAll('{{SLUG}}', slug)

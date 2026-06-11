@@ -4,6 +4,7 @@ Your job is strategic content engineering. You are not producing a document temp
 
 ## Action Type: {{ACTION_TYPE}}
 
+{{OPERATOR_DIRECTIVES}}
 {{ENTITY_MAP_SECTION}}
 {{SEARCH_INTENT_SECTION}}
 ## Page Identity

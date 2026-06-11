@@ -609,11 +609,14 @@ Written by syncMichael (Phase 6b) and Cluster Strategy (on-demand), updated by P
 |--------|--------|--------|
 | `audit_id`, `page_url`, `silo_name`, `page_role` | Dashboard (INSERT) | Pipeline |
 | `target_keywords` | Dashboard | Pipeline |
+| `operator_notes` (migration 034) | Dashboard (operator dialog) | Pipeline — injected into Pam's prompt as OPERATOR DIRECTIVES; NULL for audit-derived requests |
 | `domain` | Dashboard | Pipeline |
 | `status` | Pipeline | Dashboard | `pending` → `processing` → `completed` / `failed` |
 | `error_message` | Pipeline | Dashboard |
 
 **Dashboard polls**: 3s interval while pending/processing
+
+**`execution_pages.source` values** (TEXT, no CHECK): `michael` (architecture blueprint), `cluster_strategy` (buyer-journey expansion), `manual` (dashboard cluster add), `operator` (operator-directed dialog, Session 7-8). syncMichael's strategic-rerun deprecation only touches `source='michael'` rows. **`execution_pages.status` CHECK** (migration 034): `not_started | brief_ready | in_progress | draft_ready | review | in_review | published | deprecated` — `draft_ready`/`in_review` added because the dashboard status dropdown writes them (previously rejected by the CHECK).
 
 ---
 

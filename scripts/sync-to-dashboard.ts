@@ -2454,17 +2454,26 @@ async function syncMichael(
         }
       }
 
-      // Handle stale pages (in DB but not in new output)
+      // Handle stale pages (in DB but not in new output).
+      // Michael only owns its own pages: rows from cluster_strategy, manual
+      // adds, or operator requests are never deprecated by an architecture
+      // re-run — their absence from the blueprint is expected, not staleness.
       let deprecated = 0;
       let stalePreserved = 0;
+      let foreignPreserved = 0;
       for (const [key, ep] of existingBySlug) {
         if (newSlugs.has(key)) continue;
-        if (isCommitted(ep)) {
+        if ((ep as any).source && (ep as any).source !== 'michael') {
+          foreignPreserved++;
+        } else if (isCommitted(ep)) {
           stalePreserved++;
         } else {
           await (sb as any).from('execution_pages').update({ status: 'deprecated' }).eq('id', ep.id);
           deprecated++;
         }
+      }
+      if (foreignPreserved > 0) {
+        console.log(`  [michael] Preserved ${foreignPreserved} non-michael page(s) (cluster_strategy/manual/operator) absent from blueprint`);
       }
 
       // Parse deprecation candidates from blueprint (Michael's ## Deprecation Candidates section)
@@ -2476,6 +2485,12 @@ async function syncMichael(
           for (const c of candidates) {
             const cSlug = c.url_slug.replace(/^\/+/, '').toLowerCase();
             const ep = existingBySlug.get(cSlug);
+            // Operator pages outrank Michael's deprecation recommendations —
+            // a human explicitly requested them
+            if ((ep as any)?.source === 'operator') {
+              console.log(`  [michael] Skipping deprecation recommendation for operator page: ${c.url_slug}`);
+              continue;
+            }
             if (ep && isCommitted(ep) && ep.status !== 'published') {
               // Michael explicitly recommends deprecation — only apply to non-published committed pages
               await (sb as any).from('execution_pages').update({ status: 'deprecated' }).eq('id', ep.id);
