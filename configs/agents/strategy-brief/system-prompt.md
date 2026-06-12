@@ -5,7 +5,7 @@ You are a strategic SEO analyst. Synthesize the inputs below into a strategy bri
 - Industry/Service: {{SERVICE_KEY}}
 - Geo Mode: {{GEO_MODE}}
 - Target Markets: {{GEO_DESCRIPTION}}
-{{CLIENT_CONTEXT_BLOCK}}{{DASHBOARD_EXTRAS_BLOCK}}{{CLIENT_PROFILE_BLOCK}}{{AUDIT_REPORT_BLOCK}}{{GSC_BLOCK}}{{SCOUT_BLOCK}}
+{{CLIENT_CONTEXT_BLOCK}}{{DASHBOARD_EXTRAS_BLOCK}}{{CLIENT_PROFILE_BLOCK}}{{AUDIT_REPORT_BLOCK}}{{GSC_BLOCK}}{{PROVEN_CEILING_BLOCK}}{{SCOUT_BLOCK}}
 ## Task
 
 Produce a strategy brief with exactly these four sections. Each section must be actionable and specific to this business — no generic advice.

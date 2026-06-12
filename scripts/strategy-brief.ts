@@ -20,6 +20,8 @@ import * as path from 'node:path';
 import { callClaude, initAnthropicClient } from './anthropic-client.js';
 import { loadClientContextAsync, buildClientContextPrompt } from './client-context.js';
 import type { DashboardExtras } from './client-context.js';
+import { buildCeilingPromptBlock } from '../src/analysis/proven-ceiling.js';
+import { fetchProvenCeiling } from '../src/analysis/proven-ceiling-fetch.js';
 
 const AUDITS_BASE = path.resolve(process.cwd(), 'audits');
 
@@ -172,6 +174,7 @@ interface BriefInputs {
   serviceKey: string;
   domain: string;
   gscSummary: string | null;
+  provenCeilingBlock: string;
 }
 
 async function gatherInputs(sb: SupabaseClient, audit: any, domain: string): Promise<BriefInputs> {
@@ -251,6 +254,20 @@ async function gatherInputs(sb: SupabaseClient, audit: any, domain: string): Pro
     console.log(`  gsc_summary.md: ${gscSummary.length} chars`);
   }
 
+  // Proven ranking ceiling (empty on first runs — Phase 1b runs before Jim
+  // populates audit_keywords; re-runs get the prior run's empirical ceiling)
+  let provenCeilingBlock = '';
+  try {
+    const ceiling = await fetchProvenCeiling(sb, audit.id);
+    provenCeilingBlock = buildCeilingPromptBlock(
+      ceiling,
+      'Use the proven ceiling, not domain rating, as the quantified authority assessment when framing the visibility posture and recommending target difficulty: name the ceiling explicitly, and frame anything above it as requiring authority building first.',
+    );
+    if (provenCeilingBlock) console.log(`  Proven ceiling block: ${ceiling.cold_start ? 'cold start' : `site KD ${ceiling.site_ceiling}`}`);
+  } catch (err: any) {
+    console.log(`  Note: proven ceiling unavailable (non-fatal): ${err.message}`);
+  }
+
   return {
     auditReport,
     scopeJson,
@@ -263,6 +280,7 @@ async function gatherInputs(sb: SupabaseClient, audit: any, domain: string): Pro
     serviceKey: audit.service_key || audit.custom_service_label || '',
     domain,
     gscSummary,
+    provenCeilingBlock,
   };
 }
 
@@ -349,6 +367,7 @@ function buildPrompt(inputs: BriefInputs): string {
     .replace('{{CLIENT_PROFILE_BLOCK}}', clientProfileBlock)
     .replace('{{AUDIT_REPORT_BLOCK}}', auditReportBlock)
     .replace('{{GSC_BLOCK}}', gscBlock)
+    .replace('{{PROVEN_CEILING_BLOCK}}', inputs.provenCeilingBlock)
     .replace('{{SCOUT_BLOCK}}', scoutBlock);
 }
 

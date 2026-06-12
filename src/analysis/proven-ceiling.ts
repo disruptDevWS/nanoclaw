@@ -43,6 +43,8 @@ export interface ProvenCeilingResult {
 
 export const OWNED_MAX_POS = 7;
 export const COLD_START_MIN_OWNED = 15;
+/** Headroom above a ceiling before a keyword counts as a stretch target. */
+export const CEILING_STRETCH_HEADROOM = 5;
 
 /** Second-highest KD among owned keywords (≥2-rankings fluke guard). */
 function ceilingFromKds(owned: Array<{ keyword: string; kd: number }>): {
@@ -113,4 +115,53 @@ export function computeProvenCeiling(keywords: CeilingKeyword[]): ProvenCeilingR
     site_ceiling_example: siteExample,
     cluster_ceilings: clusterCeilings,
   };
+}
+
+/**
+ * Markdown prompt block for agent injection (Strategy Brief / Michael /
+ * Cluster Strategy). `instruction` is the consumer-specific directive appended
+ * after the data. Returns '' when there is nothing meaningful to say (no
+ * keyword data at all). On cold-start sites it emits a short cold-start note
+ * instead of ceilings. `focusClusterKey` narrows the cluster table to one
+ * cluster (Cluster Strategy use case); otherwise the top `maxClusters` by
+ * ceiling are listed.
+ */
+export function buildCeilingPromptBlock(
+  result: ProvenCeilingResult,
+  instruction: string,
+  opts: { focusClusterKey?: string | null; maxClusters?: number } = {},
+): string {
+  if (result.owned_count === 0 && result.owned_with_kd_count === 0) return '';
+
+  const header = `\n## Proven Ranking Ceiling (empirical authority — derived from actual top-7 rankings)\n`;
+
+  if (result.cold_start || result.site_ceiling === null) {
+    return `${header}This site is effectively COLD START: only ${result.owned_count} proven top-7 rankings (need 15+ for an empirical ceiling). Authority is unproven — treat all moderate-or-higher difficulty keywords as stretch targets requiring authority building, and prefer low-difficulty, low-competition targets for early wins.\n${instruction}\n`;
+  }
+
+  const lines: string[] = [];
+  const example = result.site_ceiling_example
+    ? ` (already ranks top-7 for "${result.site_ceiling_example.keyword}" at KD ${result.site_ceiling_example.kd})`
+    : '';
+  lines.push(`Site ceiling: KD ${result.site_ceiling}${example} — based on ${result.owned_count} proven top-7 rankings. This, not domain rating, is the empirical rankability bar.`);
+
+  let clusterRows = result.cluster_ceilings;
+  if (opts.focusClusterKey !== undefined) {
+    clusterRows = clusterRows.filter((c) => c.canonical_key === opts.focusClusterKey);
+  } else {
+    clusterRows = clusterRows.slice(0, opts.maxClusters ?? 15);
+  }
+  if (clusterRows.length > 0) {
+    lines.push(`Cluster ceilings (clusters without one fall back to the site ceiling):`);
+    for (const c of clusterRows) {
+      const ceiling = c.ceiling !== null
+        ? `KD ${c.ceiling}${c.example_keyword ? ` (e.g. "${c.example_keyword}")` : ''}`
+        : `no cluster-specific ceiling (${c.owned_with_kd} owned keyword${c.owned_with_kd === 1 ? '' : 's'} w/ KD — use site ceiling)`;
+      lines.push(`- ${c.canonical_topic ?? c.canonical_key}: ${ceiling}`);
+    }
+  } else if (opts.focusClusterKey !== undefined) {
+    lines.push(`This cluster has no proven top-7 rankings with difficulty data — use the site ceiling as the bar.`);
+  }
+
+  return `${header}${lines.join('\n')}\n\nA keyword more than ${CEILING_STRETCH_HEADROOM} KD points above the applicable ceiling (cluster ceiling where one exists, site ceiling otherwise) is a STRETCH TARGET: rankable only after additional authority building in that cluster.\n${instruction}\n`;
 }

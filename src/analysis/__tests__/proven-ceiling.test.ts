@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeProvenCeiling, CeilingKeyword } from '../proven-ceiling.js';
+import { computeProvenCeiling, buildCeilingPromptBlock, CeilingKeyword } from '../proven-ceiling.js';
 
 function kw(overrides: Partial<CeilingKeyword>): CeilingKeyword {
   return {
@@ -94,5 +94,49 @@ describe('computeProvenCeiling', () => {
     expect(result.cold_start).toBe(false);
     expect(result.owned_with_kd_count).toBe(1);
     expect(result.site_ceiling).toBeNull(); // only one KD'd keyword — no ≥2 guard
+  });
+});
+
+describe('buildCeilingPromptBlock', () => {
+  const INSTRUCTION = 'Use this as the rankability bar.';
+
+  it('returns empty string when there is no keyword data at all', () => {
+    expect(buildCeilingPromptBlock(computeProvenCeiling([]), INSTRUCTION)).toBe('');
+  });
+
+  it('emits a cold-start note instead of ceilings below the owned threshold', () => {
+    const block = buildCeilingPromptBlock(computeProvenCeiling(owned(5)), INSTRUCTION);
+    expect(block).toContain('COLD START');
+    expect(block).toContain('5 proven top-7 rankings');
+    expect(block).toContain(INSTRUCTION);
+    expect(block).not.toContain('Site ceiling: KD');
+  });
+
+  it('renders site + cluster ceilings with the stretch rule and instruction', () => {
+    const kws = [
+      ...owned(14, { keyword_difficulty: 10, canonical_key: 'big', canonical_topic: 'Big' }),
+      kw({ keyword: 'a', keyword_difficulty: 35, canonical_key: 'comp', canonical_topic: 'Comp' }),
+      kw({ keyword: 'b', keyword_difficulty: 33, canonical_key: 'comp', canonical_topic: 'Comp' }),
+    ];
+    const block = buildCeilingPromptBlock(computeProvenCeiling(kws), INSTRUCTION);
+    expect(block).toContain('Site ceiling: KD 33');
+    expect(block).toContain('Big: KD 10');
+    expect(block).toContain('Comp: KD 33');
+    expect(block).toContain('STRETCH TARGET');
+    expect(block).toContain(INSTRUCTION);
+  });
+
+  it('focusClusterKey narrows to one cluster; missing cluster falls back to site-bar note', () => {
+    const kws = [
+      ...owned(14, { keyword_difficulty: 10, canonical_key: 'big', canonical_topic: 'Big' }),
+      kw({ keyword: 'a', keyword_difficulty: 35, canonical_key: 'comp', canonical_topic: 'Comp' }),
+      kw({ keyword: 'b', keyword_difficulty: 33, canonical_key: 'comp', canonical_topic: 'Comp' }),
+    ];
+    const result = computeProvenCeiling(kws);
+    const focused = buildCeilingPromptBlock(result, INSTRUCTION, { focusClusterKey: 'comp' });
+    expect(focused).toContain('Comp: KD 33');
+    expect(focused).not.toContain('Big: KD 10');
+    const missing = buildCeilingPromptBlock(result, INSTRUCTION, { focusClusterKey: 'absent_cluster' });
+    expect(missing).toContain('no proven top-7 rankings with difficulty data');
   });
 });

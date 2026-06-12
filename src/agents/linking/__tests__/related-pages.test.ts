@@ -18,6 +18,7 @@ import {
   rankRelatedPages,
   buildExecPageText,
   formatRelatedPagesSection,
+  gscPathKey,
   execPageContentId,
   type PoolEntry,
   type ExecPageRow,
@@ -163,5 +164,40 @@ describe('formatRelatedPagesSection()', () => {
     expect(
       formatRelatedPagesSection({ ...result, candidates: [], cannibalization_risks: [] }),
     ).toBe('');
+  });
+});
+
+describe('formatRelatedPagesSection() with positions', () => {
+  const result: RelatedPagesResult = {
+    computed_at: '2026-06-10T00:00:00.000Z',
+    model: 'test-model',
+    source: 'disk',
+    candidates: [
+      { target: 'https://x.com/a/', kind: 'live', title: 'Page A', similarity: 0.78 },
+      { target: '/b', kind: 'planned', title: 'Page B', similarity: 0.61 },
+    ],
+    cannibalization_risks: [],
+  };
+
+  it('adds a Position column, matching paths with/without trailing slash', () => {
+    const positions = new Map([['/a', 12.4]]);
+    const md = formatRelatedPagesSection(result, positions);
+    expect(md).toContain('| Target | Type | Title | Similarity | Position |');
+    expect(md).toContain('| https://x.com/a/ | [LIVE] | Page A | 0.78 | 12.4 |');
+    expect(md).toContain('| /b | [PLANNED] | Page B | 0.61 | — |');
+    expect(md).toContain('Position = latest GSC average position');
+  });
+
+  it('omits the column entirely when no positions map is passed (legacy format)', () => {
+    expect(formatRelatedPagesSection(result)).not.toContain('Position');
+  });
+});
+
+describe('gscPathKey()', () => {
+  it('normalizes URLs and paths to lowercase no-trailing-slash pathnames', () => {
+    expect(gscPathKey('https://x.com/EMT-Boise/')).toBe('/emt-boise');
+    expect(gscPathKey('/a/b/')).toBe('/a/b');
+    expect(gscPathKey('a')).toBe('/a');
+    expect(gscPathKey('https://x.com/')).toBe('/');
   });
 });

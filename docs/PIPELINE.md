@@ -393,7 +393,7 @@ Client Brief (auto after Phase 6d, non-fatal)
 **Script:** `scripts/strategy-brief.ts` | **Model:** Claude Sonnet
 
 **Steps:**
-1. **Gather** — Loads AUDIT_REPORT.md (cross-date fallback), scope.json + scout markdown (optional), client_context from prospect-config.json (optional), client_profiles from Supabase (optional), audit metadata (geo_mode, market_geos, service_key)
+1. **Gather** — Loads AUDIT_REPORT.md (cross-date fallback), scope.json + scout markdown (optional), client_context from prospect-config.json (optional), client_profiles from Supabase (optional), audit metadata (geo_mode, market_geos, service_key), and the proven ranking ceiling (`fetchProvenCeiling()` over `audit_keywords` → `{{PROVEN_CEILING_BLOCK}}` — empty on first runs since Phase 1b precedes Jim; re-runs get the prior run's empirical ceiling as a quantified authority assessment; cold-start sites get a cold-start note; non-fatal)
 2. **Synthesize** — Single Sonnet call produces `strategy_brief.md` with four sections: Visibility Posture, Entity Authority Directive, Architecture Directive, Risk Flags
 3. **Write** — Brief saved to `audits/{domain}/research/{date}/strategy_brief.md`
 
@@ -816,6 +816,7 @@ Reads ALL prior artifacts to produce a silo-based site architecture.
 - Gap: `content_gap_analysis.md`
 - Dwight: `internal_all.csv` (filtered, 100 rows), Platform Observations from `AUDIT_REPORT.md`
 - Supabase: `audit_clusters` (revenue estimates), `audit_assumptions` + `audit_rollups` (sales mode revenue)
+- Supabase: proven ranking ceiling (`fetchProvenCeiling()` → context block; non-fatal) — pages whose primary keyword exceeds their cluster ceiling (+5 headroom) must be marked "(stretch target — requires authority building)" and sequenced after within-ceiling pages in the silo
 - Client context: `prospect-config.json` → `client_context` (full mode only)
 
 All cross-phase reads use `resolveArtifactPath()` with date fallback for operational resilience.
@@ -993,6 +994,10 @@ Oscar (generate-content.ts) — polls oscar_requests
 **BoF length directive (B2, 2026-06-12):** When `coverage_role` is `commercial`/`comparison` (incl. the null→commercial default) AND `buyer_stage` contains `decision`, `buildPrompt()` injects a binding **Bottom-of-Funnel Length Directive** via `{{CONTENT_LENGTH_DIRECTIVE}}`: target 400–800 words ("why us" 400–500, comparison 500–800, default 600), 800 hard ceiling (= the MoF floor). Pam must emit `Target Word Count: <N> words` in Implementation Notes — parsed by `extractWordCountTarget()` (outline first, metadata fallback) into `execution_pages.target_word_count`, which Oscar treats as a directive (playbook §4). All other pages keep the "intent drives length, not word counts" rule. Pages with `buyer_stage` NULL (Michael-sourced) never get the directive.
 
 **Video carousel → VideoObject (C3, 2026-06-12):** Pam's SERP enrichment already detects `has_video` in SERP features; the prompt now instructs: when "video" appears in SERP Features Present, flag the video opportunity in Implementation Notes and include a VideoObject schema stub only if the brief recommends video for the page. Oscar's playbook §10 lowers the bar for `<!-- VIDEO: -->` recommendations when the brief flags a carousel and carries the VideoObject stub through the JSON-LD. Gap receives the same signal per opportunity keyword via the SERP composition block (Phase 5).
+
+**Position-band link routing (C2, 2026-06-12):** `gatherContext()` loads the latest `gsc_page_snapshots` positions per path (paginated; `page_url` stores PATHS); `formatRelatedPagesSection(result, positions)` and the siblings table gain a Position column (`gscPathKey()` normalizes URL/path with/without trailing slash). Pam's Internal Linking rules: among semantically eligible targets, PREFER position 4–20 ("almost there" pages — authority transfer does the most good); position 1–3 only for user navigation; no-data/50+ only for new-page discovery. Position routing never overrides similarity-based eligibility. Oscar's playbook §6 adds the ≤25 internal links per page cap and the same band preference for beyond-map contextual links.
+
+**Multi-variant extended titles (C1, 2026-06-12):** Conditional `**Extended Title Tag:**` metadata field — ONLY when the page's keyword data shows 3+ distinct intent variants (comparison, how-to, pricing, certification, geographic): 150–200 chars, 2–3 natural-phrase segments separated by " - ", first segment = strongest primary-keyword match (Google segment-matches long titles across query variants; `titlematchScore`). The short ≤60 Meta Title is unchanged and still what `extractMetadataField()` persists to `execution_pages.meta_title`; the extended title travels in `metadata_markdown`. Oscar records both in the HTML metadata comment block — the extended version is the intended `<title>` element.
 
 **Information Gain Directive:** Evaluates the client profile (services, certifications, proprietary processes, case studies) to determine the level of proprietary knowledge available. This gates Pam's content strategy: pages with `PROPRIETARY KNOWLEDGE AVAILABLE` emphasize unique data and client expertise; `COMMODITY CONTENT RISK` pages require explicit information gain strategies to differentiate from generic competitors.
 
@@ -1328,7 +1333,7 @@ Cluster activation is an on-demand step that generates a strategy document for a
 
 **Steps:**
 1. Resolve audit from Supabase (domain + email)
-2. Load cluster (with `primary_entity_type`), keywords, execution_pages, gap analysis, competitors, client context
+2. Load cluster (with `primary_entity_type`), keywords, execution_pages, gap analysis, competitors, client context, and the proven ranking ceiling (`fetchProvenCeiling()` with `focusClusterKey` — this cluster's ceiling + site fallback; non-fatal). Recommended pages targeting stretch keywords (>ceiling+5) must say so in their rationale and be sequenced after within-ceiling pages.
 3. Build prompt → `callClaude()` with Opus (strategic judgment tier). Prompt includes entity type context and Section 0 (Entity Map) requirement.
 4. Parse via `extractJsonBySection()` (header-based, not positional): entity_map (Section 0, includes `search_intent` + `intent_rationale`), buyer_stages (Section 1), recommended_pages (Section 3), format_gaps (Section 4), AI optimization notes (Section 5), visibility_queries (Section 7)
 5. Upsert `cluster_strategy` table (includes `entity_map` JSONB, `search_intent` TEXT, `visibility_queries` JSONB)

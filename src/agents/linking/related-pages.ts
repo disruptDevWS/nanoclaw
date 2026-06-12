@@ -304,25 +304,57 @@ export async function computeRelatedPages(
 
 // ── Prompt section formatter ──────────────────────────────────
 
-/** Markdown section injected into Pam's prompt. '' when nothing to show. */
-export function formatRelatedPagesSection(result: RelatedPagesResult | null): string {
+/** Lookup key for GSC position maps: lowercase pathname, no trailing slash. */
+export function gscPathKey(target: string): string {
+  let p = target;
+  try {
+    p = new URL(target).pathname;
+  } catch {
+    // already a path
+  }
+  p = p.toLowerCase().replace(/\/+$/, '');
+  if (!p.startsWith('/')) p = `/${p}`;
+  return p || '/';
+}
+
+/** Markdown section injected into Pam's prompt. '' when nothing to show.
+ * When `positionsByPath` (latest GSC avg position per pathname) is provided,
+ * a Position column is added so Pam can apply position-band link routing (C2). */
+export function formatRelatedPagesSection(
+  result: RelatedPagesResult | null,
+  positionsByPath?: Map<string, number>,
+): string {
   if (!result) return '';
   if (result.candidates.length === 0 && result.cannibalization_risks.length === 0) return '';
 
+  const withPositions = positionsByPath !== undefined;
   const lines: string[] = [
     '## Verified Internal Link Candidates (semantic similarity)',
     'These pages were verified to exist (live on the site or planned in the architecture).',
     '[LIVE] pages exist today; [PLANNED] pages are in the architecture but not yet published.',
-    '',
   ];
+  if (withPositions) {
+    lines.push('Position = latest GSC average position for the target page ("—" = no ranking data, typical for planned/new pages).');
+  }
+  lines.push('');
 
   if (result.candidates.length > 0) {
-    lines.push('| Target | Type | Title | Similarity |');
-    lines.push('|--------|------|-------|------------|');
+    if (withPositions) {
+      lines.push('| Target | Type | Title | Similarity | Position |');
+      lines.push('|--------|------|-------|------------|----------|');
+    } else {
+      lines.push('| Target | Type | Title | Similarity |');
+      lines.push('|--------|------|-------|------------|');
+    }
     for (const c of result.candidates) {
       const marker = c.kind === 'live' ? '[LIVE]' : '[PLANNED]';
       const title = c.title.replace(/\|/g, '\\|');
-      lines.push(`| ${c.target} | ${marker} | ${title} | ${c.similarity.toFixed(2)} |`);
+      if (withPositions) {
+        const pos = positionsByPath!.get(gscPathKey(c.target));
+        lines.push(`| ${c.target} | ${marker} | ${title} | ${c.similarity.toFixed(2)} | ${pos !== undefined ? pos.toFixed(1) : '—'} |`);
+      } else {
+        lines.push(`| ${c.target} | ${marker} | ${title} | ${c.similarity.toFixed(2)} |`);
+      }
     }
   }
 

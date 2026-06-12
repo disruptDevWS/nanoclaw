@@ -19,6 +19,7 @@ import { formatRevenueOpportunity } from '../src/agents/gap/format-revenue.js';
 import {
   computeRelatedPages,
   formatRelatedPagesSection,
+  gscPathKey,
   type RelatedPagesResult,
 } from '../src/agents/linking/related-pages.js';
 
@@ -654,6 +655,38 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
     }
   }
 
+  // 16b. Latest GSC positions per path — position-band link routing (C2)
+  const gscPositions = new Map<string, number>();
+  try {
+    const { data: latestSnap } = await (sb as any)
+      .from('gsc_page_snapshots')
+      .select('snapshot_date')
+      .eq('audit_id', req.audit_id)
+      .order('snapshot_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latestSnap?.snapshot_date) {
+      // page_url stores PATHS (e.g. /emt-seattle), not full URLs
+      for (let from = 0; ; from += 1000) {
+        const { data: gscRows } = await (sb as any)
+          .from('gsc_page_snapshots')
+          .select('page_url, avg_position')
+          .eq('audit_id', req.audit_id)
+          .eq('snapshot_date', latestSnap.snapshot_date)
+          .range(from, from + 999);
+        for (const row of gscRows ?? []) {
+          if (row.page_url && row.avg_position != null) {
+            gscPositions.set(gscPathKey(row.page_url), Number(row.avg_position));
+          }
+        }
+        if (!gscRows || gscRows.length < 1000) break;
+      }
+      console.log(`  GSC positions: ${gscPositions.size} paths (${latestSnap.snapshot_date}) for link routing`);
+    }
+  } catch (err: any) {
+    console.log(`  Note: GSC positions unavailable (non-fatal): ${err.message}`);
+  }
+
   // 17. Visibility queries from cluster strategy
   let visibilityQueries: string[] = [];
   if (canonicalKey) {
@@ -674,7 +707,7 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
     }
   }
 
-  return { auditMeta, brief, keywords, siblings, relatedPages, blueprintExcerpt, siloName, serpEnrichment, clientProfile, authorityGaps, formatGaps, aiCitationGaps, marketContext, strategyContext, primaryEntityType, entityMap, searchIntent, buyerStage, strategyRationale, canonicalKey, technicalBaselineSection, gbpEntitySection, siblingCoverageSection, performanceContextSection, clusterAiTargets, visibilityQueries };
+  return { auditMeta, brief, keywords, siblings, relatedPages, blueprintExcerpt, siloName, serpEnrichment, clientProfile, authorityGaps, formatGaps, aiCitationGaps, marketContext, strategyContext, primaryEntityType, entityMap, searchIntent, buyerStage, strategyRationale, canonicalKey, technicalBaselineSection, gbpEntitySection, siblingCoverageSection, performanceContextSection, clusterAiTargets, visibilityQueries, gscPositions };
 }
 
 function escapeRegex(s: string): string {
@@ -1014,15 +1047,16 @@ function buildPrompt(
       ].join('\n')
     : 'No keyword data available. Use best judgment based on the page topic and domain context.';
 
-  // Build siblings table
+  // Build siblings table (Position = latest GSC avg position, for link routing)
   const siblingsTable = siblings.length > 0
     ? [
-        '| URL | Role | Status | Has Brief |',
-        '|-----|------|--------|-----------|',
+        '| URL | Role | Status | Has Brief | Position |',
+        '|-----|------|--------|-----------|----------|',
         ...siblings.map((s) => {
           const sBrief = s.page_brief as Record<string, any> | null;
           const sSlug = s.url_slug.replace(/^\/+/, '');
-          return `| /${sSlug} | ${sBrief?.role ?? '—'} | ${s.status} | ${s.meta_title ? 'Yes' : 'No'} |`;
+          const sPos = ctx.gscPositions.get(gscPathKey(`/${sSlug}`));
+          return `| /${sSlug} | ${sBrief?.role ?? '—'} | ${s.status} | ${s.meta_title ? 'Yes' : 'No'} | ${sPos !== undefined ? sPos.toFixed(1) : '—'} |`;
         }),
       ].join('\n')
     : 'No sibling pages found for this silo.';
@@ -1139,7 +1173,7 @@ This is a Decision-stage conversion page. Target length: 400-800 words.
     .replace('{{BLUEPRINT_EXCERPT}}', blueprintExcerpt || 'No architecture blueprint available.')
     .replace('{{SIBLINGS_TABLE}}', siblingsTable)
     .replace('{{SIBLING_COVERAGE}}', siblingCoverageSection)
-    .replace('{{RELATED_PAGES_SECTION}}', formatRelatedPagesSection(ctx.relatedPages))
+    .replace('{{RELATED_PAGES_SECTION}}', formatRelatedPagesSection(ctx.relatedPages, ctx.gscPositions))
     .replace('{{STRATEGY_CONTEXT}}', strategyContext ? `## Strategy Brief (Phase 1b)\n${strategyContext}\n` : '')
     .replace('{{BUYER_STAGE_SECTION}}', buyerStageSection)
     .replace('{{CONTENT_LENGTH_DIRECTIVE}}', contentLengthDirective)

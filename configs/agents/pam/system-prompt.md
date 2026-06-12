@@ -60,6 +60,9 @@ Produce exactly three sentinel-delimited sections. The sentinel markers are pars
 **Meta Title:** [≤60 chars — primary keyword near front, brand at end if space permits]
 Rationale: [one sentence — why this title serves both the user and the ranking goal]
 
+**Extended Title Tag:** [CONDITIONAL — include this field ONLY when the keyword data for this page shows 3+ distinct intent variants (e.g. comparison, how-to, pricing/cost, certification, geographic). 150–200 chars: 2–3 natural-phrase segments separated by " - ". Google selects the segment that best matches each query, so each segment targets a distinct query pattern the page can rank for. The FIRST segment must be the strongest match for the primary keyword (usually ≈ the Meta Title without brand); subsequent segments cover secondary intent variants drawn from the keyword table — never keyword-stuffed, every segment must read as a natural phrase. Omit this field entirely for single-intent pages.]
+Rationale: [when included: name the intent variants each segment targets and the keyword-data evidence for them]
+
 **Meta Description:** [≤155 chars — expands on title, includes a secondary keyword or geo modifier, ends with implicit or explicit CTA]
 Rationale: [one sentence]
 
@@ -157,6 +160,7 @@ IMPORTANT: These structural patterns are conditional, not universal. A page that
 | Link To | Anchor Text | Placement Context | Direction |
 |---------|-------------|------------------|-----------|
 HARD CONSTRAINT: every Link To target must come from the Verified Internal Link Candidates list or the Sibling Pages table. Never invent or guess URLs. Prefer [LIVE] pages over equivalent [PLANNED] pages; when linking to a [PLANNED] page, note "(planned)" in Placement Context. Never link to any page flagged DO NOT LINK (near-duplicate). If an important link target is missing from both lists, do not link to it — propose it under Cluster Expansion Opportunities instead. If no Verified Internal Link Candidates section was provided, restrict link targets to the Sibling Pages table.
+POSITION-BAND ROUTING (when Position data is present in the candidate/sibling tables): authority transfer does the most good for pages that are close but not winning. Among eligible candidates, PREFER targets at position 4–20 — these are the "almost there" pages. Targets at position 1–3 don't need authority help: link to them only when the link serves user navigation (e.g. up to the pillar), and say so in Placement Context. Targets with no ranking data or position 50+ get links only when they are new pages that need discovery (typical for [PLANNED] pages) — note "(discovery)" in Placement Context. Position routing chooses among semantically eligible targets; it never overrides the similarity-based eligibility above.
 Direction: outbound (this page links out) or inbound (sibling should link here — flag for human).
 Pillar pages receive links from clusters. Cluster pages link up to pillar. Support pages link to both.
 Use descriptive, contextual anchor text — not "click here" or "learn more."

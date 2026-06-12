@@ -17,6 +17,8 @@ import * as path from 'node:path';
 import { callClaude, initAnthropicClient } from './anthropic-client.js';
 import { loadClientContextAsync, buildClientContextPrompt } from './client-context.js';
 import { formatRevenueOpportunity } from '../src/agents/gap/format-revenue.js';
+import { buildCeilingPromptBlock } from '../src/analysis/proven-ceiling.js';
+import { fetchProvenCeiling } from '../src/analysis/proven-ceiling-fetch.js';
 
 // ============================================================
 // CLI argument parsing
@@ -252,6 +254,20 @@ async function main() {
     console.log(`  [cluster-strategy] research_summary.md not found on disk (may be Railway-only)`);
   }
 
+  // 8b. Proven ranking ceiling — this cluster's empirical rankability bar
+  let ceilingBlock = '';
+  try {
+    const ceiling = await fetchProvenCeiling(sb, auditId);
+    ceilingBlock = buildCeilingPromptBlock(
+      ceiling,
+      'Apply this to the Page Recommendations: any recommended page whose primary keyword is a STRETCH TARGET must say so in its rationale and be sequenced after within-ceiling pages — the cluster must earn authority on rankable keywords before stretch pages can work.',
+      { focusClusterKey: args.canonicalKey },
+    );
+    if (ceilingBlock) console.log(`  [cluster-strategy] Proven ceiling: ${ceiling.cold_start ? 'cold start' : `site KD ${ceiling.site_ceiling}`}`);
+  } catch (err: any) {
+    console.log(`  [cluster-strategy] Proven ceiling unavailable (non-fatal): ${err.message}`);
+  }
+
   // 9. Build prompt
   const kwTable = kwList
     .sort((a: any, b: any) => (b.search_volume ?? 0) - (a.search_volume ?? 0))
@@ -310,6 +326,8 @@ ${pageTable}
 ${gapSection}
 
 ${formatGapSection}
+
+${ceilingBlock}
 
 ${competitorSection}
 

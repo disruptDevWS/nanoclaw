@@ -143,12 +143,10 @@ Each entry is self-contained: picking it up 3 months later should not require re
 
 ---
 
-### [Pipeline] Proven ceiling injection into Strategy Brief / Michael / Cluster Strategy
+### ~~[Pipeline] Proven ceiling injection into Strategy Brief / Michael / Cluster Strategy~~ RESOLVED (Session 3, 2026-06-12)
 
-- **Status:** PARTIALLY DONE — Gap now computes the ceiling live and gates effective KD against cluster ceilings (B1, Session 2 2026-06-12). Remaining: Strategy Brief (Phase 1b) quantified authority assessment + Michael/Cluster Strategy stretch-target flags.
-- **Action:** Inject "proven ranking ceiling KD {N} + cluster ceilings" into Strategy Brief (Phase 1b), and into Michael/Cluster Strategy as a stretch-target flag ("keywords above the cluster ceiling require additional authority building"). Reuse `computeProvenCeiling()` (`src/analysis/proven-ceiling.ts`) the way runGap does — paginated audit_keywords fetch, non-fatal.
-- **Scope estimate:** S–M — 2 prompt injections, verify on Weiser full-pipeline first per protect-real-clients rule
-- **Captured:** KB extraction Session 1, 2026-06-12 · **Gap portion done:** Session 2, 2026-06-12
+- **Resolution:** All four agent consumers now receive the proven ceiling: Gap (B1 effective-KD gating, Session 2), Strategy Brief (quantified authority assessment via `{{PROVEN_CEILING_BLOCK}}`), Michael (stretch-target marking + within-ceiling-first sequencing via context block), Cluster Strategy (cluster-focused block via `focusClusterKey`). Shared plumbing: `fetchProvenCeiling()` (`src/analysis/proven-ceiling-fetch.ts`) + `buildCeilingPromptBlock()` (`src/analysis/proven-ceiling.ts`) — all injections non-fatal; first pipeline runs (no audit_keywords yet at Phase 1b) get an empty block; cold-start sites get a cold-start note instead of ceilings.
+- **Captured:** KB extraction Session 1, 2026-06-12 · **Resolved:** Session 3, 2026-06-12
 
 ---
 
@@ -160,5 +158,15 @@ Each entry is self-contained: picking it up 3 months later should not require re
 - **Captured:** KB extraction Session 2, 2026-06-12
 
 ---
+
+---
+
+### [Pipeline] Blueprint slug validator counts Buyer Journey tables as corrupted silo rows
+
+- **Status:** Pre-existing (confirmed in weiser's 2026-06-11 blueprint, before the 2026-06-12 sessions). Observed on boiseheatingair Michael run: "37.7% invalid url_slug rows" ERROR after retry — but the "rejected" rows are `| Awareness (...) |` / `| Buyer Stage |` rows from the per-silo Buyer Journey Coverage tables, which the parser treats as slug tables. The silo tables themselves were clean.
+- **Impact:** every Michael run with buyer-journey tables wastes one retry Sonnet call and emits a scary ERROR; a real corruption signal would be masked by the constant false-positive baseline.
+- **Action:** in `parseBlueprintMarkdown()` (sync-to-dashboard.ts), skip tables whose header has no slug/url column (`slugIdx === -1`) instead of falling back to column 0; then re-check whether the corruption-ratio retry threshold still fires on real corruption cases.
+- **Scope estimate:** S — parser guard + threshold sanity check
+- **Captured:** KB extraction Session 3, 2026-06-12
 
 ---

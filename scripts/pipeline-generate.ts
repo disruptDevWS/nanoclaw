@@ -34,7 +34,8 @@ import {
   normalizeDomain,
   SerpCompositionEntry,
 } from '../src/agents/gap/serp-composition.js';
-import { computeProvenCeiling } from '../src/analysis/proven-ceiling.js';
+import { computeProvenCeiling, buildCeilingPromptBlock } from '../src/analysis/proven-ceiling.js';
+import { fetchProvenCeiling } from '../src/analysis/proven-ceiling-fetch.js';
 import {
   callClaude,
   callClaudeAsync,
@@ -2660,10 +2661,24 @@ These pages receive organic traffic but are not in the current architecture. Eva
     }
   }
 
+  // --- Proven ranking ceiling (A3 → architecture stretch-target gating) ---
+  let michaelCeilingBlock = '';
+  try {
+    const ceiling = await fetchProvenCeiling(sb, auditId);
+    michaelCeilingBlock = buildCeilingPromptBlock(
+      ceiling,
+      'When assigning primary keywords to pages: a page whose primary keyword is a STRETCH TARGET for its cluster must be marked with "(stretch target — requires authority building)" in its silo-table notes, and stretch pages must not be the first pages built in a silo — sequence within-ceiling pages first so the cluster earns the authority the stretch pages need.',
+    );
+    if (michaelCeilingBlock) console.log(`  Proven ceiling block: ${ceiling.cold_start ? 'cold start' : `site KD ${ceiling.site_ceiling}`}`);
+  } catch (err: any) {
+    console.log(`  Note: proven ceiling unavailable (non-fatal): ${err.message}`);
+  }
+
   // --- Build context blocks (variable data sections for prompt template) ---
   const contextBlockParts: string[] = [];
   // Entity context FIRST (entity-first input ordering)
   if (entityContextBlock) contextBlockParts.push(entityContextBlock);
+  if (michaelCeilingBlock) contextBlockParts.push(michaelCeilingBlock.trim());
   if (researchSummary) contextBlockParts.push(`## Jim's Research Summary (Foundational Search Intelligence)\n${researchSummary}`);
   if (keywordSection) contextBlockParts.push(keywordSection);
   contextBlockParts.push(`## Revenue Clusters (by opportunity — from syncJim with revenue estimates)\nTopic | Volume | Revenue Range | Sample Keywords\n${clusterTable || 'No cluster data available yet.'}`);

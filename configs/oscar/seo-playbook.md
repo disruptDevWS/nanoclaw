@@ -193,6 +193,7 @@ dimensions column indicates additional emphasis per page type.
 - Relative paths only
 - Links should appear in natural reading positions — not clustered at the bottom
 - Links marked "(planned)" in the brief's map point to pages not yet live — embed them with relative paths as usual, and flag each one in Production Notes for human verification at publish time
+- Cap total internal links at 25 per page — beyond that, the authority each individual link passes becomes negligible (dilution). The brief's map comes first; if you add contextual links beyond the map, draw them from the brief's candidate tables and prefer targets listed at position 4–20 (the band where authority transfer does the most good), never position 1–3 pages (they don't need help)
 
 ## 7. Anti-Patterns — Never Do These
 Writing: "When it comes to...", "whether you need X or Y", "In fact,", "Don't hesitate to...", "we understand that...", rhetorical questions as section openers, em dashes more than once per 500 words, ending sections with "contact us today"
