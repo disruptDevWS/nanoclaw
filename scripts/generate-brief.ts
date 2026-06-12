@@ -1122,13 +1122,32 @@ function buildPrompt(
     buyerStageSection += `IMPORTANT: This page was added to address a gap in the ${buyerStage} stage of the buyer journey.\nThe content brief must directly address the questions buyers have at this stage, not just target\nthe primary keyword. The page should guide the reader toward the next stage in their journey.`;
   }
 
-  // B2: Bottom-of-funnel length directive — Decision-stage conversion pages only.
-  // The 800-word ceiling is deliberately the MoF floor (clean funnel transition).
-  // Informational, hub, geographic, and consideration-stage pages are exempt.
+  // D1: starter pages (low-authority mode) get a thin test-page directive that
+  // takes precedence over the BoF directive. B2: BoF length directive —
+  // Decision-stage conversion pages only; the 800-word ceiling is deliberately
+  // the MoF floor. Informational/hub/geographic/consideration pages are exempt.
   let contentLengthDirective = '';
+  const pageMode = ((brief as any)?.page_mode ?? 'full') as string;
   const isBofCoverageRole = coverageRole === 'commercial' || coverageRole === 'comparison';
   const isDecisionStage = (buyerStage ?? '').toLowerCase().includes('decision');
-  if (isBofCoverageRole && isDecisionStage) {
+  if (pageMode === 'starter') {
+    contentLengthDirective = `## Starter Page Directive (binding)
+This is a STARTER page (page_mode=starter): a thin test page for an untested keyword on a
+low-authority site, published to learn whether Google sends impressions BEFORE full content
+investment. The brief must be correspondingly minimal:
+- Target length: 200-400 words. Include the line "Target Word Count: 300 words" (single
+  number, 200-400) in the Implementation Notes — it is binding on Oscar.
+- Structure: H1 (for /faq/ pages: the EXACT question, verbatim), a direct and complete
+  answer in the first 1-2 sentences, brief supporting detail, and exactly ONE internal
+  link — to the parent pillar page. No FAQ section, no expansive subsections.
+- Required Content Coverage: one topic, answered well. Do not list coverage that cannot
+  fit 400 words.
+- Schema: minimal — WebPage (plus FAQPage Question/acceptedAnswer for /faq/ pages). Skip
+  optional entities.
+- If GSC later shows impressions, the page gets expanded to full content — note in
+  Implementation Notes what the expansion would cover so that decision is easy.
+`;
+  } else if (isBofCoverageRole && isDecisionStage) {
     contentLengthDirective = `## Bottom-of-Funnel Length Directive (binding)
 This is a Decision-stage conversion page. Target length: 400-800 words.
 - Pure "why us" / service-selection pages: 400-500 words

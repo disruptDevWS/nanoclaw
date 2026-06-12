@@ -36,3 +36,7 @@ Each file contains the agent's identity and instructions with `{{PLACEHOLDER}}` 
 - Placeholders that appear multiple times in a template are replaced with `.replaceAll()`
 - Single-occurrence placeholders use `.replace()`
 - Conditional sections (e.g., Section 12 in Dwight) are pre-computed before replacement
+
+## Multi-File Prompt Contracts — Pre-Flight Check
+
+Oscar's prompt is assembled from TWO files: `configs/oscar/system-prompt.md` AND `configs/oscar/seo-playbook.md`. When they conflict, the more permissive instruction wins (an explicit "ignore X" overrides a binding directive added to the other file). Before changing any Oscar directive, grep BOTH files for standing language on the same topic (length, links, schema, structure, tone) and reconcile contradictions explicitly — add the exception to the overriding language, don't just add the new rule. (Caught live 2026-06-12: the playbook's binding BoF word-count ceiling was silently defeated by the system prompt's "ignore word counts" — see DECISIONS.md.) The same risk applies to any future agent whose prompt spans multiple config files.

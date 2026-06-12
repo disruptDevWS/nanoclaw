@@ -586,7 +586,7 @@ Written by syncMichael (Phase 6b) and Cluster Strategy (on-demand), updated by P
 | `buyer_stage` | Cluster Strategy | `awareness`, `consideration`, `decision`, `retention` — null for architecture pages |
 | `strategy_rationale` | Cluster Strategy | Why this page was recommended — null for architecture pages |
 | `status` | Pipeline + Dashboard | `not_started` → `brief_ready` → `in_progress` → `review` → `published`. Also `deprecated` — set by: (1) syncMichael on strategic re-run for stale uncommitted pages, (2) Michael's deprecation recommendations, (3) dashboard user "Remove from queue" action (`useDeprecateExecutionPage`). Oscar writes `in_progress` (dashboard shows "Draft Ready"). `review` = manual user action ("In Review"). |
-| `page_brief` | syncMichael | JSONB — shape: `{silo, role, coverage_role, primary_keyword, volume, action, page_status}`. `coverage_role` added for entity-authority intent purpose (commercial, informational, geographic, comparison, faq, credential, outcome). Read by Pam for Page Identity context. |
+| `page_brief` | syncMichael | JSONB — shape: `{silo, role, coverage_role, primary_keyword, volume, action, page_status, page_mode}`. `coverage_role` added for entity-authority intent purpose (commercial, informational, geographic, comparison, faq, credential, outcome). `page_mode` ('full' \| 'starter', 2026-06-12) from the blueprint's Mode column — only present on low-authority-mode blueprints; absent = full. Lives in page_brief deliberately (Michael owns it; re-run overwrite is correct — unlike `related_pages`). Read by Pam (Starter Page Directive) and `detect-starter-expansion.ts`. |
 | `canonical_key` | syncMichael | Join to `audit_clusters` |
 | `cluster_active` | Pipeline (rebuild) | Boolean, gates content production |
 | `metadata_markdown` | Pam | |
@@ -925,6 +925,7 @@ These files live on the pipeline server disk and are NOT in Supabase. They feed 
 | `audits/{domain}/analysis/proven_ceiling.{json,md}` | On-demand (A3) | Empirical KD ceiling (site + per-cluster) from `compute-proven-ceiling.ts` |
 | `audits/{domain}/analysis/reeval_candidates.{json,md}` | On-demand (A1) | NavBoost re-evaluation republish candidates from `detect-reeval-candidates.ts` |
 | `audits/{domain}/analysis/llm_citation_queries.{json,md}` | On-demand (A2) | GSC zero-click fan-out flags from `detect-llm-citation-queries.ts` |
+| `audits/{domain}/analysis/starter_expansion.{json,md}` | On-demand (D1) | Starter page expand/deprioritize/wait verdicts from `detect-starter-expansion.ts` |
 | `audits/{domain}/research/{date}/coverage_validation.md` | Validator | Gap vs blueprint cross-check |
 | `audits/{domain}/architecture/{date}/architecture_blueprint.md` | Michael | Silo structure + page plan |
 | `audits/{domain}/content/{date}/{slug}/metadata.md` | Pam | Page metadata |

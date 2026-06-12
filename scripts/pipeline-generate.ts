@@ -2663,6 +2663,7 @@ These pages receive organic traffic but are not in the current architecture. Eva
 
   // --- Proven ranking ceiling (A3 → architecture stretch-target gating) ---
   let michaelCeilingBlock = '';
+  let michaelStarterBlock = '';
   try {
     const ceiling = await fetchProvenCeiling(sb, auditId);
     michaelCeilingBlock = buildCeilingPromptBlock(
@@ -2670,6 +2671,21 @@ These pages receive organic traffic but are not in the current architecture. Eva
       'When assigning primary keywords to pages: a page whose primary keyword is a STRETCH TARGET for its cluster must be marked with "(stretch target — requires authority building)" in its silo-table notes, and stretch pages must not be the first pages built in a silo — sequence within-ceiling pages first so the cluster earns the authority the stretch pages need.',
     );
     if (michaelCeilingBlock) console.log(`  Proven ceiling block: ${ceiling.cold_start ? 'cold start' : `site KD ${ceiling.site_ceiling}`}`);
+
+    // D1/D2: low-authority clients get thin-starter-page architecture. Cold start
+    // (<15 proven top-7 rankings, incl. zero) is the trigger — full content
+    // investment on untested keywords is not justified until Google confirms
+    // impressions. See docs/research/kb-extraction-map.md Workstream D.
+    if (ceiling.cold_start || (ceiling.site_ceiling !== null && ceiling.site_ceiling < 15)) {
+      michaelStarterBlock = `## LOW-AUTHORITY MODE — Thin Starter Pages (Mode column required)
+This client has ${ceiling.owned_count} proven top-7 ranking(s) — too few to justify full content investment on untested keywords. Apply starter-page architecture:
+- Add a "Mode" column to EVERY silo page table (after "Action"). Values: full | starter.
+- Mark a page \`starter\` when its primary keyword is UNTESTED (the client has no current ranking for it in the keyword data) AND no proven ranking evidence covers it. Starter pages are thin 200-400-word direct-answer test pages with a single internal link to their pillar — published to learn whether Google sends impressions BEFORE investing in full content.
+- Keep \`full\` for: pillar pages, conversion-critical pages, and any page whose primary keyword the client already ranks for (any position).
+- Individual FAQ pages (PAA expansion): when question-form queries (how/what/can/should/does...) appear in a cluster's keyword data, prefer INDIVIDUAL /faq/{question-slug} starter pages — the exact question as H1 and title, a ~120-word direct answer, one link to the parent pillar — over FAQ accordion sections on the pillar. Individual pages maximize title-query match, which is the cheapest ranking signal available to a low-authority site. List them as normal silo-table rows with Mode=starter and Role=support.
+- Lifecycle context (not your output): starter pages are monitored via GSC after publish; those earning impressions get expanded to full content, those without get deprioritized.`;
+      console.log(`  Low-authority mode: ON (${ceiling.owned_count} owned) — starter-page architecture instructed`);
+    }
   } catch (err: any) {
     console.log(`  Note: proven ceiling unavailable (non-fatal): ${err.message}`);
   }
@@ -2679,6 +2695,7 @@ These pages receive organic traffic but are not in the current architecture. Eva
   // Entity context FIRST (entity-first input ordering)
   if (entityContextBlock) contextBlockParts.push(entityContextBlock);
   if (michaelCeilingBlock) contextBlockParts.push(michaelCeilingBlock.trim());
+  if (michaelStarterBlock) contextBlockParts.push(michaelStarterBlock);
   if (researchSummary) contextBlockParts.push(`## Jim's Research Summary (Foundational Search Intelligence)\n${researchSummary}`);
   if (keywordSection) contextBlockParts.push(keywordSection);
   contextBlockParts.push(`## Revenue Clusters (by opportunity — from syncJim with revenue estimates)\nTopic | Volume | Revenue Range | Sample Keywords\n${clusterTable || 'No cluster data available yet.'}`);

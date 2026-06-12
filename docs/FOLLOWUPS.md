@@ -161,12 +161,22 @@ Each entry is self-contained: picking it up 3 months later should not require re
 
 ---
 
-### [Pipeline] Blueprint slug validator counts Buyer Journey tables as corrupted silo rows
+### ~~[Pipeline] Blueprint slug validator counts Buyer Journey tables as corrupted silo rows~~ RESOLVED (Session 4, 2026-06-12)
 
-- **Status:** Pre-existing (confirmed in weiser's 2026-06-11 blueprint, before the 2026-06-12 sessions). Observed on boiseheatingair Michael run: "37.7% invalid url_slug rows" ERROR after retry — but the "rejected" rows are `| Awareness (...) |` / `| Buyer Stage |` rows from the per-silo Buyer Journey Coverage tables, which the parser treats as slug tables. The silo tables themselves were clean.
+- **Resolution:** Parser extracted to `src/pipeline/blueprint-parse.ts` (unit-tested); tables with a stage column are skipped and a plural "pages" list column is never treated as the slug column. boiseheatingair blueprint: 20 false rejections → 0; Michael runs no longer burn a retry Sonnet call on the false positive.
+- **Status (original):** Pre-existing (confirmed in weiser's 2026-06-11 blueprint, before the 2026-06-12 sessions). Observed on boiseheatingair Michael run: "37.7% invalid url_slug rows" ERROR after retry — but the "rejected" rows are `| Awareness (...) |` / `| Buyer Stage |` rows from the per-silo Buyer Journey Coverage tables, which the parser treats as slug tables. The silo tables themselves were clean.
 - **Impact:** every Michael run with buyer-journey tables wastes one retry Sonnet call and emits a scary ERROR; a real corruption signal would be masked by the constant false-positive baseline.
 - **Action:** in `parseBlueprintMarkdown()` (sync-to-dashboard.ts), skip tables whose header has no slug/url column (`slugIdx === -1`) instead of falling back to column 0; then re-check whether the corruption-ratio retry threshold still fires on real corruption cases.
 - **Scope estimate:** S — parser guard + threshold sanity check
 - **Captured:** KB extraction Session 3, 2026-06-12
+
+---
+
+### [Pipeline/Dashboard] Starter page lifecycle — dashboard surface + cron wiring
+
+- **Status:** D1/D2 implemented 2026-06-12 (low-authority Michael mode, `page_brief.page_mode`, Pam Starter Page Directive, `detect-starter-expansion.ts` disk-first). Not yet surfaced anywhere operators look.
+- **Action:** (a) Dashboard: "Starter" badge on execution page cards (read `page_brief->>page_mode`) so operators know which pages are deliberate 300-word tests, plus surface starter_expansion verdicts after they prove out; (b) wire `detect-starter-expansion.ts` into the monthly cron after `fetch-gsc-data`; (c) consider promoting page_mode to a real column if dashboard filtering needs an index. All gated on forgegrowth.ai's post-redesign re-run actually producing published starter pages to measure.
+- **Scope estimate:** S (badge) + S (cron) — after the first starter pages publish
+- **Captured:** KB extraction Session 4, 2026-06-12
 
 ---

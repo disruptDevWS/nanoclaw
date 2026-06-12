@@ -817,6 +817,7 @@ Reads ALL prior artifacts to produce a silo-based site architecture.
 - Dwight: `internal_all.csv` (filtered, 100 rows), Platform Observations from `AUDIT_REPORT.md`
 - Supabase: `audit_clusters` (revenue estimates), `audit_assumptions` + `audit_rollups` (sales mode revenue)
 - Supabase: proven ranking ceiling (`fetchProvenCeiling()` → context block; non-fatal) — pages whose primary keyword exceeds their cluster ceiling (+5 headroom) must be marked "(stretch target — requires authority building)" and sequenced after within-ceiling pages in the silo
+- **Low-authority mode (D1/D2, 2026-06-12):** when the ceiling is cold-start (<15 proven top-7 rankings), a LOW-AUTHORITY MODE block instructs Michael to add a `Mode` column (full | starter) to every silo table. `starter` = untested keyword, 200–400-word direct-answer test page, one pillar link — published to learn whether Google sends impressions before full investment. Question-form queries get INDIVIDUAL `/faq/{question-slug}` starter pages (exact question as H1/title, ~120-word answer) instead of FAQ accordions — title-query match is the cheapest signal for a low-authority site. Parser maps the Mode column to `page_brief.page_mode`; lifecycle handled by `scripts/detect-starter-expansion.ts`.
 - Client context: `prospect-config.json` → `client_context` (full mode only)
 
 All cross-phase reads use `resolveArtifactPath()` with date fallback for operational resilience.
@@ -991,6 +992,8 @@ Oscar (generate-content.ts) — polls oscar_requests
 
 **Entity + buyer journey context:** If the page has a `primary_entity_type` (from audit_clusters), it's injected into the Page Identity block. If `entity_map` exists on the cluster's strategy, the full entity definition is injected. If `buyer_stage` is set (cluster strategy pages), a Buyer Journey Context block is added.
 
+**Starter page directive (D1, 2026-06-12):** When `page_brief.page_mode` is `starter` (set by sync-michael from the blueprint's Mode column, low-authority clients only), `{{CONTENT_LENGTH_DIRECTIVE}}` carries a binding **Starter Page Directive** instead: 200–400 words ("Target Word Count: 300" in Implementation Notes), exact-question H1 for `/faq/` pages, complete answer in the first 1–2 sentences, exactly ONE internal link (to the pillar), minimal schema. Takes precedence over the BoF directive. Oscar's hard ceiling: 400 words (playbook §4 + system-prompt exceptions — both files).
+
 **BoF length directive (B2, 2026-06-12):** When `coverage_role` is `commercial`/`comparison` (incl. the null→commercial default) AND `buyer_stage` contains `decision`, `buildPrompt()` injects a binding **Bottom-of-Funnel Length Directive** via `{{CONTENT_LENGTH_DIRECTIVE}}`: target 400–800 words ("why us" 400–500, comparison 500–800, default 600), 800 hard ceiling (= the MoF floor). Pam must emit `Target Word Count: <N> words` in Implementation Notes — parsed by `extractWordCountTarget()` (outline first, metadata fallback) into `execution_pages.target_word_count`, which Oscar treats as a directive (playbook §4). All other pages keep the "intent drives length, not word counts" rule. Pages with `buyer_stage` NULL (Michael-sourced) never get the directive.
 
 **Video carousel → VideoObject (C3, 2026-06-12):** Pam's SERP enrichment already detects `has_video` in SERP features; the prompt now instructs: when "video" appears in SERP Features Present, flag the video opportunity in Implementation Notes and include a VideoObject schema stub only if the brief recommends video for the page. Oscar's playbook §10 lowers the bar for `<!-- VIDEO: -->` recommendations when the brief flags a carousel and carries the VideoObject stub through the JSON-LD. Gap receives the same signal per opportunity keyword via the SERP composition block (Phase 5).
@@ -1155,6 +1158,12 @@ Empirical KD ranking ceiling from `audit_keywords` (rank_pos + keyword_difficult
 `npx tsx scripts/detect-reeval-candidates.ts --domain <d> [--min-pos 8 --max-pos 25 --max-kd 30 --min-growth 2.0 --min-age-months 6 --min-impressions 0]`
 
 NavBoost re-evaluation candidates: pages ranking 8–25 on KD<30 keywords whose cluster keyword count grew >2× since publish (history from `cluster_performance_snapshots`; publish dates from `execution_pages.published_at`, `created_at` fallback; pages absent from `execution_pages` are treated as pre-tracking with lower-bound growth). Output includes estimated CTR-curve lift. Action: republish under a new URL + 301 with improved content.
+
+### detect-starter-expansion.ts (D1 lifecycle)
+
+`npx tsx scripts/detect-starter-expansion.ts --domain <d> [--min-impressions 30 --deprioritize-after-days 56]`
+
+Reviews published starter pages (`page_brief.page_mode='starter'`) against the latest GSC snapshot: EXPAND (impressions ≥ threshold — Google confirmed demand, invest in full content), DEPRIORITIZE (zero impressions past the patience window), WAIT (too young/inconclusive), NOT_PUBLISHED. Output: `audits/{domain}/analysis/starter_expansion.{json,md}`. Run after monthly GSC fetches once starter pages are live.
 
 ### detect-llm-citation-queries.ts (A2)
 
