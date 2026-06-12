@@ -33,3 +33,7 @@ configs/*.seospiderconfig
 .vscode/
 
 agents-sdk-docs
+
+# Windows ADS junk + editor backups
+*Zone.Identifier
+*.bak
