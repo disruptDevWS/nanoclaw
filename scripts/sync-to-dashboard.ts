@@ -603,6 +603,7 @@ interface RankedKeywordItem {
   keyword_data: {
     keyword: string;
     keyword_info: { search_volume: number; cpc: number | null; competition: number | null };
+    keyword_properties?: { keyword_difficulty?: number | null };
     search_intent_info?: { main_intent?: string };
   };
   ranked_serp_element: {
@@ -624,6 +625,7 @@ function parseRankedKeywords(filePath: string) {
       cpc: item.keyword_data?.keyword_info?.cpc ?? null,
       ranking_url: item.ranked_serp_element?.serp_item?.url ?? null,
       intent: item.keyword_data?.search_intent_info?.main_intent ?? null,
+      keyword_difficulty: item.keyword_data?.keyword_properties?.keyword_difficulty ?? null,
     })),
     totalCount,
   };
@@ -1170,6 +1172,7 @@ async function syncJim(
       is_top_10: isTop10,
       is_striking_distance: isStrikingDistance,
       source: 'ranked',
+      keyword_difficulty: kw.keyword_difficulty,
       ...opp,
     };
   });

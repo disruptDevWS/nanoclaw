@@ -546,7 +546,7 @@ Client Brief (auto after Phase 6d, non-fatal)
 | `llm_mention_details` | DELETE + INSERT | Qualitative mention texts and citation URLs (from `llm_mentions.json`, optional) |
 | `audits` | UPDATE | status='completed', completed_at |
 
-Each `audit_keywords` row includes revenue estimates: `delta_revenue_low/mid/high` computed from `delta_traffic × CR × ACV` at three tiers. Near-miss filter: `is_brand=false AND intent≠navigational AND pos in [min,max] AND vol≥min_volume`.
+Each `audit_keywords` row includes revenue estimates: `delta_revenue_low/mid/high` computed from `delta_traffic × CR × ACV` at three tiers. Near-miss filter: `is_brand=false AND intent≠navigational AND pos in [min,max] AND vol≥min_volume`. Each row also persists `keyword_difficulty` (DataForSEO `keyword_properties.keyword_difficulty`, 0–100; NULL for synthetic keywords — migration 036, consumed by the analysis layer below).
 
 **Embed-at-ingestion:** After keyword INSERT, calls `embedAuditKeywords()` from `scripts/embed-keywords.ts` with `source=null` (all keywords — both `ranked` and `keyword_research`). This is the authoritative embedding pass; Phase 2's earlier pass pre-warmed `keyword_research` rows, and any cache hits from Phase 2 are reused here (zero duplicate OpenAI cost). Non-fatal — failures are logged as warnings.
 
@@ -1126,6 +1126,30 @@ Ranking performance tracking runs independently of the audit pipeline — weekly
 **Backfill:** `npx tsx scripts/backfill-authority-scores.ts [--domain <d>]` — computes authority scores for existing `cluster_performance_snapshots` and updates `audit_clusters`. Uses `audit_keywords` as denominator (not snapshot data) since older snapshots may be incomplete. Processes snapshot dates chronologically so deltas are correct.
 
 **RLS:** All tables: SELECT for audit owners (`audits.user_id = auth.uid()`). INSERT/UPDATE/DELETE restricted to service_role.
+
+---
+
+## KB Analytics Layer (On-Demand, Read-Only)
+
+Three standalone analysis scripts from the 2026-06-12 knowledge-base extraction (Workstream A — see `docs/research/kb-extraction-map.md`). All are read-only against Supabase/GSC; outputs go to `audits/{domain}/analysis/{name}.{json,md}` only (no DB writes, no dashboard surface yet — deferred until thresholds are tuned, see FOLLOWUPS). Pure logic lives in `src/analysis/` with vitest coverage; scripts are thin CLIs sharing `scripts/analysis-shared.ts`.
+
+### compute-proven-ceiling.ts (A3)
+
+`npx tsx scripts/compute-proven-ceiling.ts --domain <d>`
+
+Empirical KD ranking ceiling from `audit_keywords` (rank_pos + keyword_difficulty). Site ceiling = second-highest KD among owned (pos 1–7, non-brand) keywords — the ≥2-rankings fluke guard. Per-cluster ceilings by `canonical_key` (null → fall back to site). Cold start below 15 owned keywords (use DR prior). Replaces DR as the rankability bar for future Strategy Brief / Michael injection (deferred).
+
+### detect-reeval-candidates.ts (A1)
+
+`npx tsx scripts/detect-reeval-candidates.ts --domain <d> [--min-pos 8 --max-pos 25 --max-kd 30 --min-growth 2.0 --min-age-months 6 --min-impressions 0]`
+
+NavBoost re-evaluation candidates: pages ranking 8–25 on KD<30 keywords whose cluster keyword count grew >2× since publish (history from `cluster_performance_snapshots`; publish dates from `execution_pages.published_at`, `created_at` fallback; pages absent from `execution_pages` are treated as pre-tracking with lower-bound growth). Output includes estimated CTR-curve lift. Action: republish under a new URL + 301 with improved content.
+
+### detect-llm-citation-queries.ts (A2)
+
+`npx tsx scripts/detect-llm-citation-queries.ts --domain <d> [--days 90 --min-impressions 50 --max-position 10 --min-words 5]`
+
+GSC zero-click fan-out signature: position ≤10, impressions ≥50, clicks = 0, plus a long-query (>5 words) or evaluative-language signal. Makes a DEDICATED paginated query×page pull (rowLimit 25000 + startRow) — the Phase 1c top-1000-by-clicks pull systematically excludes zero-click rows because GSC sorts by clicks descending. Complementary to DataForSEO LLM Mentions (first-party long-tail vs third-party head terms). Known noise class: pasted quiz questions ("select one answer…") also match.
 
 ---
 

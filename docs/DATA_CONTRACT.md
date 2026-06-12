@@ -90,6 +90,7 @@
 | `shadow_similarity_score` | Pipeline (Phase 3c shadow) | — | Hybrid's similarity in shadow mode. |
 | `shadow_arbitration_reason` | Pipeline (Phase 3c shadow) | — | Hybrid's reasoning in shadow mode. |
 | `source` | Pipeline | Dashboard | `ranked` or `keyword_research` |
+| `keyword_difficulty` | Pipeline (Phase 3b syncJim) | Analysis scripts (proven ceiling A3, re-eval candidates A1) | DataForSEO KD 0–100 from `keyword_properties.keyword_difficulty`. NULL for synthetic keywords, keyword_research seeds, and audits without raw artifacts. Migration 036; backfilled 2026-06-12 via `scripts/backfill-keyword-difficulty.ts`. |
 | `current_ctr` | Pipeline | Dashboard | |
 | `current_traffic` | Pipeline | Dashboard | |
 | `target_ctr` | Pipeline | Dashboard | |
@@ -98,7 +99,7 @@
 | `delta_leads_low/high` | Pipeline | Dashboard | |
 | `delta_revenue_low/mid/high` | Pipeline | Dashboard | |
 
-**Pipeline writes**: Phase 2 (source=keyword_research), Phase 3/3b (source=ranked), Phase 3c (canonical_key, canonical_topic, classification metadata in hybrid/shadow modes), Phase 3c classification extraction (is_brand, intent_type, primary_entity_type, intent, canonicalize_mode — via Haiku+rules in hybrid mode, via legacy Sonnet in legacy mode), Phase 6b syncMichael (silo)
+**Pipeline writes**: Phase 2 (source=keyword_research), Phase 3/3b (source=ranked, incl. keyword_difficulty), Phase 3c (canonical_key, canonical_topic, classification metadata in hybrid/shadow modes), Phase 3c classification extraction (is_brand, intent_type, primary_entity_type, intent, canonicalize_mode — via Haiku+rules in hybrid mode, via legacy Sonnet in legacy mode), Phase 6b syncMichael (silo)
 **Dashboard reads**: `useAllKeywords()`, `useAssumptionsPreview()`, `useAudit()` relation
 **Dashboard writes**: `useDeleteKeywords()` (DELETE by id)
 
