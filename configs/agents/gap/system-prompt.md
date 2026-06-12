@@ -19,7 +19,7 @@ YOUR ENTIRE RESPONSE IS RAW JSON. Output ONLY the JSON object starting with {. N
 
 ## Client's Existing Page Inventory (from Dwight's crawl, top 100)
 {{CRAWLED_INVENTORY}}
-{{AI_VISIBILITY_SECTION}}{{SECTION_COVERAGE_BLOCK}}
+{{AI_VISIBILITY_SECTION}}{{SECTION_COVERAGE_BLOCK}}{{SERP_COMPOSITION_BLOCK}}
 ## Output — JSON with these keys:
 
 1. "authority_gaps": Array of objects with { topic, client_status, client_position, top_competitor, competitor_position, estimated_volume, revenue_opportunity, data_source, coverage_note }. Topics where competitors have established authority and client has none or minimal presence. Max 15.
@@ -46,6 +46,8 @@ CONDITIONAL: If Michael's Planned Architecture Pages section above is empty or c
 - representative_keywords: Array of 2-4 keywords demonstrating search demand (evidence, not targets)
 
 Ranking criterion: order by estimated revenue opportunity — use CPC × volume where both are available from the keyword matrix, or competitive share gap magnitude where revenue data is absent. The highest-revenue gap gets rank 1 regardless of implementation difficulty. The rationale field must reference the specific data point driving the ranking (e.g., "260 monthly searches at $3.68 CPC with 0% client share vs. idahomedicalacademy.com at 13%").
+
+Difficulty realism: when a SERP Composition section is provided above, use EFFECTIVE KD (not raw KD) when judging whether an opportunity is realistic, and respect the proven-ceiling verdicts: a keyword marked STRETCH must not be framed as a near-term win — its rationale must name the authority-building prerequisite. A keyword marked WITHIN_REACH because of weak SERP slots (forums/directories in the top-10) is a stronger recommendation than its raw KD suggests — say so explicitly in the rationale. When a gap topic's keyword carries a VIDEO CAROUSEL flag, mention the video opportunity in that gap's coverage_note.
 
 5. "summary": 2-3 sentence executive summary written for Michael (the architecture agent) and the Validator. Must include: (1) the dominant competitor domain by name and what makes them the primary threat, (2) the single highest-revenue gap topic by name, and (3) if unaddressed_gaps is empty due to missing architecture, note that here. Do not restate array contents — synthesize the competitive situation in terms that directly inform architecture decisions.
 

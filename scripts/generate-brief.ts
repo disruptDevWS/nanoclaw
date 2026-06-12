@@ -1088,6 +1088,27 @@ function buildPrompt(
     buyerStageSection += `IMPORTANT: This page was added to address a gap in the ${buyerStage} stage of the buyer journey.\nThe content brief must directly address the questions buyers have at this stage, not just target\nthe primary keyword. The page should guide the reader toward the next stage in their journey.`;
   }
 
+  // B2: Bottom-of-funnel length directive — Decision-stage conversion pages only.
+  // The 800-word ceiling is deliberately the MoF floor (clean funnel transition).
+  // Informational, hub, geographic, and consideration-stage pages are exempt.
+  let contentLengthDirective = '';
+  const isBofCoverageRole = coverageRole === 'commercial' || coverageRole === 'comparison';
+  const isDecisionStage = (buyerStage ?? '').toLowerCase().includes('decision');
+  if (isBofCoverageRole && isDecisionStage) {
+    contentLengthDirective = `## Bottom-of-Funnel Length Directive (binding)
+This is a Decision-stage conversion page. Target length: 400-800 words.
+- Pure "why us" / service-selection pages: 400-500 words
+- Comparison/versus pages with tables: 500-800 words
+- Include the line "Target Word Count: <N> words" (single number, 400-800; default 600
+  if unsure) in the Implementation Notes of the metadata block — it is parsed
+  programmatically and passed to Oscar as a directive, not a suggestion.
+- The 800-word ceiling is a hard ceiling — BoF pages beyond it dilute conversion focus.
+  Required Content Coverage must fit the ceiling: prioritize proof, differentiation, and
+  the conversion path; cut educational depth (that belongs on linked
+  consideration-stage pages).
+`;
+  }
+
   // Build optimize change spec
   const optimizeChangeSpec = actionType === 'optimize' ? `**OPTIMIZE MODE — Change Specification:**\nThis is an existing page. Do not produce a full content brief. Produce a change specification:\nFor each content area: KEEP (no change needed and why), UPDATE (what to change, why, and what the updated version should accomplish), ADD (new content to insert — describe what and why), or REMOVE (what to cut and why).\nOnly provide full content direction for ADD items.` : '';
 
@@ -1121,6 +1142,7 @@ function buildPrompt(
     .replace('{{RELATED_PAGES_SECTION}}', formatRelatedPagesSection(ctx.relatedPages))
     .replace('{{STRATEGY_CONTEXT}}', strategyContext ? `## Strategy Brief (Phase 1b)\n${strategyContext}\n` : '')
     .replace('{{BUYER_STAGE_SECTION}}', buyerStageSection)
+    .replace('{{CONTENT_LENGTH_DIRECTIVE}}', contentLengthDirective)
     .replace('{{KEYWORD_TABLE}}', keywordTable)
     .replace('{{MARKET_CONTEXT}}', marketContext ? `## Market Context\n${marketContext}\n` : '')
     .replace('{{TECHNICAL_BASELINE}}', technicalBaselineSection)
@@ -1250,7 +1272,9 @@ async function upsertExecutionPage(
   const metaDesc = extractMetadataField(parsed.metadataMd, 'Meta Description');
   const h1 = extractMetadataField(parsed.metadataMd, 'H1 Tag') ?? extractMetadataField(parsed.metadataMd, 'H1');
   const intent = extractMetadataField(parsed.metadataMd, 'Intent Classification') ?? extractMetadataField(parsed.metadataMd, 'Intent');
-  const wordCount = extractWordCountTarget(parsed.outlineMd);
+  // Outline first (legacy phrasing), metadata fallback — the BoF length
+  // directive mandates "Target Word Count: <N> words" in Implementation Notes
+  const wordCount = extractWordCountTarget(parsed.outlineMd) ?? extractWordCountTarget(parsed.metadataMd);
 
   const pamFields = {
     url_slug: normalizedSlug,

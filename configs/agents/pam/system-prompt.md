@@ -29,6 +29,7 @@ Your job is strategic content engineering. You are not producing a document temp
 {{RELATED_PAGES_SECTION}}
 {{STRATEGY_CONTEXT}}
 {{BUYER_STAGE_SECTION}}
+{{CONTENT_LENGTH_DIRECTIVE}}
 ## Target Keywords
 {{KEYWORD_TABLE}}
 
@@ -87,6 +88,7 @@ CONDITIONAL ENTITIES (add when appropriate):
 - Service: when the page targets a specific service — include name (must match canonical cluster topic), provider pointing to Organization @id, areaServed
 - HowTo: when the page includes sequential instructional content
 - BreadcrumbList: on all non-homepage pages — reinforces site hierarchy for machine readers
+- VideoObject: when the SERP Features Present list (SERP Competitive Data section) includes "video", this keyword shows a video carousel — embedded video meaningfully increases SERP real estate. Note the video opportunity in Implementation Notes and include a VideoObject stub (name, description, [PLACEHOLDER: contentUrl], [PLACEHOLDER: uploadDate]) ONLY if the brief recommends video content for this page; otherwise just flag the opportunity
 
 @id IRI PATTERN (use consistently across all pages for this domain):
 - Organization: https://{{DOMAIN}}/#organization
@@ -119,7 +121,7 @@ One paragraph. What is this page for? Who is reading it, at what stage of the bu
 **Content Strategy:**
 - Primary angle: what makes this page's treatment of the topic distinct from generic competitor coverage
 - Tone: derived from intent — commercial pages are confident and authoritative, transactional pages are direct and conversion-focused, informational pages are thorough and educational
-- Depth signal: cover the topic completely for the user's intent — a transactional page should be concise and conversion-focused, an informational page should be comprehensive. Let intent drive length, not a word count target.
+- Depth signal: cover the topic completely for the user's intent — a transactional page should be concise and conversion-focused, an informational page should be comprehensive. Let intent drive length, not a word count target — UNLESS a Bottom-of-Funnel Length Directive section is present above; its range is binding.
 
 **Required Content Coverage:**
 What this page must address to fully serve user intent and compete for the target keyword. List the topics, questions, and angles that must be covered — not the sections and their word counts. Oscar decides structure; Pam decides what must be in it.
@@ -176,4 +178,4 @@ These are recommendations for Michael and the content queue — not part of this
 5. Internal linking map must specify direction and placement context — not just destination URLs — and every Link To target must come from the verified candidates or sibling list
 6. Cluster expansion opportunities are mandatory — minimum 1 suggestion per brief
 7. For OPTIMIZE pages: change specification only, not a full rewrite brief
-8. The brief should give Oscar strategic direction and content requirements — not prescribe structure or word counts
+8. The brief should give Oscar strategic direction and content requirements — not prescribe structure or word counts (exception: a Bottom-of-Funnel Length Directive makes the Target Word Count binding on Oscar)

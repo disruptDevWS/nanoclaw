@@ -28,6 +28,14 @@ import { embedBatch, cosineSimilarity } from '../src/embeddings/index.js';
 import type { EmbeddingResult } from '../src/embeddings/index.js';
 import { formatRevenueOpportunity } from '../src/agents/gap/format-revenue.js';
 import {
+  buildSerpCompositionEntry,
+  buildSerpCompositionBlock,
+  selectSerpTargets,
+  normalizeDomain,
+  SerpCompositionEntry,
+} from '../src/agents/gap/serp-composition.js';
+import { computeProvenCeiling } from '../src/analysis/proven-ceiling.js';
+import {
   callClaude,
   callClaudeAsync,
   initAnthropicClient,
@@ -2805,6 +2813,40 @@ function extractOrganicUrls(data: any): string[] {
   return urls;
 }
 
+/** live/advanced SERP for composition classification (B1) + SERP-feature
+ * detection (C3 video carousel). Advanced (not regular) is deliberate: item
+ * types like `video` only appear in advanced responses. */
+async function fetchSerpAdvancedComposition(
+  login: string, password: string, keyword: string,
+): Promise<{ organicDomains: Array<{ rank: number; domain: string }>; hasVideoCarousel: boolean; cost: number }> {
+  const authString = Buffer.from(`${login}:${password}`).toString('base64');
+  const resp = await fetch('https://api.dataforseo.com/v3/serp/google/organic/live/advanced', {
+    method: 'POST',
+    headers: { Authorization: `Basic ${authString}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([{
+      keyword,
+      location_code: 2840,
+      language_code: 'en',
+      device: 'desktop',
+      os: 'windows',
+      depth: 10,
+    }]),
+  });
+  if (!resp.ok) throw new Error(`DataForSEO Advanced HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (data?.status_code && data.status_code !== 20000) throw new Error(`DataForSEO status ${data.status_code}`);
+
+  const task = data?.tasks?.[0];
+  const cost = task?.cost ?? 0;
+  const items: any[] = task?.result?.[0]?.items ?? [];
+  const organicDomains = items
+    .filter((i) => i.type === 'organic' && i.domain)
+    .map((i) => ({ rank: i.rank_group ?? 99, domain: String(i.domain) }))
+    .slice(0, 10);
+  const hasVideoCarousel = items.some((i) => i.type === 'video');
+  return { organicDomains, hasVideoCarousel, cost };
+}
+
 async function fetchSerpOrganic(
   login: string, password: string, keyword: string, limit = 10,
 ): Promise<any> {
@@ -3441,6 +3483,83 @@ Recommend consolidation or differentiation rather than new pages for these clust
     console.log(`  Note: Could not load density/cannibalization data (non-fatal): ${err.message}`);
   }
 
+  // SERP composition — effective difficulty for top opportunity keywords (B1 + C3).
+  // Targeted live/advanced lookups (capped, ~$0.002 each) — non-fatal on any failure.
+  let serpCompositionBlock = '';
+  try {
+    const serpEnv = loadEnv();
+    const dfLogin = serpEnv.DATAFORSEO_LOGIN;
+    const dfPassword = serpEnv.DATAFORSEO_PASSWORD;
+    if (!dfLogin || !dfPassword) throw new Error('DataForSEO credentials not set');
+
+    // Dedicated paginated fetch — runGap's main keyword query predates KD and is
+    // capped at PostgREST's 1000 rows; the ceiling needs the full set.
+    const kdKeywords: any[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data: page, error: kdErr } = await (sb as any)
+        .from('audit_keywords')
+        .select('keyword, rank_pos, search_volume, keyword_difficulty, is_brand, intent_type, canonical_key, canonical_topic, delta_revenue_mid')
+        .eq('audit_id', auditId)
+        .range(from, from + 999);
+      if (kdErr) throw new Error(kdErr.message);
+      kdKeywords.push(...(page ?? []));
+      if (!page || page.length < 1000) break;
+    }
+
+    const targets = selectSerpTargets(kdKeywords, 12, 2);
+    if (targets.length > 0) {
+      const ceiling = computeProvenCeiling(kdKeywords);
+      const clusterCeilingByKey = new Map(
+        ceiling.cluster_ceilings.map((c) => [c.canonical_key, c.ceiling]),
+      );
+      const industryCompetitorDomains = new Set(
+        ((compData ?? []) as any[])
+          .filter((c) => !c.is_client && c.competitor_type === 'industry_competitor')
+          .map((c) => normalizeDomain(c.competitor_domain)),
+      );
+
+      const entries: SerpCompositionEntry[] = [];
+      let serpCostTotal = 0;
+      for (const t of targets) {
+        try {
+          const serp = await fetchSerpAdvancedComposition(dfLogin, dfPassword, t.keyword);
+          serpCostTotal += serp.cost;
+          if (serp.organicDomains.length === 0) continue;
+          entries.push(buildSerpCompositionEntry({
+            keyword: t.keyword,
+            canonical_key: t.canonical_key,
+            kd: t.keyword_difficulty!,
+            organicDomains: serp.organicDomains,
+            hasVideoCarousel: serp.hasVideoCarousel,
+            competitorDomains: industryCompetitorDomains,
+            clientDomain: domain,
+            clusterCeiling: t.canonical_key ? (clusterCeilingByKey.get(t.canonical_key) ?? null) : null,
+            siteCeiling: ceiling.site_ceiling,
+          }));
+        } catch (serpErr: any) {
+          console.log(`  Note: SERP lookup failed for "${t.keyword}" (non-fatal): ${serpErr.message}`);
+        }
+      }
+      logDataForSeoCost(`serp/organic/advanced (gap composition × ${entries.length})`, serpCostTotal);
+
+      if (entries.length > 0) {
+        // Disk artifact first — DB/dashboard persistence deferred per disk-first pattern
+        const serpOutDir = path.join(AUDITS_BASE, domain, 'research', todayStr());
+        fs.mkdirSync(serpOutDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(serpOutDir, 'serp_composition.json'),
+          JSON.stringify({ domain, audit_id: auditId, generated_at: todayStr(), site_ceiling: ceiling.site_ceiling, cold_start: ceiling.cold_start, entries }, null, 2),
+        );
+        serpCompositionBlock = buildSerpCompositionBlock(entries, ceiling.site_ceiling);
+        console.log(`  SERP composition: ${entries.length} keywords classified ($${serpCostTotal.toFixed(4)}), ${entries.filter((e) => e.has_video_carousel).length} with video carousel`);
+      }
+    } else {
+      console.log('  SERP composition: no eligible target keywords (KD column empty or all brand/informational)');
+    }
+  } catch (err: any) {
+    console.log(`  Note: Could not build SERP composition block (non-fatal): ${err.message}`);
+  }
+
   const gapTemplate = fs.readFileSync(path.resolve(process.cwd(), 'configs/agents/gap/system-prompt.md'), 'utf-8');
   const prompt = gapTemplate
     .replace('{{DOMAIN}}', domain)
@@ -3452,7 +3571,8 @@ Recommend consolidation or differentiation rather than new pages for these clust
     .replace('{{PLANNED_SUMMARY}}', plannedSummary)
     .replace('{{CRAWLED_INVENTORY}}', crawledInventory)
     .replace('{{AI_VISIBILITY_SECTION}}', aiVisibilitySection)
-    .replace('{{SECTION_COVERAGE_BLOCK}}', sectionCoverageBlock + densityBlock);
+    .replace('{{SECTION_COVERAGE_BLOCK}}', sectionCoverageBlock + densityBlock)
+    .replace('{{SERP_COMPOSITION_BLOCK}}', serpCompositionBlock);
 
   console.log('  Generating content gap analysis via Anthropic API...');
   let gapAnalysis: any;

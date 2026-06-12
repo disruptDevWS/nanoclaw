@@ -137,7 +137,7 @@ Each entry is self-contained: picking it up 3 months later should not require re
 
 - **Status:** Deferred until thresholds are validated over a couple of monthly cycles. The three analysis scripts (`compute-proven-ceiling.ts`, `detect-reeval-candidates.ts`, `detect-llm-citation-queries.ts`) currently write disk artifacts only (`audits/{domain}/analysis/`).
 - **Action:** Once signal quality holds: (a) persist proven ceiling into `research_data.json`/`audit_snapshots` during syncJim; (b) lightweight tables (or JSONB) for re-eval candidates and LLM citation queries; (c) surface LLM citation queries in the dashboard AI Visibility section alongside DataForSEO mentions; (d) consider wiring all three into the monthly cron after `track-rankings`/`fetch-gsc-data`.
-- **Tuning notes from 2026-06-12 verification:** A2 flags pasted quiz questions ("select one answer…") — consider an optional exclusion regex or a separate `quiz_paste` reason tag. A1 IMA candidates are all lower-bound growth (pages predate tracking) — revisit once execution_pages publish dates accumulate. SMA is cold-start (1 owned keyword) — ceiling unusable there until rankings improve.
+- **Tuning notes from 2026-06-12 verification:** A2 flags pasted quiz questions ("select one answer…") — consider an optional exclusion regex or a separate `quiz_paste` reason tag. **Hard requirement if A2 output ever feeds the Gap prompt:** quiz-paste queries must be filtered BEFORE injection — they're test-prep behavior, not search demand, and would distort Gap's opportunity assessment. A1 IMA candidates are all lower-bound growth (pages predate tracking) — revisit once execution_pages publish dates accumulate. SMA is cold-start (1 owned keyword) — ceiling unusable there until rankings improve.
 - **Scope estimate:** M — sync hook + 1–2 tables + dashboard section
 - **Captured:** KB extraction Session 1, 2026-06-12
 
@@ -145,9 +145,20 @@ Each entry is self-contained: picking it up 3 months later should not require re
 
 ### [Pipeline] Proven ceiling injection into Strategy Brief / Michael / Cluster Strategy
 
-- **Status:** Deferred (prompt change — Workstream A was data-only). Ceiling artifact exists per domain at `audits/{domain}/analysis/proven_ceiling.json`.
-- **Action:** Inject "proven ranking ceiling KD {N} + cluster ceilings" into Strategy Brief (Phase 1b) as a quantified authority assessment, and into Michael/Cluster Strategy as a stretch-target flag ("keywords above the cluster ceiling require additional authority building"). Compute during syncJim so it's fresh per run. Belongs with the planned Gap revision session (B1 SERP composition uses the ceiling as its baseline).
-- **Scope estimate:** M — compute-in-sync + 2–3 prompt injections, verify on Weiser full-pipeline first per protect-real-clients rule
-- **Captured:** KB extraction Session 1, 2026-06-12
+- **Status:** PARTIALLY DONE — Gap now computes the ceiling live and gates effective KD against cluster ceilings (B1, Session 2 2026-06-12). Remaining: Strategy Brief (Phase 1b) quantified authority assessment + Michael/Cluster Strategy stretch-target flags.
+- **Action:** Inject "proven ranking ceiling KD {N} + cluster ceilings" into Strategy Brief (Phase 1b), and into Michael/Cluster Strategy as a stretch-target flag ("keywords above the cluster ceiling require additional authority building"). Reuse `computeProvenCeiling()` (`src/analysis/proven-ceiling.ts`) the way runGap does — paginated audit_keywords fetch, non-fatal.
+- **Scope estimate:** S–M — 2 prompt injections, verify on Weiser full-pipeline first per protect-real-clients rule
+- **Captured:** KB extraction Session 1, 2026-06-12 · **Gap portion done:** Session 2, 2026-06-12
+
+---
+
+### [Pipeline] B1 effective-KD threshold tuning + weak-slot list maintenance
+
+- **Status:** Shipped with knowledge-base default thresholds (≥4 weak ×0.7, ≤1 weak ×1.3, ceiling +5 headroom), unvalidated locally.
+- **Action:** After a few monthly gap runs, review `research/{date}/serp_composition.json` artifacts against actual ranking outcomes: do WITHIN_REACH keywords convert to rankings faster than STRETCH ones? Extend the weak-slot domain list in `src/agents/gap/serp-composition.ts` as new aggregators appear in artifacts. Also pending: first live sighting of a video carousel flag (0 across 24 verification lookups — local-service SERPs may rarely show them).
+- **Scope estimate:** S — threshold review + list edits
+- **Captured:** KB extraction Session 2, 2026-06-12
+
+---
 
 ---

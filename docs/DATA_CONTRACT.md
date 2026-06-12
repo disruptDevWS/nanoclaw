@@ -921,6 +921,10 @@ These files live on the pipeline server disk and are NOT in Supabase. They feed 
 | `audits/{domain}/research/{date}/ai_visibility_report.md` | AI Visibility | SOW 2.5 deliverable: executive summary, citation tables, structural gaps, recommendations |
 | `audits/{domain}/research/{date}/research_summary.md` | Jim | 10-11 section research narrative (Section 11 conditional: AI Visibility) |
 | `audits/{domain}/research/{date}/content_gap_analysis.md` | Gap | Authority + format gaps |
+| `audits/{domain}/research/{date}/serp_composition.json` | Gap | B1 effective-difficulty data: per-keyword top-10 classification (weak/competitor/authority), effective KD, proven-ceiling verdicts, video-carousel flags. Disk-first — no DB table. |
+| `audits/{domain}/analysis/proven_ceiling.{json,md}` | On-demand (A3) | Empirical KD ceiling (site + per-cluster) from `compute-proven-ceiling.ts` |
+| `audits/{domain}/analysis/reeval_candidates.{json,md}` | On-demand (A1) | NavBoost re-evaluation republish candidates from `detect-reeval-candidates.ts` |
+| `audits/{domain}/analysis/llm_citation_queries.{json,md}` | On-demand (A2) | GSC zero-click fan-out flags from `detect-llm-citation-queries.ts` |
 | `audits/{domain}/research/{date}/coverage_validation.md` | Validator | Gap vs blueprint cross-check |
 | `audits/{domain}/architecture/{date}/architecture_blueprint.md` | Michael | Silo structure + page plan |
 | `audits/{domain}/content/{date}/{slug}/metadata.md` | Pam | Page metadata |
