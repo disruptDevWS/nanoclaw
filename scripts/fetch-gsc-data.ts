@@ -417,13 +417,27 @@ export async function runGscFetch(
   fs.writeFileSync(summaryPath, summary);
   console.log(`  Written: ${summaryPath}`);
 
-  // Upsert into gsc_page_snapshots (deduplicate by page_url — GSC can return dupes)
+  // Upsert into gsc_page_snapshots. GSC can return multiple URL variants
+  // (e.g. trailing-slash, www/non-www, http/https) that normalize to the same
+  // path — SUM their clicks/impressions (impression-weight the position) rather
+  // than dropping one, otherwise site totals undercount vs the true GSC total.
   const snapshotDate = dateOverride?.snapshotDate ?? todayStr();
   const deduped = new Map<string, typeof pages[0]>();
   for (const p of pages) {
     const existing = deduped.get(p.page_url);
-    if (!existing || p.clicks > existing.clicks) {
-      deduped.set(p.page_url, p);
+    if (!existing) {
+      deduped.set(p.page_url, { ...p });
+      continue;
+    }
+    const totalImpr = existing.impressions + p.impressions;
+    existing.avg_position = totalImpr > 0
+      ? (existing.avg_position * existing.impressions + p.avg_position * p.impressions) / totalImpr
+      : existing.avg_position;
+    existing.clicks += p.clicks;
+    existing.impressions = totalImpr;
+    existing.ctr = totalImpr > 0 ? existing.clicks / totalImpr : 0;
+    if ((p.top_queries?.length ?? 0) > (existing.top_queries?.length ?? 0)) {
+      existing.top_queries = p.top_queries;
     }
   }
   const snapshotRecords = Array.from(deduped.values()).map((p) => ({
