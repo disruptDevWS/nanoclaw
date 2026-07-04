@@ -19,11 +19,14 @@ Trigger paths:
 - **Export audit:** Settings page → `export-audit` Edge Function → `/export-audit` → ZIP stream of all `audits/{domain}/` artifacts
 - **Prospect brief:** Auto after Scout (prospect mode) or on-demand → `pipeline-controls` Edge Function → `/generate-prospect-brief` → `generate-prospect-brief.ts`
 - **Client brief:** Auto after Phase 6d (full/sales pipeline) or on-demand → `pipeline-controls` Edge Function → `/generate-client-brief` → `generate-client-brief.ts`
+- **Page audit (deep dive):** Page Optimizer page → `page-audit` Edge Function (inserts `page_audit_runs` row, auth: `resolveAuthContext` + ownership) → `/audit-page` → `audit-page.ts` (single-URL fetch + code-verified checks + Claude recommendations → `page_audit_runs.findings`)
+- **Refresh architecture:** Clusters page → `cluster-action` Edge Function (`action: refresh_architecture`) → `/refresh-architecture` → `refresh-architecture.ts` (Michael re-run from live state + `--agents michael` sync, strategic_rerun semantics)
 
 Edge Functions (deployed from [Lovable repo](https://github.com/disruptDevWS/market-position-audit-lovable)):
 - `run-audit` — validates audit, marks `running`, POSTs to `/trigger-pipeline`
 - `scout-config` — writes prospect config to disk, triggers scout, reads reports via `/scout-report` (auth: `validateSuperAdmin` + `has_role`)
-- `cluster-action` — proxies `/activate-cluster` and `/deactivate-cluster` (auth: `resolveAuthContext` + ownership check)
+- `cluster-action` — proxies `/activate-cluster`, `/deactivate-cluster`, and `/refresh-architecture` (`action: refresh_architecture`) (auth: `resolveAuthContext` + ownership check)
+- `page-audit` — inserts a pending `page_audit_runs` row, POSTs `/audit-page` with `{domain, url, email, run_id}` (auth: `resolveAuthContext` + ownership; page URL host must match audit domain)
 - `pipeline-controls` — proxies `/recanonicalize`, `/track-rankings`, `/track-gsc`, `/track-llm-mentions`, `/ai-visibility-analysis`, `/lookup-keywords`, `/generate-prospect-brief`, and `/generate-client-brief` (auth: `validateSuperAdmin` + `has_role`)
 - `export-audit` — streams ZIP of all pipeline artifacts for a domain (auth: `validateSuperAdmin` + `has_role`)
 
@@ -667,6 +670,12 @@ All classification fields extracted by `classify-keywords.ts` (Haiku + determini
 
 **Cluster status preservation** (`sync-to-dashboard.ts:725-878`): Before DELETE, saves activation state (`status`, `activated_at`, `activated_by`, `target_publish_date`, `notes`, `hidden_reason`) for all non-inactive clusters. After INSERT, restores state for clusters that survived the rebuild. Logs orphaned active clusters (canonical_key removed by re-canonicalization) to `agent_runs` with `warning: 'orphaned_cluster_activations'`. See DECISIONS.md entry "cluster_strategy orphaning by canonicalization is deprecation, not remap" (2026-04-09).
 
+**Manual-edit survivability (migration 038, 2026-07-04):** The rebuild is no longer fully destructive:
+- `audit_clusters.is_manual = true` rows (user-created topics) are excluded from the DELETE (in both `rebuildClustersAndRollups` and `syncJim`'s pre-delete) and derived inserts that would collide on their `canonical_key` are skipped — manual wins.
+- `audit_clusters.edited_at != null` rows (user-renamed/annotated derived clusters) get `topic`, `canonical_topic`, `notes`, `primary_entity_type`, `edited_at`, `edited_by` restored after re-insert (same pattern as statusMap).
+- Active manual clusters are never counted as "lost" (their `execution_pages.cluster_active` is not flipped off), and `cluster_strategy` rows for manual clusters are never auto-deprecated.
+- Keyword→cluster membership (`audit_keywords.canonical_key`) stays fully pipeline-derived by design — keywords are directional evidence, not human-curated. See DECISIONS.md 2026-07-04.
+
 **Strategy deprecation** (`sync-to-dashboard.ts:880-922`): Any `cluster_strategy` row whose `canonical_key` is no longer present in the rebuilt `audit_clusters` set is marked `status='deprecated'` with `deprecated_at` timestamp. Strategy documents are preserved — deprecation is a soft flag, not a delete. Regenerating a strategy (Phase 5 / dashboard Generate Strategy) reactivates it: the `generate-cluster-strategy.ts` upsert sets `status='active'`, `deprecated_at=NULL`.
 
 **Empty-rebuild guard** (2026-06-11): If the keyword fetch returns 0 rows with `canonical_key`, the rebuild bails out BEFORE deleting anything — no cluster delete, no rollup reset, no activation orphaning, no strategy deprecation. An empty set means keywords aren't canonicalized yet (the jim sync calls this rebuild before Phase 3c canonicalize on every re-run), not that every cluster ceased to exist. Logs `warning: 'skipped_empty_cluster_rebuild'` to `agent_runs` when prior clusters existed. Before this guard, every full re-run over an audit with active strategies transiently wiped clusters and permanently deprecated the strategies (bit Weiser 2026-06-11).
@@ -818,6 +827,8 @@ Reads ALL prior artifacts to produce a silo-based site architecture.
 - Supabase: `audit_clusters` (revenue estimates), `audit_assumptions` + `audit_rollups` (sales mode revenue)
 - Supabase: proven ranking ceiling (`fetchProvenCeiling()` → context block; non-fatal) — pages whose primary keyword exceeds their cluster ceiling (+5 headroom) must be marked "(stretch target — requires authority building)" and sequenced after within-ceiling pages in the silo
 - **Low-authority mode (D1/D2, 2026-06-12):** when the ceiling is cold-start (<15 proven top-7 rankings), a LOW-AUTHORITY MODE block instructs Michael to add a `Mode` column (full | starter) to every silo table. `starter` = untested keyword, 200–400-word direct-answer test page, one pillar link — published to learn whether Google sends impressions before full investment. Question-form queries get INDIVIDUAL `/faq/{question-slug}` starter pages (exact question as H1/title, ~120-word answer) instead of FAQ accordions — title-query match is the cheapest signal for a low-authority site. Parser maps the Mode column to `page_brief.page_mode`; lifecycle handled by `scripts/detect-starter-expansion.ts`.
+- **Cornerstone content (migration 039, 2026-07-04):** Supabase `cornerstone_pages` (user-uploaded Screaming Frog export with declared sections, from the dashboard Strategy page) → "User-Declared Cornerstone Content" context block, injected right after entity context. Declared sections are silo candidates and architectural ANCHORS: every cornerstone page must appear in the blueprint, never marked for deletion; conflicts with crawl-derived structure are surfaced in the Executive Summary under "Architecture Conflicts", never silently resolved. Includes per-page facts (title, word count, GSC clicks/position) from the upload.
+- **Manually assigned pages (migration 038, 2026-07-04):** on re-runs, `execution_pages.assignment_locked = true` rows are listed in a "MANUALLY ASSIGNED PAGES" constraint table inside `{{RERUN_SECTION}}` — Michael must keep them in their listed silo and may only flag disagreement in the Executive Summary.
 - Client context: `prospect-config.json` → `client_context` (full mode only)
 
 All cross-phase reads use `resolveArtifactPath()` with date fallback for operational resilience.
@@ -867,6 +878,8 @@ All cross-phase reads use `resolveArtifactPath()` with date fallback for operati
 | `strategic_rerun` | Committed pages get metadata-only update (page_brief, silo, priority). Stale uncommitted pages set to `deprecated`. Parses `## Deprecation Candidates` JSON from blueprint for explicit deprecation. |
 | `failure_resume` | Full replace (re-syncing same artifacts, no protection needed) |
 
+**assignment_locked (migration 038, 2026-07-04):** In every scenario, `execution_pages.assignment_locked = true` rows (user manually assigned the page to a topic via the dashboard Architecture Editor) get ONLY `snapshot_version` updated — silo, page_brief, canonical_key, status, and source are untouched. Locked rows absent from the new blueprint are never auto-deprecated (treated like foreign-source rows). The canonical_key backfill also filters `.eq('assignment_locked', false)`.
+
 **Supabase writes:**
 
 | Table | Purpose |
@@ -893,7 +906,7 @@ All cross-phase reads use `resolveArtifactPath()` with date fallback for operati
 
 | Table | Purpose |
 |-------|---------|
-| `agent_technical_pages` | Per-page technical data (status_code, word_count, title, h1, meta_desc, depth, indexability, inlinks) |
+| `agent_technical_pages` | Per-page technical data (status_code, word_count, title, h1, meta_desc, depth, indexability, inlinks) + `optimization_profile`/`optimization_score` (migration 037) — mechanical per-page optimization scoring computed by `scoreCrawlRow()` (`src/agents/page-audit/score-page.ts`) during sync, zero LLM spend; powers the dashboard Page Optimizer worklist |
 | `audit_snapshots` | Parsed AUDIT_REPORT.md sections (executive_summary, prioritized_fixes, agentic_readiness, structured_data_issues, heading_issues, security_issues) |
 
 ---
@@ -1379,6 +1392,34 @@ Cluster activation is an on-demand step that generates a strategy document for a
 
 ---
 
+## Page Audit — Single-Page Deep Dive (On-Demand)
+
+**Trigger:** Page Optimizer page → `page-audit` Edge Function → `/audit-page` → `scripts/audit-page.ts`
+**Auth:** audit owners (`resolveAuthContext`), not super_admin-only. **Model:** Claude Sonnet (one call).
+
+Flow (`scripts/audit-page.ts`):
+1. Edge function inserts `page_audit_runs` row (`pending`) and passes `run_id`; script claims it (`running`).
+2. `src/agents/page-audit/fetch-page.ts` — one native `fetch` + cheerio parse of the raw (pre-JS) HTML: title/meta/robots/canonical, H1–H6 outline, images + alt, internal/external links, JSON-LD blocks, visible word count. What we parse = what a non-rendering AI crawler sees.
+3. `score-page.ts` `scoreFetchedPage()` — mechanical 0–100 profile (same check vocabulary as the crawl-time batch scoring).
+4. `agent-readiness.ts` — **code-verified** Aleyda 3-layer (Layer 2) checks: robots.txt AI-bot rules (GPTBot, ClaudeBot, PerplexityBot, …), `llms.txt`, `.well-known/mcp.json` (WebMCP; soft-404-guarded), SSR content, canonical consistency, heading extractability, @graph/@id/Organization/sameAs entity checks, schema dates, authorship, `potentialAction`. Replaces the retired prompt-guessed Dwight §10.4 scorecard for this flow.
+5. `src/agents/linking/related-pages.ts` — embedding-grounded internal-link candidates (non-fatal if unavailable) + cluster context from `execution_pages.canonical_key` → `audit_clusters`.
+6. One Claude call with `configs/agents/dwight/page-audit-prompt.md` → strict JSON findings (metadata / headers / images / internal_links / graph_schema incl. complete proposed @graph JSON-LD / agent_readiness). One retry on malformed JSON.
+7. Writes `findings` (+ attached `mechanical` + `readiness` layers) and `page_snapshot` to `page_audit_runs`, status `complete` (or `failed` + error_message).
+
+Dashboard polls `page_audit_runs` by id every 3s (pam_requests pattern). Realtime is not used anywhere in the app.
+
+**Table:** `page_audit_runs` (migration 037) — RLS: service_role ALL; authenticated SELECT via audit ownership. Inserts come from the edge function (service role).
+
+---
+
+## Refresh Architecture (On-Demand)
+
+**Trigger:** Clusters page → `cluster-action` Edge Function (`action: refresh_architecture`) → `/refresh-architecture` → `scripts/refresh-architecture.ts`
+
+Sequences `pipeline-generate.ts michael` then `sync-to-dashboard.ts --agents michael` (no `--start-from` → `strategic_rerun`). Michael's existing re-run mode supplies the live state: committed execution pages + GSC/GA4 performance, organic pages outside the architecture, manual clusters (`is_manual`), locked assignments (`assignment_locked` constraint table), and cornerstone content (migration 039). In-flight dedup key `refresh-arch:<domain>`; also 409s if a full pipeline run for the domain is in flight.
+
+---
+
 ## Operational Resilience
 
 **Date fallback:** Pipeline phases may span midnight. `resolveArtifactPath()` tries today's date first, then falls back to the most recent dated directory containing the requested file. This means a failed Phase 5 re-run at 12:01 AM still finds Phase 3's artifacts from 11:58 PM.
@@ -1475,6 +1516,8 @@ The pipeline server (`src/pipeline-server-standalone.ts`) is an HTTP server that
 | POST | `/deactivate-cluster` | Deactivate a cluster (sync, 200) |
 | POST | `/lookup-keywords` | Ad-hoc DataForSEO keyword volume lookup, persists to `keyword_lookups` |
 | POST | `/export-audit` | Stream ZIP of all artifacts for a domain |
+| POST | `/audit-page` | Single-page optimization deep dive → `page_audit_runs` (async, 202; requires `{domain, url, email, run_id}`; url host must match domain) |
+| POST | `/refresh-architecture` | Michael re-run from live Supabase state + michael sync (async, 202; strategic_rerun preserves committed pages + `assignment_locked` rows) |
 
 **Auth:** All endpoints (except `/health`) require `Authorization: Bearer <PIPELINE_TRIGGER_SECRET>`.
 

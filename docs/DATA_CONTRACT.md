@@ -130,10 +130,12 @@
 | `primary_entity_type` | Pipeline (Phase 3c/3d) | Dashboard | `Service`, `Course`, `Product`, `LocalBusiness`, `FAQPage`, `Article` — default `Service` |
 | `authority_score` | Pipeline (track-rankings) | Dashboard | 0-100, position-weighted |
 | `authority_score_updated_at` | Pipeline | Dashboard | |
+| `is_manual` | Dashboard | Both | Migration 038. User-created topic — rebuilds never delete it; derived inserts colliding on its `canonical_key` are skipped (manual wins) |
+| `edited_at` / `edited_by` | Dashboard | Both | Migration 038. User rename/annotation marker — rebuild restores `topic`/`canonical_topic`/`notes`/`primary_entity_type` for edited rows |
 
-**Pipeline writes**: Phase 3b (initial), Phase 3d (rebuild with canonical keys, preserves status/activation/hidden/entity_type)
+**Pipeline writes**: Phase 3b (initial), Phase 3d (rebuild with canonical keys, preserves status/activation/hidden/entity_type + manual/edited rows per migration 038)
 **Dashboard reads**: `useAuditClusters()`, `useAudit()` relation, ClustersPage, StrategyPage, OverviewPage
-**Dashboard writes**: Via `cluster-action` edge function (status, activation fields), direct update (hidden status/reason)
+**Dashboard writes**: Via `cluster-action` edge function (activate/deactivate/refresh_architecture) AND direct table writes under RLS: hide/unhide (`useHideCluster`/`useUnhideCluster`), delete cascade (`useDeleteCluster`), create manual topic (`useCreateCluster`, INSERT), rename/annotate (`useUpdateCluster`, UPDATE). RLS: owner-scoped INSERT + UPDATE policies codified in migration 038 (the UPDATE policy previously existed only as live drift).
 
 ---
 
@@ -229,8 +231,10 @@ Written by syncDwight (Phase 6c). One row per crawled URL.
 | `inlinks_count`, `outlinks_count` | |
 | `semantic_closest_url`, `semantic_similarity_score`, `semantic_flag` | Near-duplicate detection |
 | `crawl_data` | JSONB overflow (extra columns from crawl) |
+| `optimization_profile` | Migration 037. JSONB `{score, checks[], computed_from}` — mechanical per-page checks (`scoreCrawlRow()`, `src/agents/page-audit/score-page.ts`), computed at sync time, zero LLM spend |
+| `optimization_score` | Migration 037. 0-100 numeric; dashboard Page Optimizer worklist sorts ascending (lowest = biggest lever) |
 
-**Dashboard reads**: `useAgentTechnicalPages()` → AuditPage
+**Dashboard reads**: `useAgentTechnicalPages()` → AuditPage; `useOptimizationWorklist()` → PageAuditPage
 
 ---
 
@@ -596,6 +600,7 @@ Written by syncMichael (Phase 6b) and Cluster Strategy (on-demand), updated by P
 | `related_pages` | Pam (generate-brief.ts) | JSONB — embedding-derived verified internal link candidates. Shape: `{computed_at, model, source, candidates: [{target, kind: 'live'\|'planned', title, similarity, status?, silo?}], cannibalization_risks: [{target, similarity}]}`. Lives OUTSIDE `page_brief` because syncMichael wholesale-overwrites `page_brief` on re-runs — survives strategic re-runs. Only set when computed (never nulled). Read by dashboard brief drawer (ExecutionPage.tsx "Related Pages" block). Migration 032. |
 | `published_at` | Dashboard | Set when status → published |
 | `snapshot_version` | syncMichael | |
+| `assignment_locked` | Dashboard | Migration 038. TRUE when the user manually assigned this page to a topic (`useAssignPageToCluster` — also sets `canonical_key` + `silo`). syncMichael then updates ONLY `snapshot_version` for the row, never auto-deprecates it, and the canonical_key backfill skips it. `useUnlockPageAssignment` releases it. |
 
 **Dual taxonomy — `silo` vs `canonical_topic`**: `silo` is Michael's architectural grouping (human-readable name from blueprint silo headers). `canonical_topic` on `audit_clusters` is Phase 3c's semantic grouping. They overlap but are NOT identical — Michael may group pages differently than Phase 3c groups keywords. `canonical_key` is the contractual join between `execution_pages` and `audit_clusters`. `silo` is a display label with no foreign key relationship. The silo-match fallback in cluster activation (step 12b) bridges the gap for pages where `canonical_key` is NULL by matching `silo = canonical_topic`.
 
@@ -660,6 +665,44 @@ Written by `generate-cluster-strategy.ts` (on-demand, per-cluster via `/activate
 | `model_used` | |
 
 **Dashboard reads**: `useClusterStrategy()`, `useClusterStrategyPoll()` → StrategyPage. Both filter `.eq('status', 'active')` — deprecated strategies are invisible to the dashboard.
+
+**RLS (migration 038)**: owner-scoped INSERT + UPDATE policies added for `authenticated` (previously SELECT + DELETE only).
+
+---
+
+### `page_audit_runs` (migration 037)
+
+Single-page optimization deep dives. Inserted `pending` by the `page-audit` edge function (service role), claimed + completed by `scripts/audit-page.ts` via `/audit-page`.
+
+| Column | Writer | Notes |
+|--------|--------|-------|
+| `page_url` | Edge fn | The audited URL (host must match audit domain) |
+| `status` | Edge fn → Pipeline | TEXT CHECK: `pending` → `running` → `complete` / `failed` |
+| `findings` | Pipeline | JSONB: `{summary, metadata[], headers[], images[], internal_links[], graph_schema:{issues[], proposed_jsonld}, agent_readiness[], mechanical:{score, checks[]}, readiness:{checks[]}}` |
+| `page_snapshot` | Pipeline | JSONB code-verified facts (title, meta, headings, image/link counts, jsonld count, has_llms_txt, has_mcp_manifest) |
+| `error_message`, `requested_by`, `completed_at` | | Standard lifecycle fields |
+
+**RLS**: service_role ALL; `authenticated` SELECT via audit ownership (no user INSERT — the edge function inserts).
+**Dashboard**: `usePageAuditRun()` polls by id every 3s; `usePageAuditRuns()` history → PageAuditPage.
+
+---
+
+### `cornerstone_pages` (migration 039)
+
+User-declared cornerstone content — the overlay INPUT lane (dashboard writes, pipeline reads). Uploaded on the Strategy page from a Screaming Frog export; rows with an empty Status Code are section labels, URL rows inherit the preceding section. UNIQUE `(audit_id, url)`.
+
+| Column | Writer | Notes |
+|--------|--------|-------|
+| `url` | Dashboard | |
+| `section` | Dashboard | Declared section label (e.g. "ABOUT (ENTITY OPTIMIZATION)") — becomes a declared-silo anchor in Michael's prompt |
+| `primary_topic` | Dashboard | From the "Primary Keyword or Topic" column when filled |
+| `notes` | Dashboard | Manual annotation |
+| `page_facts` | Dashboard | JSONB subset of the export: title, h1, meta_description, word_count, indexability, canonical, inlinks, `gsc:{clicks, impressions, position}` |
+| `uploaded_by` | Dashboard | |
+
+**RLS**: `authenticated` full CRUD via audit ownership; service_role ALL. Upload is replace-all (delete + insert).
+**Pipeline reads**: `runMichael()` — "User-Declared Cornerstone Content" context block (anchor + reconcile rules; the crawl is never overridden).
+**Dashboard**: `useCornerstonePages()` / `useUploadCornerstonePages()` → CornerstoneUpload on StrategyPage.
 
 ---
 
@@ -877,6 +920,8 @@ Server-side view computing position changes from `ranking_snapshots`.
 | `pipeline-controls` | `generate_content` | `/generate-content` | `{domain, email}` | `{status:'content_generation_started'}` |
 | `cluster-action` | `activate` | `/activate-cluster` | `{audit_id, canonical_key, target_publish_date?, notes?}` | cluster status |
 | `cluster-action` | `deactivate` | `/deactivate-cluster` | `{audit_id, canonical_key}` | cluster status |
+| `cluster-action` | `refresh_architecture` | `/refresh-architecture` | `{audit_id}` | `{success, status?}` (200 `already_running` on 409) |
+| `page-audit` | (default) | `/audit-page` | `{audit_id, page_url}` → pipeline gets `{domain, url, email, run_id}` | 202 `{success, run_id}`; inserts pending `page_audit_runs` row first |
 | `share-audit` | `status/create/revoke/verify` | (Supabase-only) | varies | varies |
 | `manage-users` | `list` | (Supabase-only) | `{action:'list'}` | `{users[]}` |
 | `export-audit` | (default) | `/export-audit` | `{domain}` | Binary ZIP stream |
@@ -884,9 +929,9 @@ Server-side view computing position changes from `ranking_snapshots`.
 
 **Auth patterns**:
 - `validateSuperAdmin`: JWT → `has_role('super_admin')` — used by `pipeline-controls`, `scout-config` (except `get_share_report`), `manage-users`
-- `resolveAuthContext`: JWT → user lookup + audit ownership check — used by `cluster-action`, `share-audit`
+- `resolveAuthContext`: JWT → user lookup + audit ownership check — used by `cluster-action`, `page-audit`, `share-audit`
 
-**Retry**: `run-audit` and `pipeline-controls` call the pipeline server via `_shared/retry.ts` `fetchWithRetry` — retries on network throw or 5xx with backoff delays [1s, 4s, 16s]; never retries `< 500` (409 passes through). After exhausting retries, the last 5xx Response is returned (not thrown) so callers keep status-based handling.
+**Retry**: `run-audit`, `pipeline-controls`, `cluster-action`, and `page-audit` call the pipeline server via `_shared/retry.ts` `fetchWithRetry` — retries on network throw or 5xx with backoff delays [1s, 4s, 16s]; never retries `< 500` (409 passes through). After exhausting retries, the last 5xx Response is returned (not thrown) so callers keep status-based handling.
 
 ---
 
