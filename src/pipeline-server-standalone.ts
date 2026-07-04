@@ -527,6 +527,198 @@ async function handleRecanonicalize(req: http.IncomingMessage, res: http.ServerR
   json(res, 202, { status: 'recanonicalize_started', domain });
 }
 
+async function handleRefreshArchitecture(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!checkAuth(req, res)) return;
+
+  let payload: { domain?: string; email?: string };
+  try {
+    payload = JSON.parse(await readBody(req));
+  } catch {
+    json(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  const { domain, email } = payload;
+  if (!domain || !email) {
+    json(res, 400, { error: 'domain and email are required' });
+    return;
+  }
+  if (!DOMAIN_RE.test(domain)) {
+    json(res, 400, { error: 'Invalid domain format' });
+    return;
+  }
+  if (!EMAIL_RE.test(email)) {
+    json(res, 400, { error: 'Invalid email format' });
+    return;
+  }
+
+  const refreshKey = `refresh-arch:${domain}`;
+  if (inFlight.has(refreshKey) || inFlight.has(domain)) {
+    json(res, 409, { error: `Architecture refresh or pipeline already running for ${domain}` });
+    return;
+  }
+
+  inFlight.add(refreshKey);
+  console.log(`Architecture refresh triggered: ${domain} (${email})`);
+
+  const child = spawn('npx', ['tsx', 'scripts/refresh-architecture.ts', '--domain', domain, '--user-email', email], {
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: process.cwd(),
+  });
+  child.unref();
+
+  const logLines: string[] = [];
+  const collect = (stream: NodeJS.ReadableStream | null, prefix: string) => {
+    if (!stream) return;
+    let buf = '';
+    stream.on('data', (chunk: Buffer) => {
+      buf += chunk.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        console.log(`[refresh-arch:${domain}] ${prefix}: ${line}`);
+        logLines.push(`${prefix}: ${line}`);
+      }
+    });
+    stream.on('end', () => {
+      if (buf) {
+        console.log(`[refresh-arch:${domain}] ${prefix}: ${buf}`);
+        logLines.push(`${prefix}: ${buf}`);
+      }
+    });
+  };
+  collect(child.stdout, 'OUT');
+  collect(child.stderr, 'ERR');
+
+  const disarm = armWatchdog(child, `refresh-arch:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
+  child.on('close', (code) => {
+    disarm();
+    inFlight.delete(refreshKey);
+    console.log(`Architecture refresh finished: ${domain} (exit ${code})`);
+    if (code !== 0) {
+      console.error(`Architecture refresh failed: ${domain} — last 10 lines:\n${logLines.slice(-10).join('\n')}`);
+    }
+  });
+
+  child.on('error', (err) => {
+    disarm();
+    inFlight.delete(refreshKey);
+    console.error(`Architecture refresh spawn error: ${domain}`, err);
+  });
+
+  json(res, 202, { status: 'refresh_architecture_started', domain });
+}
+
+const RUN_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function handleAuditPage(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!checkAuth(req, res)) return;
+
+  let payload: { domain?: string; url?: string; email?: string; run_id?: string };
+  try {
+    payload = JSON.parse(await readBody(req));
+  } catch {
+    json(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  const { domain, url, email, run_id } = payload;
+  if (!domain || !url || !email || !run_id) {
+    json(res, 400, { error: 'domain, url, email, and run_id are required' });
+    return;
+  }
+  if (!DOMAIN_RE.test(domain)) {
+    json(res, 400, { error: 'Invalid domain format' });
+    return;
+  }
+  if (!EMAIL_RE.test(email)) {
+    json(res, 400, { error: 'Invalid email format' });
+    return;
+  }
+  if (!RUN_ID_RE.test(run_id)) {
+    json(res, 400, { error: 'Invalid run_id format' });
+    return;
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    json(res, 400, { error: 'Invalid url' });
+    return;
+  }
+  if (!/^https?:$/.test(parsedUrl.protocol) || url.length > 2000) {
+    json(res, 400, { error: 'url must be http(s) and under 2000 chars' });
+    return;
+  }
+  // Page must belong to the audited domain (apex or subdomain)
+  const host = parsedUrl.hostname.toLowerCase();
+  const apex = domain.toLowerCase();
+  if (host !== apex && !host.endsWith(`.${apex}`)) {
+    json(res, 400, { error: `url host must match audit domain ${domain}` });
+    return;
+  }
+
+  const auditPageKey = `audit-page:${run_id}`;
+  if (inFlight.has(auditPageKey)) {
+    json(res, 409, { error: `Page audit already running for run ${run_id}` });
+    return;
+  }
+
+  inFlight.add(auditPageKey);
+  console.log(`Page audit triggered: ${domain} ${url} (${email}, run ${run_id})`);
+
+  const child = spawn('npx', ['tsx', 'scripts/audit-page.ts', '--domain', domain, '--url', url, '--user-email', email, '--run-id', run_id], {
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: process.cwd(),
+  });
+  child.unref();
+
+  const logLines: string[] = [];
+  const collect = (stream: NodeJS.ReadableStream | null, prefix: string) => {
+    if (!stream) return;
+    let buf = '';
+    stream.on('data', (chunk: Buffer) => {
+      buf += chunk.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        console.log(`[audit-page:${domain}] ${prefix}: ${line}`);
+        logLines.push(`${prefix}: ${line}`);
+      }
+    });
+    stream.on('end', () => {
+      if (buf) {
+        console.log(`[audit-page:${domain}] ${prefix}: ${buf}`);
+        logLines.push(`${prefix}: ${buf}`);
+      }
+    });
+  };
+  collect(child.stdout, 'OUT');
+  collect(child.stderr, 'ERR');
+
+  const disarm = armWatchdog(child, `audit-page:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
+  child.on('close', (code) => {
+    disarm();
+    inFlight.delete(auditPageKey);
+    console.log(`Page audit finished: ${domain} ${url} (exit ${code})`);
+    if (code !== 0) {
+      console.error(`Page audit failed: ${domain} ${url} — last 10 lines:\n${logLines.slice(-10).join('\n')}`);
+    }
+  });
+
+  child.on('error', (err) => {
+    disarm();
+    inFlight.delete(auditPageKey);
+    console.error(`Page audit spawn error: ${domain}`, err);
+  });
+
+  json(res, 202, { status: 'page_audit_started', domain, run_id });
+}
+
 async function handleActivateCluster(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   if (!checkAuth(req, res)) return;
 
@@ -1587,6 +1779,10 @@ const server = http.createServer((req, res) => {
     handleTrackRankings(req, res);
   } else if (req.method === 'POST' && req.url === '/recanonicalize') {
     handleRecanonicalize(req, res);
+  } else if (req.method === 'POST' && req.url === '/refresh-architecture') {
+    handleRefreshArchitecture(req, res);
+  } else if (req.method === 'POST' && req.url === '/audit-page') {
+    handleAuditPage(req, res);
   } else if (req.method === 'POST' && req.url === '/activate-cluster') {
     handleActivateCluster(req, res);
   } else if (req.method === 'POST' && req.url === '/deactivate-cluster') {

@@ -18,6 +18,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { embedAuditKeywords } from './embed-keywords.js';
 import { isCommitted, phaseIndex, type RerunScenario } from './rerun-utils.js';
+import { scoreCrawlRow } from '../src/agents/page-audit/score-page.js';
 
 // ============================================================
 // CLI argument parsing
@@ -749,7 +750,7 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
   // Preserve cluster activation + hidden status + computed scores before delete
   const { data: existingStatuses } = await sb
     .from('audit_clusters')
-    .select('canonical_key, status, activated_at, activated_by, target_publish_date, notes, hidden_reason, primary_entity_type, authority_score, authority_score_updated_at, coverage_score, coverage_competitor_count, coverage_score_updated_at, density_score, competitor_density_score, density_updated_at')
+    .select('canonical_key, status, activated_at, activated_by, target_publish_date, notes, hidden_reason, primary_entity_type, authority_score, authority_score_updated_at, coverage_score, coverage_competitor_count, coverage_score_updated_at, density_score, competitor_density_score, density_updated_at, topic, canonical_topic, edited_at, edited_by')
     .eq('audit_id', auditId);
   const statusMap = new Map(
     (existingStatuses ?? [])
@@ -760,6 +761,26 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
   const scoreMap = new Map(
     (existingStatuses ?? [])
       .filter((r: any) => r.canonical_key && (r.authority_score != null || r.coverage_score != null || r.density_score != null))
+      .map((r: any) => [r.canonical_key, r]),
+  );
+
+  // Manual-edit survivability (migration 038):
+  //  * is_manual clusters are user-created — never deleted or re-derived. They are
+  //    excluded from the delete below and from derived inserts (manual wins on
+  //    canonical_key collision, enforced by the (audit_id, canonical_key) unique index).
+  //  * edited_at clusters are pipeline-derived but user-renamed/annotated — their
+  //    display fields are restored after the rebuild (same pattern as statusMap).
+  const { data: manualClusters } = await (sb as any)
+    .from('audit_clusters')
+    .select('canonical_key, status')
+    .eq('audit_id', auditId)
+    .eq('is_manual', true);
+  const manualKeys = new Set(
+    ((manualClusters ?? []) as any[]).map((r) => r.canonical_key).filter(Boolean),
+  );
+  const editMap = new Map(
+    ((existingStatuses ?? []) as any[])
+      .filter((r: any) => r.canonical_key && r.edited_at != null && !manualKeys.has(r.canonical_key))
       .map((r: any) => [r.canonical_key, r]),
   );
 
@@ -810,8 +831,8 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
     return { clusterCount: 0, nearMissCount: 0 };
   }
 
-  // Clear existing clusters + rollups
-  await sb.from('audit_clusters').delete().eq('audit_id', auditId);
+  // Clear existing clusters + rollups (manual clusters survive — migration 038)
+  await (sb as any).from('audit_clusters').delete().eq('audit_id', auditId).eq('is_manual', false);
   await sb.from('audit_rollups').delete().eq('audit_id', auditId);
 
   let clusterMap = buildClusterMap(kwRows as any[]);
@@ -856,6 +877,15 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
         sample_keywords: c.keywords.slice(0, 5),
         primary_entity_type: c.primaryEntityType ?? 'Service',
       };
+    })
+    // Manual clusters were not deleted; skip derived records that would collide
+    // on the (audit_id, canonical_key) unique index — manual wins.
+    .filter((r) => {
+      if (manualKeys.has(r.canonical_key)) {
+        console.log(`  [${label}] Skipping derived cluster "${r.canonical_key}" — manual cluster with same key exists (manual wins)`);
+        return false;
+      }
+      return true;
     });
 
   if (clusterRecords.length > 0) {
@@ -931,13 +961,34 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
       }
     }
 
+    // Restore user-edited display fields (rename/annotation survivability — migration 038)
+    if (editMap.size > 0) {
+      let editsRestored = 0;
+      for (const [canonicalKey, prev] of editMap) {
+        if (!clusterRecords.some((r) => r.canonical_key === canonicalKey)) continue;
+        await (sb as any).from('audit_clusters').update({
+          topic: (prev as any).topic,
+          canonical_topic: (prev as any).canonical_topic,
+          notes: (prev as any).notes,
+          primary_entity_type: (prev as any).primary_entity_type,
+          edited_at: (prev as any).edited_at,
+          edited_by: (prev as any).edited_by,
+        }).eq('audit_id', auditId).eq('canonical_key', canonicalKey);
+        editsRestored++;
+      }
+      if (editsRestored > 0) {
+        console.log(`  [${label}] Restored user edits for ${editsRestored} clusters`);
+      }
+    }
+
     // Restore execution_pages cluster_active based on surviving active clusters
     if (activeClusterKeys.size > 0) {
       const survivingActiveKeys = clusterRecords
         .filter((r) => statusMap.has(r.canonical_key))
         .map((r) => r.canonical_key);
+      // Manual clusters were never deleted — an active manual cluster is not "lost"
       const lostKeys = [...activeClusterKeys].filter(
-        (k) => !clusterRecords.some((r) => r.canonical_key === k),
+        (k) => !clusterRecords.some((r) => r.canonical_key === k) && !manualKeys.has(k),
       );
 
       // DATA-4: Log orphaned activations for audit trail
@@ -994,6 +1045,8 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
       .map((r) => r.canonical_key)
       .filter(Boolean);
     const newCanonicalKeys = new Set(clusterRecords.map((r) => r.canonical_key));
+    // Strategies for surviving manual clusters are not orphans
+    for (const k of manualKeys) newCanonicalKeys.add(k);
     const orphanedStrategyKeys = existingStrategyKeys.filter((k) => !newCanonicalKeys.has(k));
     if (orphanedStrategyKeys.length > 0) {
       const { error: depErr } = await (sb as any)
@@ -1116,7 +1169,9 @@ async function syncJim(
   // update both files.
   await sb.from('audit_keywords').delete().eq('audit_id', auditId).eq('source', 'ranked');
   await sb.from('audit_keywords').delete().eq('audit_id', auditId).is('source', null);
-  await sb.from('audit_clusters').delete().eq('audit_id', auditId);
+  // Manual clusters survive jim re-runs (migration 038); rebuildClustersAndRollups
+  // below re-derives everything else.
+  await (sb as any).from('audit_clusters').delete().eq('audit_id', auditId).eq('is_manual', false);
   await sb.from('audit_rollups').delete().eq('audit_id', auditId);
 
   // Insert ALL keyword records with segment flags
@@ -1928,6 +1983,8 @@ async function syncDwight(
       semanticFlag = 'NEAR-DUP';
     }
 
+    const optProfile = scoreCrawlRow(r);
+
     // Build crawl_data with remaining useful columns
     const crawlData: Record<string, string | number | null> = {};
     const knownCols = new Set([
@@ -1957,6 +2014,10 @@ async function syncDwight(
       semantic_similarity_score: semScore,
       semantic_flag: semanticFlag,
       crawl_data: crawlData,
+      // Mechanical optimization scoring (migration 037) — the site-wide
+      // "optimize existing pages" worklist. Code-computed, zero LLM spend.
+      optimization_profile: optProfile,
+      optimization_score: optProfile.score,
     };
   });
 
@@ -2273,10 +2334,10 @@ async function syncMichael(
       // Load all existing execution_pages for this audit
       const { data: existingPages } = await sb
         .from('execution_pages')
-        .select('id, url_slug, status, source, published_at')
+        .select('id, url_slug, status, source, published_at, assignment_locked')
         .eq('audit_id', auditId);
 
-      const existingBySlug = new Map<string, { id: string; url_slug: string; status: string; source: string | null; published_at: string | null }>();
+      const existingBySlug = new Map<string, { id: string; url_slug: string; status: string; source: string | null; published_at: string | null; assignment_locked?: boolean }>();
       for (const ep of (existingPages ?? []) as any[]) {
         const normalizedSlug = String(ep.url_slug).replace(/^\/+/, '').toLowerCase();
         existingBySlug.set(normalizedSlug, ep);
@@ -2287,6 +2348,7 @@ async function syncMichael(
       let preserved = 0;
       let updated = 0;
       let inserted = 0;
+      let lockedSkipped = 0;
 
       for (const rec of execRecords) {
         const slug = rec.url_slug.replace(/^\/+/, '');
@@ -2294,7 +2356,14 @@ async function syncMichael(
         newSlugs.add(key);
         const existing = existingBySlug.get(key);
 
-        if (existing && isCommitted(existing)) {
+        if (existing && (existing as any).assignment_locked) {
+          // User manually assigned this page to a topic (migration 038) —
+          // Michael's re-run must not re-home it or overwrite its curated brief.
+          await (sb as any).from('execution_pages').update({
+            snapshot_version: rec.snapshot_version,
+          }).eq('id', existing.id);
+          lockedSkipped++;
+        } else if (existing && isCommitted(existing)) {
           // Committed: update metadata only, do NOT touch status/source/Pam/Oscar fields
           await (sb as any).from('execution_pages').update({
             url_slug: slug,
@@ -2332,7 +2401,10 @@ async function syncMichael(
       let foreignPreserved = 0;
       for (const [key, ep] of existingBySlug) {
         if (newSlugs.has(key)) continue;
-        if ((ep as any).source && (ep as any).source !== 'michael') {
+        if ((ep as any).assignment_locked) {
+          // Locked pages are never auto-deprecated by an architecture re-run
+          foreignPreserved++;
+        } else if ((ep as any).source && (ep as any).source !== 'michael') {
           foreignPreserved++;
         } else if (isCommitted(ep)) {
           stalePreserved++;
@@ -2375,19 +2447,24 @@ async function syncMichael(
         }
       }
 
-      console.log(`  [michael] Strategic re-run: ${preserved} preserved, ${updated} updated, ${inserted} new, ${deprecated} deprecated (stale), ${stalePreserved} stale-but-committed`);
+      console.log(`  [michael] Strategic re-run: ${preserved} preserved, ${updated} updated, ${inserted} new, ${deprecated} deprecated (stale), ${stalePreserved} stale-but-committed, ${lockedSkipped} assignment-locked (untouched)`);
     } else {
       // first_run or failure_resume: standard upsert with source
       for (const rec of execRecords) {
         const slug = rec.url_slug.replace(/^\/+/, '');
         const { data: existing } = await sb
           .from('execution_pages')
-          .select('id')
+          .select('id, assignment_locked')
           .eq('audit_id', auditId)
           .or(`url_slug.eq.${slug},url_slug.eq./${slug}`)
           .maybeSingle();
 
-        if (existing) {
+        if (existing && (existing as any).assignment_locked) {
+          // User-assigned page (migration 038) — leave silo/brief untouched
+          await (sb as any).from('execution_pages').update({
+            snapshot_version: rec.snapshot_version,
+          }).eq('id', (existing as any).id);
+        } else if (existing) {
           await sb.from('execution_pages').update({
             url_slug: slug,
             page_brief: rec.page_brief,
@@ -2418,8 +2495,10 @@ async function syncMichael(
       const ck = pkToCanonical.get(pk);
       if (ck) {
         const slug = p.url_slug.replace(/^\/+/, '');
-        await sb.from('execution_pages').update({ canonical_key: ck })
+        // assignment_locked pages keep their user-assigned canonical_key
+        await (sb as any).from('execution_pages').update({ canonical_key: ck })
           .eq('audit_id', auditId)
+          .eq('assignment_locked', false)
           .or(`url_slug.eq.${slug},url_slug.eq./${slug}`);
         canonicalUpdated++;
       }

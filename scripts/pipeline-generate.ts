@@ -2331,6 +2331,48 @@ async function runMichael(sb: SupabaseClient, auditId: string, domain: string, r
     .map((c) => `${c.topic} | ${c.total_volume} | $${c.est_revenue_low}-$${c.est_revenue_high} | ${(c.sample_keywords ?? []).slice(0, 5).join(', ')}`)
     .join('\n');
 
+  // --- User-declared cornerstone content (overlay input lane — migration 039) ---
+  // Uploaded via the dashboard from a Screaming Frog export; declared sections are
+  // the operator's intended topical structure. Complements — never overrides —
+  // Dwight's crawl: reconciliation rules are embedded in the block itself,
+  // matching the gap/platform section idiom.
+  let cornerstoneBlock = '';
+  {
+    const { data: cornerstoneRows } = await (sb as any)
+      .from('cornerstone_pages')
+      .select('url, section, primary_topic, notes, page_facts')
+      .eq('audit_id', auditId)
+      .order('section', { ascending: true });
+    const csPages = (cornerstoneRows ?? []) as any[];
+    if (csPages.length > 0) {
+      const bySection = new Map<string, any[]>();
+      for (const r of csPages) {
+        const key = r.section || 'Unsectioned';
+        if (!bySection.has(key)) bySection.set(key, []);
+        bySection.get(key)!.push(r);
+      }
+      cornerstoneBlock = `## User-Declared Cornerstone Content (${csPages.length} pages — architectural anchors)
+The operator uploaded a curated inventory of cornerstone content, grouped into DECLARED SECTIONS representing their intended topical structure. Treat these as fixed architectural anchors:
+- Every cornerstone page MUST appear in your silo tables. Never mark one for deletion or deprecation.
+- Declared sections are strong silo candidates. Where crawl/keyword-derived silos disagree with a declared section, keep the cornerstone page anchored to its declared section and surface the tension in the Executive Summary under "Architecture Conflicts" — do not silently re-home it.
+- Reconcile against crawl data: a cornerstone URL present in the crawl is an existing page (Status=exists); one absent is planned (Status=new).
+`;
+      for (const [section, rows] of bySection) {
+        cornerstoneBlock += `\n### Declared Section: ${section}\n`;
+        for (const r of rows) {
+          const f = (r.page_facts ?? {}) as any;
+          const facts: string[] = [];
+          if (f.title) facts.push(`title="${f.title}"`);
+          if (f.word_count != null) facts.push(`${f.word_count} words`);
+          if (f.gsc?.clicks != null) facts.push(`${f.gsc.clicks} GSC clicks`);
+          if (f.gsc?.position != null) facts.push(`avg pos ${f.gsc.position}`);
+          cornerstoneBlock += `- ${r.url}${r.primary_topic ? ` → topic: ${r.primary_topic}` : ''}${facts.length ? ` (${facts.join(', ')})` : ''}${r.notes ? ` — ${r.notes}` : ''}\n`;
+        }
+      }
+      console.log(`  Cornerstone content: ${csPages.length} pages in ${bySection.size} declared sections`);
+    }
+  }
+
   // --- Disk: Jim's research_summary.md (REQUIRED) ---
   const researchSummaryPath = resolveArtifactPath(domain, 'research', 'research_summary.md', researchDate);
   if (!researchSummaryPath) throw new Error('research_summary.md not found — Jim must run successfully first');
@@ -2520,9 +2562,22 @@ ${parts.join('\n\n')}`;
     // Fetch existing execution pages for committed architecture table
     const { data: existingExecPages } = await (sb as any)
       .from('execution_pages')
-      .select('url_slug, silo, priority, status, source, published_at, page_brief, canonical_key')
+      .select('url_slug, silo, priority, status, source, published_at, page_brief, canonical_key, assignment_locked')
       .eq('audit_id', auditId);
     const committedPages = (existingExecPages ?? []).filter((p: any) => isCommitted(p));
+
+    // User-assigned pages (migration 038) — Michael must keep them where the human put them
+    const lockedPages = (existingExecPages ?? []).filter((p: any) => p.assignment_locked);
+    if (lockedPages.length > 0) {
+      const lockedTable = lockedPages
+        .map((p: any) => `${p.url_slug} | ${p.silo ?? ''} | ${p.canonical_key ?? ''}`)
+        .join('\n');
+      rerunBlock += `\n## MANUALLY ASSIGNED PAGES (${lockedPages.length} pages — assignments are FIXED)
+URL Slug | Silo | Topic Key
+${lockedTable}
+
+CONSTRAINT: These pages were manually assigned to their silo/topic by the operator. Keep each in its listed silo — do NOT reassign them, even if data suggests a different home. If you believe one is misplaced, note it in the Executive Summary instead.\n`;
+    }
 
     if (committedPages.length > 0) {
       const committedTable = committedPages.map((p: any) => {
@@ -2694,6 +2749,8 @@ This client has ${ceiling.owned_count} proven top-7 ranking(s) — too few to ju
   const contextBlockParts: string[] = [];
   // Entity context FIRST (entity-first input ordering)
   if (entityContextBlock) contextBlockParts.push(entityContextBlock);
+  // Cornerstone content next — user-declared ground truth outranks derived signals
+  if (cornerstoneBlock) contextBlockParts.push(cornerstoneBlock);
   if (michaelCeilingBlock) contextBlockParts.push(michaelCeilingBlock.trim());
   if (michaelStarterBlock) contextBlockParts.push(michaelStarterBlock);
   if (researchSummary) contextBlockParts.push(`## Jim's Research Summary (Foundational Search Intelligence)\n${researchSummary}`);
