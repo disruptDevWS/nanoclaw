@@ -807,6 +807,20 @@ Written by Phase 6d (LocalPresence). One row per directory.
 
 ---
 
+### `market_value_estimates`
+
+Migration 042 (2026-07-05). Web-search-grounded typical job/customer values, cached per vertical+region. Written by Scout (service role) on cache miss; RLS enabled with no policies (service-role only). Rows are hand-editable overrides — Scout trusts a fresh row over a new lookup (180-day freshness window).
+
+| Column | Writer | Reader | Notes |
+|--------|--------|--------|-------|
+| `vertical_key`, `region_key` | Pipeline (Scout) | Pipeline | Unique pair; slugified (e.g. `locksmith` / `boise_idaho`) |
+| `acv_low/mid/high`, `cr`, `value_label` | Pipeline | Pipeline | Feeds `revenue_assumptions` (`method: market_estimate`) |
+| `basis` | Pipeline | Dashboard (via `scout_scope_json.revenue_assumptions.basis`) | Plain-language source sentence for the share-page footnote |
+| `sources` | Pipeline | — | JSONB `[{url, title}]` citations from web search |
+| `confidence`, `estimated_at` | Pipeline | Pipeline | Freshness check |
+
+---
+
 ### `benchmarks`
 
 Read-only reference data. Pipeline reads at sync time, Dashboard reads for audit creation.

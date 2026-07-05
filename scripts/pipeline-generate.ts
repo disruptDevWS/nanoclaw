@@ -564,6 +564,123 @@ const SCOUT_REVENUE_ESTIMATES: Record<string, { acv_low: number; acv_high: numbe
 };
 const PAGE1_CTR = 0.08;
 
+// ── Market-value estimates (web-search-grounded, cached per vertical+region) ──
+
+const MARKET_ESTIMATE_MAX_AGE_DAYS = 180;
+
+interface MarketValueEstimate {
+  acv_low: number | null;
+  acv_mid: number;
+  acv_high: number | null;
+  cr: number;
+  value_label: string;
+  basis: string | null;
+  confidence: string | null;
+}
+
+function slugifyKey(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+/**
+ * Typical job/customer value for a service vertical in a region, grounded in
+ * published market data via the Anthropic web search tool. Cached in
+ * market_value_estimates so re-runs produce identical revenue numbers and the
+ * lookup cost amortizes across prospects; rows are hand-editable overrides.
+ * Returns null on hard failure (caller falls back to the static benchmark
+ * table or suppresses revenue entirely).
+ */
+async function fetchMarketValueEstimate(
+  sb: SupabaseClient,
+  verticalKey: string,
+  regionKey: string,
+  regionLabel: string,
+  serviceDescription: string,
+): Promise<MarketValueEstimate | null> {
+  let cached: any = null;
+  try {
+    const { data } = await sb
+      .from('market_value_estimates')
+      .select('*')
+      .eq('vertical_key', verticalKey)
+      .eq('region_key', regionKey)
+      .maybeSingle();
+    cached = data;
+  } catch {
+    // cache unavailable — proceed to live estimate
+  }
+  if (cached) {
+    const ageDays = (Date.now() - new Date(cached.estimated_at).getTime()) / 86_400_000;
+    if (ageDays <= MARKET_ESTIMATE_MAX_AGE_DAYS) {
+      console.log(`  Market estimate: cache hit (${verticalKey} / ${regionKey}, ${Math.round(ageDays)}d old)`);
+      return cached as MarketValueEstimate;
+    }
+  }
+
+  const anchors = Object.entries(SCOUT_REVENUE_ESTIMATES)
+    .map(([k, v]) => `- ${k}: $${v.acv_low}-$${v.acv_high} per ${v.label}, ~${(v.cr * 100).toFixed(1)}% conversion`)
+    .join('\n');
+
+  const prompt = `You are estimating the typical revenue per job/customer for a local service business, for use in a conservative revenue-opportunity model shown to the business owner. Use web search to find published cost/pricing data (industry cost guides such as HomeAdvisor/Angi true-cost pages, trade publications, pricing surveys) for this service in or near this region.
+
+Service: ${serviceDescription}
+Region: ${regionLabel}
+
+Calibration anchors from other local-service verticals (national averages):
+${anchors}
+
+Rules:
+- Be conservative: use the typical/median job, not premium or emergency-only pricing. The owner knows their own numbers; an inflated value discredits the whole report.
+- If region-specific data is unavailable, use national data and say so in "basis".
+- "cr" is the fraction of website visitors who become customers; stay within 0.01-0.03 unless you find strong published evidence otherwise.
+- "basis" is one plain-language sentence a business owner would read under a revenue table, e.g. "Based on published cost-guide rates for locksmith services in the Boise, Idaho area."
+
+Respond with ONLY a JSON object:
+{"acv_low": <number>, "acv_mid": <number>, "acv_high": <number>, "cr": <number>, "value_label": "<short unit, e.g. service call>", "basis": "<one sentence>", "confidence": "high|medium|low", "sources": [{"url": "...", "title": "..."}]}`;
+
+  try {
+    const raw = await callClaude(prompt, {
+      model: 'sonnet',
+      phase: 'market_value_estimate',
+      webSearch: { maxUses: 4 },
+    });
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('no JSON object in response');
+    const est = JSON.parse(match[0]);
+
+    const mid = Number(est.acv_mid);
+    if (!Number.isFinite(mid) || mid <= 0) throw new Error(`invalid acv_mid: ${est.acv_mid}`);
+    const low = Number(est.acv_low);
+    const high = Number(est.acv_high);
+    const rawCr = Number(est.cr);
+    const cr = Math.min(Math.max(Number.isFinite(rawCr) && rawCr > 0 ? rawCr : 0.02, 0.005), 0.05);
+
+    const row = {
+      vertical_key: verticalKey,
+      region_key: regionKey,
+      acv_low: Number.isFinite(low) && low > 0 && low <= mid ? low : null,
+      acv_mid: mid,
+      acv_high: Number.isFinite(high) && high >= mid ? high : null,
+      cr,
+      value_label: typeof est.value_label === 'string' && est.value_label.trim() ? est.value_label.trim() : 'job',
+      basis: typeof est.basis === 'string' && est.basis.trim() ? est.basis.trim().slice(0, 500) : null,
+      sources: Array.isArray(est.sources) ? est.sources.slice(0, 5) : null,
+      confidence: typeof est.confidence === 'string' ? est.confidence : null,
+      estimated_at: new Date().toISOString(),
+    };
+    await sb.from('market_value_estimates').upsert(row, { onConflict: 'vertical_key,region_key' });
+    console.log(`  Market estimate: web search — ACV=$${mid} per ${row.value_label} (${row.confidence ?? 'unrated'} confidence)`);
+    return row as MarketValueEstimate;
+  } catch (err: any) {
+    console.log(`  Warning: market value estimate failed (${err.message})`);
+    if (cached) {
+      console.log('  Using stale cached market estimate');
+      return cached as MarketValueEstimate;
+    }
+    return null;
+  }
+}
+
 // Minimum ranked keywords before auto-supplementing with seed candidates.
 // Below this threshold, DataForSEO returned too few organic results for a useful analysis.
 const MIN_RANKED_KEYWORDS_THRESHOLD = 50;
@@ -5415,11 +5532,13 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
   const serviceCoverage = Object.fromEntries(coverageByTopic);
 
   // ── Revenue estimates ──
-  // Priority: owner-provided job value → vertical benchmark → suppress.
-  // No CPC-derived fallback: a business owner knows their own job value, and one
-  // absurd invented ACV discredits every other number in the report. When we
-  // can't state a defensible ACV we show no dollar estimates at all (the share
-  // page and narrative fall back to advertiser cost-per-click framing).
+  // Priority: owner-provided job value → web-search-grounded market estimate
+  // (cached per vertical+region) → static vertical benchmark (only if the
+  // market lookup hard-fails) → suppress. No CPC-derived fallback: a business
+  // owner knows their own job value, and one absurd invented ACV discredits
+  // every other number in the report. When we can't state a defensible ACV we
+  // show no dollar estimates at all (the share page and narrative fall back to
+  // advertiser cost-per-click framing).
   const detectedVertical = detectScoutVertical([
     ...rankedKeywords.map((k) => k.keyword),
     ...config.topic_patterns,
@@ -5428,12 +5547,13 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
   const ownerAcv = Number(config.estimated_job_value);
 
   interface RevenueAssumptions {
-    method: 'owner_provided' | 'vertical_benchmark';
+    method: 'owner_provided' | 'market_estimate' | 'vertical_benchmark';
     vertical: string | null;
     acv_used: number;
     cr_used: number;
     ctr_used: number;
     value_label: string;
+    basis?: string | null;
     disclaimer: string;
   }
   let revenueAssumptions: RevenueAssumptions | null = null;
@@ -5448,16 +5568,46 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
       value_label: verticalEst?.label ?? 'job',
       disclaimer: 'Based on the owner-provided average job value. Stated assumptions below.',
     };
-  } else if (verticalEst) {
-    revenueAssumptions = {
-      method: 'vertical_benchmark',
-      vertical: detectedVertical,
-      acv_used: (verticalEst.acv_low + verticalEst.acv_high) / 2,
-      cr_used: verticalEst.cr,
-      ctr_used: PAGE1_CTR,
-      value_label: verticalEst.label,
-      disclaimer: 'Rough estimate based on industry averages. Stated assumptions below.',
-    };
+  } else {
+    const verticalKey = detectedVertical ?? slugifyKey(config.topic_patterns[0] ?? 'local_service');
+    const firstGeo = config.target_geos[0];
+    const regionLabel = isNational
+      ? 'United States'
+      : firstGeo
+        ? firstGeo.metros[0]
+          ? `${firstGeo.metros[0]}, ${firstGeo.state}`
+          : firstGeo.state
+        : 'United States';
+    const serviceDescription = `${verticalKey.replace(/_/g, ' ')} (services: ${config.topic_patterns.slice(0, 5).join(', ')})`;
+    const marketEst = await fetchMarketValueEstimate(
+      sb,
+      verticalKey,
+      slugifyKey(regionLabel),
+      regionLabel,
+      serviceDescription,
+    );
+    if (marketEst) {
+      revenueAssumptions = {
+        method: 'market_estimate',
+        vertical: detectedVertical,
+        acv_used: Number(marketEst.acv_mid),
+        cr_used: Number(marketEst.cr),
+        ctr_used: PAGE1_CTR,
+        value_label: marketEst.value_label,
+        basis: marketEst.basis,
+        disclaimer: 'Estimated from published market rates. Stated assumptions below.',
+      };
+    } else if (verticalEst) {
+      revenueAssumptions = {
+        method: 'vertical_benchmark',
+        vertical: detectedVertical,
+        acv_used: (verticalEst.acv_low + verticalEst.acv_high) / 2,
+        cr_used: verticalEst.cr,
+        ctr_used: PAGE1_CTR,
+        value_label: verticalEst.label,
+        disclaimer: 'Rough estimate based on industry averages. Stated assumptions below.',
+      };
+    }
   }
 
   if (revenueAssumptions) {
@@ -5465,7 +5615,7 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
       `  Revenue estimates: ${revenueAssumptions.method} (${detectedVertical ?? 'no vertical'}), ACV=$${revenueAssumptions.acv_used}, CR=${revenueAssumptions.cr_used}`,
     );
   } else {
-    console.log('  Revenue estimates: suppressed (no owner job value, no vertical benchmark) — CPC framing only');
+    console.log('  Revenue estimates: suppressed (no owner job value, market estimate failed) — CPC framing only');
   }
 
   const defending = gapMatrix.filter((g) => g.status === 'defending').length;
@@ -5776,7 +5926,7 @@ function buildProspectNarrativePrompt(scoutReport: string, scopeJson: Record<str
       const rows = topByRevenue
         .map((o: any) => `- "${o.keyword}": ${o.volume.toLocaleString()} searches/mo → ~$${o.rough_revenue_monthly.toLocaleString()}/mo`)
         .join('\n');
-      revenueContext = `\n## Revenue Estimates (top opportunities by potential monthly revenue)\n${rows}\nAssumptions: ${(revAssumptions.cr_used * 100).toFixed(1)}% conversion rate, $${revAssumptions.acv_used.toLocaleString()} average ${revAssumptions.value_label} value, at page-1 visibility.\n`;
+      revenueContext = `\n## Revenue Estimates (top opportunities by potential monthly revenue)\n${rows}\nAssumptions: ${(revAssumptions.cr_used * 100).toFixed(1)}% conversion rate, $${revAssumptions.acv_used.toLocaleString()} average ${revAssumptions.value_label} value, at page-1 visibility.${revAssumptions.basis ? `\nValue basis (cite this in plain language when stating the assumption): ${revAssumptions.basis}` : ''}\n`;
     }
   } else if (topicMaxCpc && Object.keys(topicMaxCpc).length > 0) {
     // Fallback for old scope.json without revenue_assumptions

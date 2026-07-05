@@ -47,6 +47,8 @@ export const PHASE_MAX_TOKENS: Record<string, number> = {
   'content-qa': 4096,
   qa: 4096,
   prospect_narrative: 2048,
+  scout_opportunity_screen: 2048,
+  market_value_estimate: 4096,
   default: 8192,
 };
 
@@ -111,7 +113,13 @@ export interface CallClaudeOptions {
   phase?: string;       // phase name for max_tokens lookup
   timeoutMs?: number;   // request timeout (default: 600_000)
   warnOnTruncation?: boolean; // throw TruncationError if stop_reason === 'max_tokens'
+  /** Enable the Anthropic server-side web search tool (runs on Anthropic infra; no client-side loop). */
+  webSearch?: { maxUses?: number };
 }
+
+// Server-side tool loops can return stop_reason 'pause_turn' at the API's
+// iteration limit; re-sending with the assistant turn appended resumes them.
+const PAUSE_TURN_MAX_CONTINUATIONS = 5;
 
 /**
  * Call Claude via the Anthropic SDK.
@@ -136,18 +144,36 @@ export async function callClaude(
   // Anthropic API requires streaming for requests that may exceed 10 minutes
   const useStreaming = maxTokens > 16384;
 
+  // web_search_20260209 is newer than this SDK's type definitions; the API
+  // validates the tool shape server-side, so pass it structurally.
+  const tools = opts.webSearch
+    ? ([{ type: 'web_search_20260209', name: 'web_search', max_uses: opts.webSearch.maxUses ?? 5 }] as any)
+    : undefined;
+
   let lastError: unknown;
   for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
     try {
-      const params = {
+      const params: any = {
         model,
         max_tokens: maxTokens,
         messages: [{ role: 'user' as const, content: prompt }],
+        ...(tools ? { tools } : {}),
       };
 
-      const response = useStreaming
+      let response = useStreaming
         ? await client.messages.stream(params, { timeout: timeoutMs }).finalMessage()
         : await client.messages.create(params, { timeout: timeoutMs });
+
+      // Server-side tool use may pause at the API's iteration limit; append the
+      // assistant turn and re-send (no extra user message) to resume.
+      let continuations = 0;
+      while (response.stop_reason === 'pause_turn' && continuations < PAUSE_TURN_MAX_CONTINUATIONS) {
+        continuations++;
+        params.messages = [...params.messages, { role: 'assistant', content: response.content }];
+        response = useStreaming
+          ? await client.messages.stream(params, { timeout: timeoutMs }).finalMessage()
+          : await client.messages.create(params, { timeout: timeoutMs });
+      }
 
       // Extract text from response
       const textBlocks = response.content.filter((b) => b.type === 'text');

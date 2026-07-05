@@ -1491,3 +1491,17 @@ Both prompts were inline in pipeline-generate.ts and generate-brief.ts respectiv
 **Share gate warns, never blocks.** Matt is the only sender; a server-side block on thin reports (Dry Guys: 1 gap, $0 opportunity) would just get in his way. The dialog names the specific weaknesses and lets him proceed.
 
 **get_share_report no longer returns `scout_markdown`.** The public endpoint shipped the full internal playbook (gap matrix, LP architecture, recommended scope JSON) in the API response of every share link, unrendered but one dev-tools click away. Internal report access stays super_admin-only via read_report.
+
+---
+
+### 2026-07-05 — Scout revenue: dynamic market estimates replace the manual-ACV bottleneck
+
+**Matt rejected owner-entered job values as the default path** — "if I have to manually do it, I become the bottleneck, and there's minimal accuracy difference between me running it and a real-time pull from reliable sources." He's right: the numbers are coarse either way (the benchmark table says HVAC is "$800–5,000"), so the fix-2 design (owner value or suppress) optimized for defensibility at the cost of making him data entry for every prospect.
+
+**New priority: owner value (override, not requirement) → web-search-grounded market estimate → static benchmark (only on hard lookup failure) → suppress.** The estimate is one Sonnet call with the Anthropic server-side web search tool pulling published cost-guide data (HomeAdvisor/Angi true-cost pages, regional pricing sites, trade surveys). Verified live for the locksmith/Boise case that motivated everything: $165/service call (range $100–250) with six citations including Boise-specific sources — vs the deleted CPC×200 fallback's $2,488.
+
+**Cached in `market_value_estimates` per vertical+region, not per-run** (migration 042), for three reasons: re-scouting the same prospect must produce identical revenue numbers (dollar figures that drift between runs read as fabricated), the lookup cost amortizes across prospects in the same vertical+region, and the table is Matt's audit/override surface — editing a row once per vertical beats entering a value once per prospect. 180-day freshness; stale cache beats a failed lookup.
+
+**The footnote now cites its basis.** `revenue_assumptions.basis` carries a plain-language source sentence ("Based on HomeAdvisor/Angi cost-guide data and Homeyou regional pricing for Boise, ID...") to the share page footnote and the narrative prompt — "published market rates" with named sources survives a skeptical read where "industry averages" doesn't.
+
+**Web search wired into `anthropic-client.ts` as an opt-in** (`webSearch: {maxUses}`): server-side tool `web_search_20260209`, structural literal (SDK 0.78 predates the type), `pause_turn` continuation loop capped at 5. The static SCOUT_REVENUE_ESTIMATES table survives as calibration anchors in the estimate prompt + hard fallback.
