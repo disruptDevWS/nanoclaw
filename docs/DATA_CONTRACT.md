@@ -797,9 +797,10 @@ Written by Phase 6d (LocalPresence). One row per directory.
 | `share_token` | Edge fn (generate_share_token) | Edge fn (get_share_report) | UUID, unique partial index |
 | `share_token_created_at` | Edge fn | Dashboard | |
 | `brand_favicon_url` | Pipeline (Scout) | Edge fn (get_share_report) | Google favicon URL |
-| `scout_markdown` | Pipeline (Scout) | Edge fn (get_share_report) | Full scout report markdown |
-| `scout_scope_json` | Pipeline (Scout) | Edge fn (get_share_report) | scope.json JSONB. Additive fields: `gap_summary.top_opportunities[].cpc_inferred` (boolean), `max_topic_cpc` (Record<string, number>) |
+| `scout_markdown` | Pipeline (Scout) | Edge fn (read_report, super_admin only) | Full scout report markdown. **Removed from public get_share_report 2026-07-05** — it leaked the internal playbook to anyone with a share link |
+| `scout_scope_json` | Pipeline (Scout) | Edge fn (get_share_report) | scope.json JSONB. Additive fields: `gap_summary.top_opportunities[].cpc_inferred` (boolean), `[].variant_count` (int, >1 when near-variants collapsed), `[].rough_revenue_monthly` (absent when revenue suppressed), `max_topic_cpc` (Record<string, number>), `revenue_assumptions` (null when no owner ACV and no vertical benchmark; `method: owner_provided \| vertical_benchmark`) |
 | `prospect_narrative` | Pipeline (Scout) | Edge fn (get_share_report) | Plain-language outreach doc |
+| `estimated_job_value` | Dashboard | Pipeline (Scout, via prospect-config.json) | Migration 041 (2026-07-05). Owner-provided typical job value (USD); overrides vertical benchmark ACV |
 
 **Dashboard reads**: `useProspects()`, `useProspect()`, `useProspectStatus()` (2s poll while running)
 **Pipeline writes**: Scout updates status, scout_run_at, scout_output_path, brand_favicon_url, scout_markdown, scout_scope_json, prospect_narrative

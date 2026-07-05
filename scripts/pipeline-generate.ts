@@ -563,7 +563,6 @@ const SCOUT_REVENUE_ESTIMATES: Record<string, { acv_low: number; acv_high: numbe
   medical_training:   { acv_low: 1200,  acv_high: 2000,  cr: 0.015, label: 'enrollment' },
 };
 const PAGE1_CTR = 0.08;
-const CPC_ACV_MULTIPLIER = 200;
 
 // Minimum ranked keywords before auto-supplementing with seed candidates.
 // Below this threshold, DataForSEO returned too few organic results for a useful analysis.
@@ -961,6 +960,116 @@ function deduplicateVolumeResults(
     }
   }
   return [...map.values()];
+}
+
+// ── Scout top-opportunity hygiene (recipient-facing rows) ──
+
+const ALL_STATE_TOKENS = new Set([
+  ...Object.keys(US_STATE_LOCATION_CODES).map((s) => s.toLowerCase()),
+  ...Object.keys(STATE_ABBREV_TO_FULL).map((s) => s.toLowerCase()),
+]);
+
+/**
+ * Canonical key for recipient-facing opportunity rows. More aggressive than
+ * buildCanonicalKey: drops state tokens (full names and abbreviations) anywhere
+ * in the keyword and normalizes simple plurals, so "locksmith boise",
+ * "locksmith boise id", "locksmiths boise idaho", and "boise idaho locksmith"
+ * collapse to a single row instead of four near-identical ones.
+ */
+function buildOpportunityKey(kw: string): string {
+  const tokens = kw
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter((t) => !ALL_STATE_TOKENS.has(t))
+    .map((t) => (t.length > 3 && t.endsWith('s') && !t.endsWith('ss') ? t.slice(0, -1) : t));
+  return tokens.sort().join(' ') || kw.toLowerCase().trim();
+}
+
+/**
+ * Collapse near-variant keywords into one row each. Input must be pre-sorted by
+ * volume descending: the first occurrence (highest volume) becomes the
+ * representative row — volumes are deliberately NOT summed, since keyword
+ * variants largely double-count the same demand.
+ */
+function collapseOpportunityVariants<T extends { keyword: string; volume: number }>(
+  entries: T[],
+): Array<T & { variant_count: number }> {
+  const map = new Map<string, T & { variant_count: number }>();
+  for (const e of entries) {
+    const key = buildOpportunityKey(e.keyword);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...e, variant_count: 1 });
+    } else {
+      existing.variant_count++;
+    }
+  }
+  return [...map.values()];
+}
+
+/**
+ * LLM relevance screen for recipient-facing opportunity keywords. Flags rows a
+ * skeptical business owner would spot as junk: locations outside the target
+ * geos ("silicon valley locksmith" for an Idaho shop), competitor brand names
+ * ("star lock and key"), or queries that aren't plausible service demand.
+ * Non-fatal: returns the input unchanged on any failure.
+ */
+async function screenOpportunityKeywords<T extends { keyword: string }>(
+  candidates: T[],
+  businessName: string,
+  domain: string,
+  topicPatterns: string[],
+  targetGeos: Array<{ state: string; metros: string[] }>,
+): Promise<T[]> {
+  if (candidates.length === 0) return candidates;
+
+  const geoDesc =
+    targetGeos
+      .map((g) => (g.metros.length > 0 ? `${g.state} (${g.metros.join(', ')})` : g.state))
+      .join('; ') || 'national (no geo restriction)';
+  const numbered = candidates.map((c, i) => `${i}: ${c.keyword}`).join('\n');
+
+  const prompt = `You are screening keyword opportunities before they appear in a report sent to a business owner. Flag any keyword that would make the report look like automated junk.
+
+Business: ${businessName} (${domain})
+Services: ${topicPatterns.join(', ')}
+Target markets: ${geoDesc}
+
+Keywords:
+${numbered}
+
+Flag a keyword ONLY if:
+(a) it references a city, region, or place clearly OUTSIDE the target markets (e.g., a California city for an Idaho business), or
+(b) it contains the name of a specific OTHER business or brand (not a generic service term), or
+(c) it is not a plausible customer search for the services listed.
+
+Do NOT flag keywords merely for being generic, low volume, or missing a geo qualifier.
+
+Respond with ONLY a JSON array of the flagged entries, e.g. [{"index": 3, "reason": "references Mill Valley, California"}]. If nothing should be flagged, respond with [].`;
+
+  try {
+    const raw = await callClaude(prompt, { model: 'haiku', phase: 'scout_opportunity_screen' });
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) return candidates;
+    const flagged = JSON.parse(match[0]);
+    if (!Array.isArray(flagged)) return candidates;
+    const dropIdx = new Set(
+      flagged
+        .map((f: any) => (typeof f === 'number' ? f : f?.index))
+        .filter((n: any) => Number.isInteger(n) && n >= 0 && n < candidates.length),
+    );
+    // Safety: an over-eager or garbled response must not wipe the whole list
+    if (dropIdx.size === 0 || dropIdx.size >= candidates.length) return candidates;
+    const dropped = candidates.filter((_, i) => dropIdx.has(i));
+    console.log(
+      `  Opportunity screen: dropped ${dropped.length} keyword(s): ${dropped.map((c) => `"${c.keyword}"`).join(', ')}`,
+    );
+    return candidates.filter((_, i) => !dropIdx.has(i));
+  } catch (err: any) {
+    console.log(`  Warning: opportunity screen failed (${err.message}) — keeping unscreened list`);
+    return candidates;
+  }
 }
 
 // ── Embedding-based semantic dedup (Scout Phase 0) ──
@@ -4741,6 +4850,8 @@ interface ProspectConfig {
   target_geos: Array<{ state: string; metros: string[] }>;
   topic_patterns: string[];
   state: string;
+  /** Owner-provided typical job/customer value in USD. Overrides vertical benchmarks. */
+  estimated_job_value?: number;
 }
 
 interface ProspectRecord {
@@ -5294,39 +5405,58 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
   const serviceCoverage = Object.fromEntries(coverageByTopic);
 
   // ── Revenue estimates ──
-  const detectedVertical = detectScoutVertical(rankedKeywords.map((k) => k.keyword));
+  // Priority: owner-provided job value → vertical benchmark → suppress.
+  // No CPC-derived fallback: a business owner knows their own job value, and one
+  // absurd invented ACV discredits every other number in the report. When we
+  // can't state a defensible ACV we show no dollar estimates at all (the share
+  // page and narrative fall back to advertiser cost-per-click framing).
+  const detectedVertical = detectScoutVertical([
+    ...rankedKeywords.map((k) => k.keyword),
+    ...config.topic_patterns,
+  ]);
   const verticalEst = detectedVertical ? SCOUT_REVENUE_ESTIMATES[detectedVertical] : null;
+  const ownerAcv = Number(config.estimated_job_value);
 
-  let acvMid: number;
-  let crUsed: number;
-  let valueLabel: string;
-  let revenueMethod: 'vertical_benchmark' | 'cpc_derived';
+  interface RevenueAssumptions {
+    method: 'owner_provided' | 'vertical_benchmark';
+    vertical: string | null;
+    acv_used: number;
+    cr_used: number;
+    ctr_used: number;
+    value_label: string;
+    disclaimer: string;
+  }
+  let revenueAssumptions: RevenueAssumptions | null = null;
 
-  if (verticalEst) {
-    acvMid = (verticalEst.acv_low + verticalEst.acv_high) / 2;
-    crUsed = verticalEst.cr;
-    valueLabel = verticalEst.label;
-    revenueMethod = 'vertical_benchmark';
-  } else {
-    // CPC-derived fallback: median CPC × multiplier
-    const allCpcs = gapMatrix.map((g) => g.cpc).filter((c) => c > 0).sort((a, b) => a - b);
-    const medianCpc = allCpcs.length > 0 ? allCpcs[Math.floor(allCpcs.length / 2)] : 5;
-    acvMid = medianCpc * CPC_ACV_MULTIPLIER;
-    crUsed = 0.02;
-    valueLabel = 'customer';
-    revenueMethod = 'cpc_derived';
+  if (Number.isFinite(ownerAcv) && ownerAcv > 0) {
+    revenueAssumptions = {
+      method: 'owner_provided',
+      vertical: detectedVertical,
+      acv_used: ownerAcv,
+      cr_used: verticalEst?.cr ?? 0.02,
+      ctr_used: PAGE1_CTR,
+      value_label: verticalEst?.label ?? 'job',
+      disclaimer: 'Based on the owner-provided average job value. Stated assumptions below.',
+    };
+  } else if (verticalEst) {
+    revenueAssumptions = {
+      method: 'vertical_benchmark',
+      vertical: detectedVertical,
+      acv_used: (verticalEst.acv_low + verticalEst.acv_high) / 2,
+      cr_used: verticalEst.cr,
+      ctr_used: PAGE1_CTR,
+      value_label: verticalEst.label,
+      disclaimer: 'Rough estimate based on industry averages. Stated assumptions below.',
+    };
   }
 
-  const revenueAssumptions = {
-    method: revenueMethod,
-    vertical: detectedVertical,
-    acv_used: acvMid,
-    cr_used: crUsed,
-    ctr_used: PAGE1_CTR,
-    value_label: valueLabel,
-    disclaimer: 'Rough estimate based on industry averages. Stated assumptions below.',
-  };
-  console.log(`  Revenue estimates: ${detectedVertical ?? 'cpc_derived'} vertical, ACV=$${acvMid}, CR=${crUsed}`);
+  if (revenueAssumptions) {
+    console.log(
+      `  Revenue estimates: ${revenueAssumptions.method} (${detectedVertical ?? 'no vertical'}), ACV=$${revenueAssumptions.acv_used}, CR=${revenueAssumptions.cr_used}`,
+    );
+  } else {
+    console.log('  Revenue estimates: suppressed (no owner job value, no vertical benchmark) — CPC framing only');
+  }
 
   const defending = gapMatrix.filter((g) => g.status === 'defending').length;
   const weak = gapMatrix.filter((g) => g.status === 'weak').length;
@@ -5336,7 +5466,7 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
 
   // Filter non-commercial keywords from top_opportunities
   // Brand words from prospect name + domain (e.g., "castle", "lock", "key" from "Castle Lock and Key")
-  const INFORMATIONAL_PREFIXES = ['what is', 'what are', 'what does', 'how to', 'how do', 'how does', 'who is', 'where is', 'why do', 'why does'];
+  const INFORMATIONAL_PREFIXES = ['what is', 'what are', 'what does', 'how to', 'how do', 'how does', 'who is', 'where is', 'why do', 'why does', 'should '];
   const FILLER_WORDS = new Set(['and', 'the', 'of', 'in', 'for', 'a', 'an', 'or', 'to', 'is', 'by']);
   const brandWords = new Set(
     [...config.name.toLowerCase().split(/\s+/), ...domain.replace(/\.[^.]+$/, '').split(/[-.]/)].filter(
@@ -5361,6 +5491,65 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
     if (kw.startsWith('best ')) return false;
     return true;
   }
+
+  // ── Top opportunities: hygiene pass (recipient-facing) ──
+  // This list drives the share page "Revenue You're Missing" table and the
+  // prospect narrative, so it must survive a skeptical owner's read:
+  // variant collapse → out-of-state filter → LLM relevance screen.
+  const targetStateNames = new Set<string>();
+  for (const g of config.target_geos) {
+    if (!g.state) continue;
+    const full = STATE_ABBREV_TO_FULL[g.state.toUpperCase()] ?? g.state;
+    targetStateNames.add(full.toLowerCase());
+  }
+  const nonTargetStates = Object.keys(US_STATE_LOCATION_CODES)
+    .map((s) => s.toLowerCase())
+    .filter((s) => !targetStateNames.has(s));
+
+  const oppCandidates = gapMatrix
+    .filter((g) => g.status === 'gap' && g.topic !== 'Other' && isCommercialKeyword(g.keyword))
+    .sort((a, b) => b.volume - a.volume);
+  const collapsedOpps = collapseOpportunityVariants(oppCandidates);
+  if (collapsedOpps.length < oppCandidates.length) {
+    console.log(`  Opportunity variants collapsed: ${oppCandidates.length} → ${collapsedOpps.length}`);
+  }
+
+  // Full state names only — two-letter abbreviations ("in", "or", "me") are too
+  // ambiguous to match deterministically; the LLM screen catches city-level strays.
+  const geoFilteredOpps = isNational
+    ? collapsedOpps
+    : collapsedOpps.filter((g) => {
+        const padded = ` ${g.keyword.toLowerCase()} `;
+        return !nonTargetStates.some((s) => padded.includes(` ${s} `));
+      });
+  if (geoFilteredOpps.length < collapsedOpps.length) {
+    const dropped = collapsedOpps.filter((g) => !geoFilteredOpps.includes(g));
+    console.log(`  Geo filter: dropped ${dropped.length} out-of-state keyword(s): ${dropped.map((g) => `"${g.keyword}"`).join(', ')}`);
+  }
+
+  const screenedOpps = await screenOpportunityKeywords(
+    geoFilteredOpps.slice(0, 40),
+    config.name,
+    domain,
+    config.topic_patterns,
+    config.target_geos,
+  );
+
+  const topOpportunities = screenedOpps.slice(0, 20).map((g) => ({
+    keyword: g.keyword,
+    topic: g.topic,
+    volume: g.volume,
+    cpc: g.cpc,
+    ...(g.cpc_inferred ? { cpc_inferred: true } : {}),
+    ...(g.variant_count > 1 ? { variant_count: g.variant_count } : {}),
+    ...(revenueAssumptions
+      ? {
+          rough_revenue_monthly: Math.round(
+            g.volume * PAGE1_CTR * revenueAssumptions.cr_used * revenueAssumptions.acv_used,
+          ),
+        }
+      : {}),
+  }));
 
   // ── Step 5: Markdown output + scope.json ──
   console.log('\n--- Step 5: Scout Report + scope.json ---');
@@ -5404,15 +5593,7 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
       weak,
       gaps,
       other_gap_count: otherGapCount,
-      top_opportunities: gapMatrix
-        .filter((g) => g.status === 'gap' && g.topic !== 'Other' && isCommercialKeyword(g.keyword))
-        .sort((a, b) => b.volume - a.volume)
-        .slice(0, 20)
-        .map((g) => ({
-          keyword: g.keyword, topic: g.topic, volume: g.volume, cpc: g.cpc,
-          ...(g.cpc_inferred ? { cpc_inferred: true } : {}),
-          rough_revenue_monthly: Math.round(g.volume * PAGE1_CTR * crUsed * acvMid),
-        })),
+      top_opportunities: topOpportunities,
     },
     service_coverage: serviceCoverage,
     revenue_assumptions: revenueAssumptions,
@@ -5635,11 +5816,9 @@ ${scoutReport}
 ## Where Demand Is Escaping You
 [2-3 short paragraphs about search demand they're missing. Translate keyword gaps into business language — "people searching for X in Y aren't finding you." Quantify with monthly search numbers. Don't use SEO jargon like "SERP" or "canonical" — say "search results" and "topics." Make it concrete: name specific services and cities.
 
-Use the revenue estimates provided. Frame like this: '"{keyword}" gets {volume} searches every month. At a conservative ${(revAssumptions ? (revAssumptions.cr_used * 100).toFixed(0) : '2')}% conversion rate and $${revAssumptions ? revAssumptions.acv_used.toLocaleString() : 'X'} average ${revAssumptions?.value_label ?? 'customer'} value, page-1 visibility on this term alone represents roughly $X,XXX/month in potential revenue. You're currently not on page 1.'
+${revAssumptions ? `Use the revenue estimates provided. Frame like this: '"{keyword}" gets {volume} searches every month. At a conservative ${(revAssumptions.cr_used * 100).toFixed(0)}% conversion rate and $${revAssumptions.acv_used.toLocaleString()} average ${revAssumptions.value_label} value, page-1 visibility on this term alone represents roughly $X,XXX/month in potential revenue. You're currently not on page 1.'
 
-State the assumption once in plain language, then let the numbers stand. Don't repeat the caveat per keyword.
-
-If no revenue estimates are available, fall back to search volume framing: "{volume} people search for this every month, and right now none of them find you."
+State the assumption once in plain language, then let the numbers stand. Don't repeat the caveat per keyword.` : `No dollar revenue estimates are available for this prospect. Do NOT invent, derive, or estimate any dollar revenue figure or average customer/job value anywhere in the narrative. Frame value with advertiser cost instead: 'Advertisers pay $X per click to reach someone searching for this. {volume} people search every month, and right now none of them find you.' Where CPC data is not provided, use plain volume framing: '{volume} people search for this every month, and right now none of them find you.'`}
 
 When the prospect has zero presence for a topic in a city, say it directly: "When someone in {city} searches for {service}, your competitors appear. You don't."
 

@@ -1475,3 +1475,19 @@ Both prompts were inline in pipeline-generate.ts and generate-brief.ts respectiv
 **Cornerstone is a worklist LENS, not a filter.** Filtering the worklist to the uploaded CSV would blind the system to real pages outside the declaration (and empty it for audits without an upload). Instead: anchor badge on matching rows + All/Cornerstone/Other toggle (only shown when a declaration exists), URL-normalized matching against `cornerstone_pages`.
 
 **GSC context for page audits comes from the API we already run, not the CSV.** `gsc_page_snapshots` is a live monthly feed with per-URL `top_queries`; a CSV column would be a stale manual copy of it. `audit-page.ts` now injects the last 3 snapshots + top queries into the deep-dive prompt with explicit evidence framing: impressions-without-answers = extractability/coverage gaps to fix; winning queries = protected (don't recommend changes that sacrifice them). The cornerstone CSV's GSC columns (already parsed to `page_facts.gsc`) remain the fallback for unconnected sites/prospects — right for Scout, wrong as primary for clients. Prompt explicitly says "no GSC data — do not invent performance claims" when absent.
+
+---
+
+### 2026-07-05 — Scout share-readiness: credibility over coverage (sales-enablement review, fixes 1–5)
+
+**The evaluation unit for Scout is a cold recipient's 30-second skeptical read, and every fix follows from it.** Review of live prospect data found three credibility killers in the recipient-facing artifact: California keywords + a competitor brand in an Idaho locksmith's "Revenue You're Missing" table, four near-variant "locksmith boise" rows each claiming the same $3,981/mo, and a "$2,488 average customer value" for a locksmith invented by the CPC×200 fallback.
+
+**Revenue estimates are suppressed, not clamped, when no defensible ACV exists.** Priority: owner-provided `estimated_job_value` (migration 041, flows dashboard → prospect-config.json → runScout) → vertical benchmark → null. The CPC×200 derived-ACV branch was deleted outright: the one number a business owner knows perfectly is their own job value, and a clamped guess is still a guess printed next to their name. The share page and narrative already had honest CPC framing ("advertisers pay $X/click") as the no-revenue path, so suppression costs nothing visually.
+
+**Variant collapse keeps the max-volume representative and does NOT sum volumes.** Keyword variants ("locksmith boise" / "boise idaho locksmith") largely double-count the same demand; summing would inflate exactly the number a skeptic checks. `variant_count` is recorded for optional "+N variants" display.
+
+**Top-opportunity hygiene ends in a Haiku relevance screen rather than more deterministic rules.** Full-state-name filtering is deterministic, but city-level strays ("mill valley locksmith") and competitor brand names ("star lock and key") are open sets — a cheap LLM pass with a refuse-to-drop-100% guard is more robust than any list we'd maintain. Non-fatal on failure (keeps unscreened list), same resilience idiom as narrative generation.
+
+**Share gate warns, never blocks.** Matt is the only sender; a server-side block on thin reports (Dry Guys: 1 gap, $0 opportunity) would just get in his way. The dialog names the specific weaknesses and lets him proceed.
+
+**get_share_report no longer returns `scout_markdown`.** The public endpoint shipped the full internal playbook (gap matrix, LP architecture, recommended scope JSON) in the API response of every share link, unrendered but one dev-tools click away. Internal report access stays super_admin-only via read_report.
