@@ -980,7 +980,7 @@ function buildOpportunityKey(kw: string): string {
   const tokens = kw
     .toLowerCase()
     .trim()
-    .split(/\s+/)
+    .split(/[\s-]+/) // hyphens too: "tri-valley" and "tri valley" are the same variant
     .filter((t) => !ALL_STATE_TOKENS.has(t))
     .map((t) => (t.length > 3 && t.endsWith('s') && !t.endsWith('ss') ? t.slice(0, -1) : t));
   return tokens.sort().join(' ') || kw.toLowerCase().trim();
@@ -1040,7 +1040,7 @@ Keywords:
 ${numbered}
 
 Flag a keyword ONLY if:
-(a) it references a city, region, or place clearly OUTSIDE the target markets (e.g., a California city for an Idaho business), or
+(a) it references a city, region, or place clearly OUTSIDE the target markets (e.g., a California city for an Idaho business). Treat named multi-city regions (e.g., "Tri-Valley", "Inland Empire", "Silicon Valley") as outside the target markets unless one clearly matches; or
 (b) it contains the name of a specific OTHER business or brand (not a generic service term), or
 (c) it is not a plausible customer search for the services listed.
 
@@ -1049,7 +1049,9 @@ Do NOT flag keywords merely for being generic, low volume, or missing a geo qual
 Respond with ONLY a JSON array of the flagged entries, e.g. [{"index": 3, "reason": "references Mill Valley, California"}]. If nothing should be flagged, respond with [].`;
 
   try {
-    const raw = await callClaude(prompt, { model: 'haiku', phase: 'scout_opportunity_screen' });
+    // Sonnet, not haiku: this screen is the report's credibility gate and haiku
+    // proved inconsistent on region names across runs (verified 2026-07-05).
+    const raw = await callClaude(prompt, { model: 'sonnet', phase: 'scout_opportunity_screen' });
     const match = raw.match(/\[[\s\S]*\]/);
     if (!match) return candidates;
     const flagged = JSON.parse(match[0]);

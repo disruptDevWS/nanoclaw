@@ -248,7 +248,7 @@ Client Brief (auto after Phase 6d, non-fatal)
 4. **Deduplication** — Near-variant keywords collapsed via `buildCanonicalKey()` (suffix-only state stripping, alphabetical sort). Applied to ranked keywords and opportunity map before gap matrix assembly.
 5. **Gap matrix** — Cross-references rankings vs opportunity: defending (1–10), weak (11–30), gap (not ranking). CPC backfill: $0 CPC entries filled from same-topic max, marked `cpc_inferred: true`. Inferred values shown with tilde prefix (`~$X`) in report tables.
 6. **Revenue estimates** — Priority: owner-provided `estimated_job_value` (`method: owner_provided`) → `SCOUT_REVENUE_ESTIMATES` vertical benchmark (`method: vertical_benchmark`, vertical detected from ranked keywords + `topic_patterns`) → **suppressed** (`revenue_assumptions: null`, no `rough_revenue_monthly` on opportunities; share page and narrative fall back to CPC framing). The CPC×200 derived-ACV fallback was removed 2026-07-05 — it produced indefensible customer values.
-7. **Top-opportunity hygiene** — `gap_summary.top_opportunities` (recipient-facing: share page "Revenue You're Missing" table + narrative) goes through: variant collapse via `buildOpportunityKey()` (state tokens dropped anywhere, simple plural normalization; highest-volume variant kept as representative, volumes NOT summed, `variant_count` recorded) → out-of-state filter (full state names not in `target_geos`) → Haiku relevance screen (`scout_opportunity_screen` phase: flags out-of-market locations, competitor brand names, non-service queries; non-fatal, keeps unscreened list on failure; refuses to drop 100%).
+7. **Top-opportunity hygiene** — `gap_summary.top_opportunities` (recipient-facing: share page "Revenue You're Missing" table + narrative) goes through: variant collapse via `buildOpportunityKey()` (state tokens dropped anywhere, simple plural normalization; highest-volume variant kept as representative, volumes NOT summed, `variant_count` recorded) → out-of-state filter (full state names not in `target_geos`) → Sonnet relevance screen (`scout_opportunity_screen` phase: flags out-of-market locations, competitor brand names, non-service queries; non-fatal, keeps unscreened list on failure; refuses to drop 100%).
 8. **Report + scope.json** — Sonnet generates scout report (7 sections); scope.json is Jim-compatible seed data with `cpc_inferred` on opportunities and `max_topic_cpc` at root.
 9. **Prospect narrative** — Sonnet generates 3-section outreach document. When revenue assumptions exist, prompt instructs ACV/conversion framing; when suppressed, prompt forbids inventing dollar figures and mandates CPC/volume framing.
 
@@ -258,7 +258,8 @@ Client Brief (auto after Phase 6d, non-fatal)
 |-----|----------|---------|
 | DataForSEO Ranked Keywords | `/v3/dataforseo_labs/google/ranked_keywords/live` | Current organic rankings |
 | DataForSEO Bulk Volume | `/v3/keywords_data/google_ads/search_volume/live` | Opportunity map volume |
-| Anthropic API (haiku) | `callClaude()` | Topic extraction, top-opportunity relevance screen |
+| Anthropic API (haiku) | `callClaude()` | Topic extraction |
+| Anthropic API (sonnet) | `callClaude()` | Top-opportunity relevance screen (`scout_opportunity_screen`) |
 | Anthropic API (sonnet) | `callClaude()` | Scout report generation |
 
 **Budget:** `SCOUT_SESSION_BUDGET` env var (default $2.00). Each API call checks remaining budget before proceeding.
