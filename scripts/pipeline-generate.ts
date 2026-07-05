@@ -4861,6 +4861,7 @@ interface ProspectRecord {
   geo_type: string;
   target_geos: any;
   status: string;
+  estimated_job_value?: number | string | null;
 }
 
 const SCOUT_SESSION_BUDGET = parseFloat(process.env.SCOUT_SESSION_BUDGET || '2.00');
@@ -4943,6 +4944,13 @@ async function runScout(sb: SupabaseClient, domain: string, prospectConfigPath: 
 
   // Resolve or create prospect in Supabase
   const prospect = await resolveProspect(sb, domain, config);
+
+  // Owner job value: config wins, DB row is the fallback — existing prospects
+  // get their value set via the dashboard (prospects.estimated_job_value)
+  // without a prospect-config.json rewrite.
+  if (config.estimated_job_value == null && prospect.estimated_job_value != null) {
+    config.estimated_job_value = Number(prospect.estimated_job_value);
+  }
 
   // Flatten geos for keyword generation
   const allGeos: string[] = [];
