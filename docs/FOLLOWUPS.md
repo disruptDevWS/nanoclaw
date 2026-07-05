@@ -180,3 +180,23 @@ Each entry is self-contained: picking it up 3 months later should not require re
 - **Captured:** KB extraction Session 4, 2026-06-12
 
 ---
+
+### [Pipeline/Dashboard] Page-audit findings lifecycle (applied/dismissed/stale state)
+
+- **Status:** Deferred by design (Matt's feedback, 2026-07-05). Deep-dive findings are currently a regenerated wall — copyable recommendations with no state. Tolerable per-page; degrades to noise across a client worklist over months, and forfeits remediation-velocity reporting (a client-facing asset).
+- **Action:** Findings become rows with state (`open` / `applied` / `dismissed` / `stale`), keyed by (audit_id, page_url, category, root-cause fingerprint). Deep-dive re-runs RECONCILE against prior findings instead of replacing them: unchanged finding → keep state; fixed on-page → auto-mark `applied` (mechanical checks can verify); new → `open`. Same reconcile-don't-override principle as cornerstone injection and migration-038 preservation, one level down. The re-run diff baseline exists as of 2026-07-05 (`page_snapshot.jsonld` + mechanical/readiness checks are code-recomputable).
+- **Also fold in:** root-cause dedupe — the same defect can appear through multiple lenses (e.g. H2→H4 skip in both Headers and Agent Readiness). Fine as presentation; any future per-page finding COUNT or severity rollup must dedupe by root-cause fingerprint first or counts inflate.
+- **Natural home:** Phase 2 optimize-mode (docs/plans/optimize-mode-phase2.md) — lifecycle rows are also the input the optimize-brief needs ("what was already applied").
+- **Scope estimate:** M — findings table + reconcile pass + dashboard state controls
+- **Captured:** Page Optimizer feedback session, 2026-07-05
+
+---
+
+### [Dashboard] Blend strategic severity into worklist ranking (once per-page data exists)
+
+- **Status:** Deferred — labeled honestly instead ("Technical Floor", 2026-07-05). The mechanical score is a floor detector: on mature sites (IMA homepage: 14/14 checks, strategically weak H1) the score-sorted worklist inverts — it deprioritizes exactly the pages established clients need fixed.
+- **Action:** Once findings lifecycle (above) or Phase 2 produces per-page strategic severity for a meaningful share of pages, blend it into the worklist sort (floor ASC, then severity DESC where known). Do NOT blend earlier — readiness checks only exist for deep-dived pages, and sorting on a 95%-null column launders the label. Prereq if site-wide readiness scoring is ever wanted at crawl time: persist raw HTML per page (currently a data-contract gap — only structured fields are stored).
+- **Scope estimate:** S (blend) — gated on lifecycle data
+- **Captured:** Page Optimizer feedback session, 2026-07-05
+
+---

@@ -25,6 +25,7 @@ import { callClaude, initAnthropicClient } from './anthropic-client.js';
 import { fetchPage, type FetchedPage } from '../src/agents/page-audit/fetch-page.js';
 import { assessAgentReadiness } from '../src/agents/page-audit/agent-readiness.js';
 import { scoreFetchedPage } from '../src/agents/page-audit/score-page.js';
+import { diffJsonLd } from '../src/agents/page-audit/schema-diff.js';
 import { computeRelatedPages, formatRelatedPagesSection } from '../src/agents/linking/related-pages.js';
 
 // ============================================================
@@ -247,6 +248,20 @@ async function main() {
     findings.mechanical = profile;
     findings.readiness = { checks: readiness.checks };
 
+    // Mechanical @graph preservation verification (DECISIONS.md 2026-07-05):
+    // the proposed replacement must be a verified superset of the live schema.
+    // Removals are computed in code, never trusted from the prompt, and render
+    // as sign-off warnings in the dashboard before anyone pastes the proposal.
+    if (findings.graph_schema?.proposed_jsonld && page.jsonLd.length > 0) {
+      const schemaDiff = diffJsonLd(page.jsonLd, findings.graph_schema.proposed_jsonld);
+      findings.graph_schema.diff = schemaDiff;
+      console.log(
+        `[audit-page] Schema diff: ${schemaDiff.preserved.length} preserved, ${schemaDiff.added.length} added, ` +
+        `${schemaDiff.modified.length} modified, ${schemaDiff.removed.length} REMOVED` +
+        (schemaDiff.removed.length > 0 ? ' — removals require human sign-off' : ''),
+      );
+    }
+
     // 6. Persist
     const pageSnapshot = {
       final_url: page.finalUrl,
@@ -262,6 +277,8 @@ async function main() {
       internal_link_count: page.internalLinks.length,
       external_link_count: page.externalLinkCount,
       jsonld_block_count: page.jsonLd.length,
+      // Raw parsed JSON-LD — the diff baseline for this and future re-runs
+      jsonld: page.jsonLd,
       has_llms_txt: readiness.llmsTxt != null,
       has_mcp_manifest: readiness.mcpManifest != null,
       fetched_at: new Date().toISOString(),

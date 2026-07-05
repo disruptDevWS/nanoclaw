@@ -678,8 +678,8 @@ Single-page optimization deep dives. Inserted `pending` by the `page-audit` edge
 |--------|--------|-------|
 | `page_url` | Edge fn | The audited URL (host must match audit domain) |
 | `status` | Edge fn → Pipeline | TEXT CHECK: `pending` → `running` → `complete` / `failed` |
-| `findings` | Pipeline | JSONB: `{summary, metadata[], headers[], images[], internal_links[], graph_schema:{issues[], proposed_jsonld}, agent_readiness[], mechanical:{score, checks[]}, readiness:{checks[]}}` |
-| `page_snapshot` | Pipeline | JSONB code-verified facts (title, meta, headings, image/link counts, jsonld count, has_llms_txt, has_mcp_manifest) |
+| `findings` | Pipeline | JSONB: `{summary, metadata[], headers[], images[], internal_links[], graph_schema:{issues[], proposed_jsonld, diff}, agent_readiness[], mechanical:{score, checks[]}, readiness:{checks[]}}`. `graph_schema.diff` (2026-07-05) = mechanical preservation verification from `schema-diff.ts`: `{preserved[], added[], modified[], removed[], current/proposed_entity_count}` — removals render as sign-off warnings before the proposal is pasted |
+| `page_snapshot` | Pipeline | JSONB code-verified facts (title, meta, headings, image/link counts, `jsonld` — full parsed blocks, the re-run diff baseline (2026-07-05), has_llms_txt, has_mcp_manifest) |
 | `error_message`, `requested_by`, `completed_at` | | Standard lifecycle fields |
 
 **RLS**: service_role ALL; `authenticated` SELECT via audit ownership (no user INSERT — the edge function inserts).
