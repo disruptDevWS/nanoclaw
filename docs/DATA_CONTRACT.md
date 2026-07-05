@@ -702,7 +702,23 @@ User-declared cornerstone content — the overlay INPUT lane (dashboard writes, 
 
 **RLS**: `authenticated` full CRUD via audit ownership; service_role ALL. Upload is replace-all (delete + insert).
 **Pipeline reads**: `runMichael()` — "User-Declared Cornerstone Content" context block (anchor + reconcile rules; the crawl is never overridden).
-**Dashboard**: `useCornerstonePages()` / `useUploadCornerstonePages()` → CornerstoneUpload on StrategyPage.
+**Dashboard**: `useCornerstonePages()` / `useUploadCornerstonePages()` → CornerstoneUpload on StrategyPage. Also read by PageAuditPage as the worklist cornerstone lens (anchor badge + All/Cornerstone/Other toggle).
+
+---
+
+### `page_dismissals` (migration 040)
+
+Worklist noise control — overlay input lane (dashboard-written, URL-keyed per audit). Separate table BECAUSE `agent_technical_pages` is delete+reinserted every Dwight sync — dismissals survive re-crawls with no preservation code. UNIQUE `(audit_id, url)`.
+
+| Column | Writer | Notes |
+|--------|--------|-------|
+| `url` | Dashboard | Exact crawled URL (matched by normalized host+path) |
+| `reason` | Dashboard | CHECK: `irrelevant` / `test_page` / `intentional` — `test_page` triggers a remove-or-noindex nudge |
+| `dismissed_by` | Dashboard | |
+
+**RLS**: `authenticated` full CRUD via audit ownership; service_role ALL.
+**Dashboard**: `usePageDismissals()` / `useDismissPage()` (upsert) / `useRestorePage()` (delete) → PageAuditPage; dismissed rows collapse into a restorable section.
+**Pipeline**: does not read (v1) — dismissals are a display concern; the crawl keeps scoring every page.
 
 ---
 

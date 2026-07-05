@@ -9,6 +9,8 @@ You are given code-verified facts about the page (extracted by a real fetch + pa
 - Page: {{PAGE_URL}}
 - Page's topic cluster: {{CLUSTER_CONTEXT}}
 
+{{GSC_SECTION}}
+
 ## Code-Verified Page Snapshot
 {{PAGE_SNAPSHOT}}
 

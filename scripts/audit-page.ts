@@ -210,7 +210,52 @@ async function main() {
       /* non-fatal */
     }
 
-    // 5. Assemble prompt + call Claude
+    // 5. GSC performance context (last 3 monthly snapshots + top queries) —
+    // ground-truth query fan-out evidence for the recommendations. API-first by
+    // design: gsc_page_snapshots is the live feed; the cornerstone CSV's GSC
+    // columns are only a fallback for unconnected sites. Non-fatal when absent.
+    let gscSection = '';
+    try {
+      const pagePath = new URL(page.finalUrl).pathname;
+      const variants = [...new Set([
+        pagePath,
+        pagePath.replace(/\/+$/, '') || '/',
+        pagePath.endsWith('/') ? pagePath : `${pagePath}/`,
+      ])];
+      const { data: gscRows } = await (sb as any)
+        .from('gsc_page_snapshots')
+        .select('snapshot_date, page_url, clicks, impressions, ctr, avg_position, top_queries')
+        .eq('audit_id', auditId)
+        .in('page_url', variants)
+        .order('snapshot_date', { ascending: false })
+        .limit(3);
+      if (gscRows && gscRows.length > 0) {
+        const hist = gscRows
+          .map((r: any) => `${r.snapshot_date} | ${r.clicks ?? 0} | ${r.impressions ?? 0} | ${((r.ctr ?? 0) * 100).toFixed(1)}% | ${r.avg_position != null ? Number(r.avg_position).toFixed(1) : '—'}`)
+          .join('\n');
+        gscSection = `## GSC Performance for This Page (last ${gscRows.length} monthly snapshot(s) — ground truth)\nMonth | Clicks | Impressions | CTR | Avg Position\n${hist}\n`;
+        const tq = gscRows[0].top_queries;
+        if (Array.isArray(tq) && tq.length > 0) {
+          const qLines = tq.slice(0, 20).map((q: any) => {
+            if (typeof q === 'string') return `- ${q}`;
+            const label = q.query ?? q.keyword ?? JSON.stringify(q);
+            const stats: string[] = [];
+            if (q.clicks != null) stats.push(`${q.clicks} clicks`);
+            if (q.impressions != null) stats.push(`${q.impressions} impr`);
+            if (q.position != null) stats.push(`pos ${Number(q.position).toFixed(1)}`);
+            return `- ${label}${stats.length ? ` (${stats.join(', ')})` : ''}`;
+          }).join('\n');
+          gscSection += `\n### Queries this page already earns impressions for (latest month)\n${qLines}\n\nUse these as EVIDENCE, not decoration: a query with impressions but weak clicks/position that the page content does not directly answer is an extractability/coverage gap — address it in your header and content recommendations. Queries the page wins should be PROTECTED (do not recommend changes that sacrifice them).`;
+        }
+        console.log(`[audit-page] GSC context: ${gscRows.length} snapshot(s), ${Array.isArray(gscRows[0].top_queries) ? gscRows[0].top_queries.length : 0} top queries`);
+      } else {
+        console.log('[audit-page] No GSC snapshots for this page (analytics not connected or page unmatched)');
+      }
+    } catch (err: any) {
+      console.warn(`[audit-page] GSC context unavailable (non-fatal): ${err.message}`);
+    }
+
+    // 6. Assemble prompt + call Claude
     const template = fs.readFileSync(
       path.resolve(process.cwd(), 'configs/agents/dwight/page-audit-prompt.md'),
       'utf-8',
@@ -224,6 +269,7 @@ async function main() {
       .replaceAll('{{PAGE_URL}}', page.finalUrl)
       .replaceAll('{{DOMAIN}}', args.domain)
       .replace('{{CLUSTER_CONTEXT}}', clusterContext)
+      .replace('{{GSC_SECTION}}', gscSection || '## GSC Performance for This Page\nNo GSC data available for this page — do not invent performance claims.')
       .replace('{{PAGE_SNAPSHOT}}', buildSnapshotSection(page))
       .replace('{{MECHANICAL_CHECKS}}', fmtChecks(profile.checks as any))
       .replace('{{READINESS_CHECKS}}', fmtChecks(readiness.checks as any))
@@ -262,7 +308,7 @@ async function main() {
       );
     }
 
-    // 6. Persist
+    // 7. Persist
     const pageSnapshot = {
       final_url: page.finalUrl,
       status_code: page.statusCode,

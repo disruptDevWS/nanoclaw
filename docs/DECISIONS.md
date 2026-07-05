@@ -1465,3 +1465,13 @@ Both prompts were inline in pipeline-generate.ts and generate-brief.ts respectiv
 **Backfill needed no re-crawl.** `scoreCrawlRow()` consumes exactly the fields syncDwight already persists as structured columns; `scripts/backfill-optimization-scores.ts` reconstructed the pseudo-CSV shape from `agent_technical_pages` rows and scored 648 pages across 10 audits (0 failures) with zero API cost. The genuine data-contract gap is raw HTML (not persisted) — matters only if site-wide readiness scoring at crawl time is ever wanted.
 
 **Findings lifecycle + root-cause dedupe → FOLLOWUPS**, not built now: reconcile-don't-override applied to findings themselves, natural home in Phase 2 optimize-mode.
+
+---
+
+### 2026-07-05 — Worklist noise: dismiss-don't-delete + cornerstone lens; GSC context is API-first
+
+**Irrelevant pages (e.g. /newtest) are dismissed, never deleted — in their own table.** Deleting `agent_technical_pages` rows destroys crawl truth AND wouldn't survive the delete+reinsert sync anyway. `page_dismissals` (migration 040) is URL-keyed per audit in a separate overlay table — the third use of the overlay-input pattern (cornerstone_pages, assignment_locked) — so dismissals persist across every re-crawl with zero preservation code. Reason enum (`irrelevant`/`test_page`/`intentional`) matters: a live indexable test page IS a finding — dismissing as test_page nudges "remove or noindex it." This is deliberately the first shipped slice of the findings-lifecycle FOLLOWUP.
+
+**Cornerstone is a worklist LENS, not a filter.** Filtering the worklist to the uploaded CSV would blind the system to real pages outside the declaration (and empty it for audits without an upload). Instead: anchor badge on matching rows + All/Cornerstone/Other toggle (only shown when a declaration exists), URL-normalized matching against `cornerstone_pages`.
+
+**GSC context for page audits comes from the API we already run, not the CSV.** `gsc_page_snapshots` is a live monthly feed with per-URL `top_queries`; a CSV column would be a stale manual copy of it. `audit-page.ts` now injects the last 3 snapshots + top queries into the deep-dive prompt with explicit evidence framing: impressions-without-answers = extractability/coverage gaps to fix; winning queries = protected (don't recommend changes that sacrifice them). The cornerstone CSV's GSC columns (already parsed to `page_facts.gsc`) remain the fallback for unconnected sites/prospects — right for Scout, wrong as primary for clients. Prompt explicitly says "no GSC data — do not invent performance claims" when absent.

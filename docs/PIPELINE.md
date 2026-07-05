@@ -1403,8 +1403,9 @@ Flow (`scripts/audit-page.ts`):
 3. `score-page.ts` `scoreFetchedPage()` — mechanical 0–100 profile (same check vocabulary as the crawl-time batch scoring).
 4. `agent-readiness.ts` — **code-verified** Aleyda 3-layer (Layer 2) checks: robots.txt AI-bot rules (GPTBot, ClaudeBot, PerplexityBot, …), `llms.txt`, `.well-known/mcp.json` (WebMCP; soft-404-guarded), SSR content, canonical consistency, heading extractability, @graph/@id/Organization/sameAs entity checks, schema dates, authorship, `potentialAction`. Replaces the retired prompt-guessed Dwight §10.4 scorecard for this flow.
 5. `src/agents/linking/related-pages.ts` — embedding-grounded internal-link candidates (non-fatal if unavailable) + cluster context from `execution_pages.canonical_key` → `audit_clusters`.
-6. One Claude call with `configs/agents/dwight/page-audit-prompt.md` → strict JSON findings (metadata / headers / images / internal_links / graph_schema incl. complete proposed @graph JSON-LD / agent_readiness). One retry on malformed JSON.
-7. Writes `findings` (+ attached `mechanical` + `readiness` layers) and `page_snapshot` to `page_audit_runs`, status `complete` (or `failed` + error_message).
+6. **GSC context (2026-07-05):** last 3 monthly `gsc_page_snapshots` for the URL (path-variant matched) + latest `top_queries`, injected with evidence framing — impressions-without-answers are coverage gaps to fix; winning queries are protected. API-first by design; the cornerstone CSV's GSC columns are only a fallback for unconnected sites. Non-fatal when absent ("do not invent performance claims").
+7. One Claude call with `configs/agents/dwight/page-audit-prompt.md` → strict JSON findings (metadata / headers / images / internal_links / graph_schema incl. complete proposed @graph JSON-LD / agent_readiness). One retry on malformed JSON. **Schema preservation (2026-07-05):** `schema-diff.ts` mechanically diffs the proposed @graph against the live JSON-LD; `graph_schema.diff` removals render as dashboard sign-off warnings.
+8. Writes `findings` (+ attached `mechanical` + `readiness` layers) and `page_snapshot` (incl. raw JSON-LD — the re-run diff baseline) to `page_audit_runs`, status `complete` (or `failed` + error_message).
 
 Dashboard polls `page_audit_runs` by id every 3s (pam_requests pattern). Realtime is not used anywhere in the app.
 
