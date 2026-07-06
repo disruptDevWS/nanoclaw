@@ -5753,6 +5753,21 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
       weak,
       gaps,
       other_gap_count: otherGapCount,
+      // Fit signal: modeled monthly revenue if every gap/weak keyword reached
+      // page 1. Deliberately a conservative floor (organic only — no local
+      // pack, long tail, repeat business, or LTV) used to RANK prospects by
+      // engagement economics; it is not a precise TAM. Null when revenue is
+      // suppressed.
+      addressable_revenue_monthly: revenueAssumptions
+        ? Math.round(
+            gapMatrix
+              .filter((g) => (g.status === 'gap' || g.status === 'weak') && g.topic !== 'Other')
+              .reduce((sum, g) => sum + g.volume, 0) *
+              PAGE1_CTR *
+              revenueAssumptions.cr_used *
+              revenueAssumptions.acv_used,
+          )
+        : null,
       top_opportunities: topOpportunities,
     },
     service_coverage: serviceCoverage,

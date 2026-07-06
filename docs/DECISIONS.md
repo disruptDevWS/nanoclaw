@@ -1505,3 +1505,13 @@ Both prompts were inline in pipeline-generate.ts and generate-brief.ts respectiv
 **The footnote now cites its basis.** `revenue_assumptions.basis` carries a plain-language source sentence ("Based on HomeAdvisor/Angi cost-guide data and Homeyou regional pricing for Boise, ID...") to the share page footnote and the narrative prompt — "published market rates" with named sources survives a skeptical read where "industry averages" doesn't.
 
 **Web search wired into `anthropic-client.ts` as an opt-in** (`webSearch: {maxUses}`): server-side tool `web_search_20260209`, structural literal (SDK 0.78 predates the type), `pause_turn` continuation loop capped at 5. The static SCOUT_REVENUE_ESTIMATES table survives as calibration anchors in the estimate prompt + hard fallback.
+
+---
+
+### 2026-07-06 — Honest revenue math doubles as prospect qualification (addressable-revenue fit signal)
+
+**Matt's insight after the TVL re-run:** grounded numbers ($280/mo on the top keyword vs the old inflated $3,981) felt underwhelming — and that's information. "An additional $280/mo in revenue isn't worth a marketing investment." The same calculation that makes the report credible ranks the prospect list: TVL's full gap matrix at page-1 capture models to ~$781/mo (definitively poor fit for quality engagements), while restoration prospects model to $7k–$133k/mo and a Summit-style school pencils to ~$19k/mo on one keyword.
+
+**`gap_summary.addressable_revenue_monthly`** = Σ(gap+weak volume) × page-1 CTR × CR × ACV, pipeline-computed. Deliberately a floor, not a TAM — organic only, no local pack, long tail, repeat business, or LTV — so it RANKS prospects; borderline cases get a human look. The dashboard falls back to service_coverage × revenue_assumptions math for pre-2026-07-06 scopes and returns null for cpc_derived ACVs (that junk is exactly what the revenue rework removed; showing a number derived from it would resurrect it).
+
+**Threshold $2,500/mo** (constant in `prospectFit.ts`): at a 3–5x client-ROI rule that supports at most ~$500–800/mo of spend — the tier Matt explicitly avoids. Below it, the share-readiness dialog suggests skipping or a courtesy note instead of a pitch (poor-fit honesty as a referral play). Warn-don't-block, consistent with the share gate.
