@@ -250,6 +250,103 @@ export async function getServiceAccountAccessToken(scopes: string[]): Promise<st
 }
 
 // ============================================================
+// Public: domain-wide-delegated user access token (cached)
+// ============================================================
+
+const delegatedTokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+/**
+ * Get a Google access token that acts AS a Workspace user (domain-wide
+ * delegation), without a service-account key file:
+ *   1. User ADC token (existing chain)
+ *   2. IAM Credentials signJwt — sign a DWD assertion as the SA
+ *      (same roles/iam.serviceAccountTokenCreator grant as generateAccessToken)
+ *   3. Exchange the signed assertion at the token endpoint (jwt-bearer grant)
+ *
+ * Requires one-time Workspace admin setup: the SA's OAuth2 client ID must be
+ * authorized for the requested scopes under Admin console → Security →
+ * API Controls → Domain-wide Delegation. See docs/GMAIL_DWD_SETUP.md.
+ */
+export async function getDelegatedUserAccessToken(
+  subject: string,
+  scopes: string[],
+): Promise<string> {
+  const cacheKey = `${subject}|${scopes.slice().sort().join(',')}`;
+
+  const cached = delegatedTokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() + 300_000) {
+    return cached.token;
+  }
+
+  const userToken = await getUserAccessToken();
+
+  // Step 1: sign the DWD assertion as the service account (keyless)
+  const nowSec = Math.floor(Date.now() / 1000);
+  const signResp = await fetch(
+    `${IAM_CREDENTIALS_ENDPOINT}/${SERVICE_ACCOUNT_EMAIL}:signJwt`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        payload: JSON.stringify({
+          iss: SERVICE_ACCOUNT_EMAIL,
+          sub: subject,
+          scope: scopes.join(' '),
+          aud: TOKEN_ENDPOINT,
+          iat: nowSec,
+          exp: nowSec + 3600,
+        }),
+      }),
+    },
+  );
+
+  if (!signResp.ok) {
+    const errText = await signResp.text();
+    throw new Error(
+      `SA signJwt failed (${signResp.status}): ${errText}\n` +
+        `Ensure the ADC identity has roles/iam.serviceAccountTokenCreator on ${SERVICE_ACCOUNT_EMAIL}.`,
+    );
+  }
+
+  const { signedJwt } = await signResp.json();
+
+  // Step 2: exchange the assertion for a user-delegated access token
+  const tokenResp = await fetch(TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: signedJwt,
+    }).toString(),
+  });
+
+  if (!tokenResp.ok) {
+    const errText = await tokenResp.text();
+    throw new Error(
+      `Delegated token exchange failed (${tokenResp.status}): ${errText}\n` +
+        `This usually means domain-wide delegation is not configured for ` +
+        `${SERVICE_ACCOUNT_EMAIL} with scopes [${scopes.join(', ')}] in the ` +
+        `Google Workspace Admin console. See docs/GMAIL_DWD_SETUP.md. ` +
+        `(DWD changes can take ~10 minutes to propagate.)`,
+    );
+  }
+
+  const tokenData = await tokenResp.json();
+  const token = tokenData.access_token as string;
+  const expiresIn = (tokenData.expires_in as number) || 3600;
+
+  delegatedTokenCache.set(cacheKey, {
+    token,
+    expiresAt: Date.now() + expiresIn * 1000,
+  });
+
+  return token;
+}
+
+// ============================================================
 // Analytics connection lookup
 // ============================================================
 

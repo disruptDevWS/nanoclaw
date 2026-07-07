@@ -1345,6 +1345,39 @@ Ad-hoc keyword volume lookup via DataForSEO Keyword Data API. Super-admin only. 
 
 ---
 
+## Outreach Email Draft (On-Demand)
+
+Generates a personalized cold-outreach email for a **scouted prospect** and materializes it as a draft in matt@forgegrowth.ai's Gmail Drafts folder for human review. **The pipeline never sends email** — no send call exists in the codebase; Matt reviews and sends manually from Gmail.
+
+### generate-outreach-email.ts
+
+**CLI:** `npx tsx scripts/generate-outreach-email.ts --domain <domain> [--force]`
+
+**Inputs:** `prospects` row (contact fields, narrative, scope fallback) + latest `audits/{domain}/scout/{date}/scope.json` and `prospect-narrative.md` (disk first, DB fallback via `prospects.scout_scope_json` / `prospect_narrative`). Never reads `scout_markdown` (internal playbook — must not leak into recipient-facing copy).
+
+**Steps:**
+1. Resolve prospect by domain; require `status ∈ (scouted, converted)`
+2. Idempotency gate: existing `gmail_draft_id` without `--force` → skip (never a second draft per prospect); `--force` updates the existing draft in place (404 → recreate)
+3. Fit check: `addressable_revenue_monthly < $2,500/mo` → `courtesy_note` variant + warning (warn, never block); ≥ threshold → `pitch`; null/suppressed → `pitch` with no revenue numbers in the prompt
+4. One Sonnet call (`phase: outreach_email`, 2048 max tokens), `---SUBJECT---`/`---BODY---` markers; missing markers → exit 1, nothing written. Prompt carries the grounding rule (cite only provided facts) and the em-dash STYLE RULES block
+5. Persist copy to `prospects` (`outreach_status='generated'`) **before** the Gmail step
+6. Gmail step (non-fatal): `getDelegatedUserAccessToken(sender, [gmail.compose])` → `createDraft`/`updateDraft` (`scripts/gmail-drafts.ts`) → on success `gmail_draft_id` + `outreach_status='drafted'`; on failure status stays `generated` and exit code is 0 (`--force` retries)
+
+**Auth chain (keyless DWD):** ADC user token → IAM Credentials `signJwt` as `fg-analytics` SA → jwt-bearer exchange → user-delegated Gmail token. One-time Workspace admin setup required — see [GMAIL_DWD_SETUP.md](GMAIL_DWD_SETUP.md). Sender overridable via `OUTREACH_SENDER` env (default `matt@forgegrowth.ai`).
+
+### Pipeline Server Endpoint
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/generate-outreach-email` | `{ domain, force? }` → 202, detached spawn of the CLI (handler `handleGenerateOutreachEmail`, inFlight key `outreach-email:{domain}`) |
+
+### Supabase Columns (`prospects`)
+
+`contact_email`, `contact_name` (manual entry), `outreach_subject`, `outreach_body` (source of truth — the Gmail draft is a materialization), `outreach_variant` (`pitch|courtesy_note`), `outreach_status` (`none|generated|drafted`), `gmail_draft_id`, `outreach_generated_at`.
+**Migration:** `scripts/migrations/043-prospect-outreach.sql`
+
+---
+
 ## Cluster Activation (On-Demand)
 
 Cluster activation is an on-demand step that generates a strategy document for a specific topic cluster, marks it active, and flags its execution_pages. It runs outside the main pipeline, triggered via HTTP endpoint or CLI.

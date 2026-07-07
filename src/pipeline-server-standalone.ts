@@ -1289,6 +1289,88 @@ async function handleGenerateProspectBrief(req: http.IncomingMessage, res: http.
   json(res, 202, { status: 'brief_generation_started', domain, artifact: `reports/prospect_brief.html` });
 }
 
+async function handleGenerateOutreachEmail(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!checkAuth(req, res)) return;
+
+  let payload: { domain?: string; force?: boolean };
+  try {
+    payload = JSON.parse(await readBody(req));
+  } catch {
+    json(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  const { domain, force } = payload;
+  if (!domain) {
+    json(res, 400, { error: 'domain is required' });
+    return;
+  }
+  if (!DOMAIN_RE.test(domain)) {
+    json(res, 400, { error: 'Invalid domain format' });
+    return;
+  }
+
+  const outreachKey = `outreach-email:${domain}`;
+  if (inFlight.has(outreachKey)) {
+    json(res, 409, { error: `Outreach email already generating for ${domain}` });
+    return;
+  }
+
+  inFlight.add(outreachKey);
+  console.log(`Outreach email triggered: ${domain}${force ? ' (force)' : ''}`);
+
+  const args = ['tsx', 'scripts/generate-outreach-email.ts', '--domain', domain];
+  if (force) args.push('--force');
+  const child = spawn('npx', args, {
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: process.cwd(),
+  });
+  child.unref();
+
+  const logLines: string[] = [];
+  const collect = (stream: NodeJS.ReadableStream | null, prefix: string) => {
+    if (!stream) return;
+    let buf = '';
+    stream.on('data', (chunk: Buffer) => {
+      buf += chunk.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        console.log(`[outreach-email:${domain}] ${prefix}: ${line}`);
+        logLines.push(`${prefix}: ${line}`);
+      }
+    });
+    stream.on('end', () => {
+      if (buf) {
+        console.log(`[outreach-email:${domain}] ${prefix}: ${buf}`);
+        logLines.push(`${prefix}: ${buf}`);
+      }
+    });
+  };
+  collect(child.stdout, 'OUT');
+  collect(child.stderr, 'ERR');
+
+  const disarm = armWatchdog(child, `outreach-email:${domain}`, PIPELINE_JOB_TIMEOUT_MS);
+
+  child.on('close', (code) => {
+    disarm();
+    inFlight.delete(outreachKey);
+    console.log(`Outreach email finished: ${domain} (exit ${code})`);
+    if (code !== 0) {
+      console.error(`Outreach email failed: ${domain} — last 10 lines:\n${logLines.slice(-10).join('\n')}`);
+    }
+  });
+
+  child.on('error', (err) => {
+    disarm();
+    inFlight.delete(outreachKey);
+    console.error(`Outreach email spawn error: ${domain}`, err);
+  });
+
+  json(res, 202, { status: 'outreach_generation_started', domain });
+}
+
 async function handleGenerateClientBrief(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   if (!checkAuth(req, res)) return;
 
@@ -1801,6 +1883,8 @@ const server = http.createServer((req, res) => {
     handleAiVisibilityAnalysis(req, res);
   } else if (req.method === 'POST' && req.url === '/generate-prospect-brief') {
     handleGenerateProspectBrief(req, res);
+  } else if (req.method === 'POST' && req.url === '/generate-outreach-email') {
+    handleGenerateOutreachEmail(req, res);
   } else if (req.method === 'POST' && req.url === '/generate-client-brief') {
     handleGenerateClientBrief(req, res);
   } else if (req.method === 'POST' && req.url === '/generate-brief') {

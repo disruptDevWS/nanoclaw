@@ -801,9 +801,15 @@ Written by Phase 6d (LocalPresence). One row per directory.
 | `scout_scope_json` | Pipeline (Scout) | Edge fn (get_share_report) | scope.json JSONB. Additive fields: `gap_summary.top_opportunities[].cpc_inferred` (boolean), `[].variant_count` (int, >1 when near-variants collapsed), `[].rough_revenue_monthly` (absent when revenue suppressed), `gap_summary.addressable_revenue_monthly` (int or null; fit signal — dashboard falls back to service_coverage math for older scopes, skipping cpc_derived), `max_topic_cpc` (Record<string, number>), `revenue_assumptions` (null when no owner ACV and no vertical benchmark; `method: owner_provided \| vertical_benchmark`) |
 | `prospect_narrative` | Pipeline (Scout) | Edge fn (get_share_report) | Plain-language outreach doc |
 | `estimated_job_value` | Dashboard | Pipeline (Scout, via prospect-config.json) | Migration 041 (2026-07-05). Owner-provided typical job value (USD); overrides vertical benchmark ACV |
+| `contact_email`, `contact_name` | Manual (SQL/dashboard, dashboard UI TBD) | Pipeline (generate-outreach-email.ts) | Migration 043 (2026-07-07). Nullable — draft generates with empty To: when absent |
+| `outreach_subject`, `outreach_body` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | Generated cold-email copy. Source of truth; the Gmail draft is a materialization |
+| `outreach_variant` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | `pitch` \| `courtesy_note` (below $2,500/mo fit threshold) |
+| `outreach_status` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | `none` \| `generated` (copy in DB, Gmail step failed/pending) \| `drafted` (Gmail draft exists). Text, not enum |
+| `gmail_draft_id` | Pipeline (generate-outreach-email.ts) | Pipeline | Gmail API draft id; idempotency anchor for update-in-place on `--force` |
+| `outreach_generated_at` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | |
 
 **Dashboard reads**: `useProspects()`, `useProspect()`, `useProspectStatus()` (2s poll while running)
-**Pipeline writes**: Scout updates status, scout_run_at, scout_output_path, brand_favicon_url, scout_markdown, scout_scope_json, prospect_narrative
+**Pipeline writes**: Scout updates status, scout_run_at, scout_output_path, brand_favicon_url, scout_markdown, scout_scope_json, prospect_narrative; generate-outreach-email.ts updates outreach_* + gmail_draft_id
 
 ---
 
