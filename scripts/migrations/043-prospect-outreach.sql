@@ -1,7 +1,6 @@
 -- 043: Outreach email draft queue for scouted prospects.
--- NOT YET VERIFIED against live schema (Management API token expired 2026-07-07).
--- Before applying: query information_schema.columns for public.prospects and
--- confirm none of these column names exist, then update this header.
+-- Verified 2026-07-07 via Management API: public.prospects has 18 columns
+-- (base + 041 + share migration); none of the 8 column names below exist.
 -- Contact fields are entered manually (SQL/dashboard); generated fields are
 -- written by scripts/generate-outreach-email.ts. The Gmail draft is a
 -- materialization of outreach_subject/outreach_body — the row is source of truth.

@@ -252,6 +252,7 @@ async function main() {
   const env = loadEnv();
   // Set env vars for anthropic-client.ts / google-auth.ts
   if (env.ANTHROPIC_API_KEY) process.env.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY;
+  if (env.ANTHROPIC_KEY) process.env.ANTHROPIC_KEY = env.ANTHROPIC_KEY;
   if (env.GOOGLE_ADC_JSON) process.env.GOOGLE_ADC_JSON = env.GOOGLE_ADC_JSON;
   if (env.GOOGLE_APPLICATION_CREDENTIALS) {
     process.env.GOOGLE_APPLICATION_CREDENTIALS = env.GOOGLE_APPLICATION_CREDENTIALS;
