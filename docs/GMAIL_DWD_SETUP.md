@@ -32,6 +32,8 @@ What IS needed is a one-time Workspace admin authorization:
    and data control → API Controls → **Domain-wide Delegation** → Add new:
    - Client ID: the numeric ID from step 1
    - OAuth scopes: exactly `https://www.googleapis.com/auth/gmail.compose`
+     — the **full URL**. The console rejects the short form (`gmail.compose`)
+     with "invalid scope".
 
    (`gmail.compose` is the narrowest scope that can create drafts — there is
    no drafts-only scope. The codebase contains no send call; see DECISIONS.md.)
