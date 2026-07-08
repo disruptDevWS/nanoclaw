@@ -25,7 +25,10 @@ function resolveModel(shortName: string): string {
 export const PHASE_MAX_TOKENS: Record<string, number> = {
   dwight: 16384,
   jim: 16384,
-  michael: 16384,
+  // michael 16384→32768 (2026-07-08): re-run prompts now carry the previous-
+  // architecture baseline + rejected recommendations + Cluster Key column;
+  // large-site blueprints were already brushing the 16K output ceiling.
+  michael: 32768,
   gap: 12288,
   'keyword-research-extract': 4096,
   'keyword-research-synth': 16384,

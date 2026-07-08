@@ -831,8 +831,9 @@ export async function rebuildClustersAndRollups(sb: SupabaseClient, auditId: str
     return { clusterCount: 0, nearMissCount: 0 };
   }
 
-  // Clear existing clusters + rollups (manual clusters survive — migration 038)
-  await (sb as any).from('audit_clusters').delete().eq('audit_id', auditId).eq('is_manual', false);
+  // Clear existing clusters + rollups (manual clusters survive — migration 038;
+  // Michael-declared structural clusters survive — migration 044)
+  await (sb as any).from('audit_clusters').delete().eq('audit_id', auditId).eq('is_manual', false).eq('is_structural', false);
   await sb.from('audit_rollups').delete().eq('audit_id', auditId);
 
   let clusterMap = buildClusterMap(kwRows as any[]);
@@ -1169,9 +1170,10 @@ async function syncJim(
   // update both files.
   await sb.from('audit_keywords').delete().eq('audit_id', auditId).eq('source', 'ranked');
   await sb.from('audit_keywords').delete().eq('audit_id', auditId).is('source', null);
-  // Manual clusters survive jim re-runs (migration 038); rebuildClustersAndRollups
+  // Manual clusters survive jim re-runs (migration 038); Michael-declared
+  // structural clusters survive too (migration 044); rebuildClustersAndRollups
   // below re-derives everything else.
-  await (sb as any).from('audit_clusters').delete().eq('audit_id', auditId).eq('is_manual', false);
+  await (sb as any).from('audit_clusters').delete().eq('audit_id', auditId).eq('is_manual', false).eq('is_structural', false);
   await sb.from('audit_rollups').delete().eq('audit_id', auditId);
 
   // Insert ALL keyword records with segment flags
@@ -2310,6 +2312,40 @@ async function syncMichael(
 
   // --- Seed execution_pages (re-run-aware) ---
   if (pages.length > 0) {
+    // Michael-declared cluster keys (migration 044): resolve each page's declared
+    // Cluster Key against audit_clusters. Keys with no cluster row yet are
+    // structural (e.g. service_area — no keyword backing) and get upserted as
+    // is_structural=true so /clusters and /execution can render their pages.
+    const clusterStatusByKey = new Map<string, string>();
+    {
+      const { data: clusterRows } = await (sb as any)
+        .from('audit_clusters')
+        .select('canonical_key, status')
+        .eq('audit_id', auditId);
+      for (const c of (clusterRows ?? []) as any[]) {
+        if (c.canonical_key) clusterStatusByKey.set(c.canonical_key, c.status);
+      }
+      const declaredKeys = new Set(pages.map((p) => p.cluster_key).filter(Boolean));
+      const missingKeys = [...declaredKeys].filter((k) => !clusterStatusByKey.has(k));
+      for (const key of missingKeys) {
+        const topic = key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const { error: scErr } = await (sb as any).from('audit_clusters').insert({
+          audit_id: auditId,
+          topic,
+          canonical_key: key,
+          canonical_topic: topic,
+          status: 'inactive',
+          is_structural: true,
+        });
+        if (scErr) {
+          console.warn(`  [michael] Structural cluster insert failed for '${key}': ${scErr.message}`);
+        } else {
+          clusterStatusByKey.set(key, 'inactive');
+          console.log(`  [michael] Created structural cluster '${key}' (${topic})`);
+        }
+      }
+    }
+
     const execRecords = pages.map((p) => ({
       audit_id: auditId,
       url_slug: p.url_slug,
@@ -2317,6 +2353,10 @@ async function syncMichael(
       priority: p.action_required === 'create' ? 1 : p.action_required === 'optimize' ? 2 : p.action_required === 'differentiate' ? 3 : 4,
       status: 'not_started',
       source: 'michael',
+      // Declared key wins at insert time; keyword backfill below remains the
+      // fallback for pages without one (and never overwrites a declared key).
+      canonical_key: p.cluster_key || null,
+      cluster_active: p.cluster_key ? clusterStatusByKey.get(p.cluster_key) === 'active' : false,
       page_brief: {
         silo_name: p.silo_name,
         role: p.role,
@@ -2334,7 +2374,7 @@ async function syncMichael(
       // Load all existing execution_pages for this audit
       const { data: existingPages } = await sb
         .from('execution_pages')
-        .select('id, url_slug, status, source, published_at, assignment_locked')
+        .select('id, url_slug, status, source, published_at, assignment_locked, operator_disposition')
         .eq('audit_id', auditId);
 
       const existingBySlug = new Map<string, { id: string; url_slug: string; status: string; source: string | null; published_at: string | null; assignment_locked?: boolean }>();
@@ -2349,6 +2389,13 @@ async function syncMichael(
       let updated = 0;
       let inserted = 0;
       let lockedSkipped = 0;
+      let dispositionSkipped = 0;
+
+      // Declared cluster key propagates to committed/uncommitted updates too
+      // (same semantics as the keyword backfill, which also re-homes non-locked
+      // pages regardless of status). Locked and disposed pages are never re-homed.
+      const declaredClusterFields = (rec: { canonical_key: string | null; cluster_active: boolean }) =>
+        rec.canonical_key ? { canonical_key: rec.canonical_key, cluster_active: rec.cluster_active } : {};
 
       for (const rec of execRecords) {
         const slug = rec.url_slug.replace(/^\/+/, '');
@@ -2356,7 +2403,15 @@ async function syncMichael(
         newSlugs.add(key);
         const existing = existingBySlug.get(key);
 
-        if (existing && (existing as any).assignment_locked) {
+        if (existing && (existing as any).operator_disposition) {
+          // Operator disposed this recommendation (rejected/deferred — migration
+          // 044). Immovable: never revived, re-homed, or brief-updated. Rejected
+          // reasons are fed back into Michael's prompt so he stops re-proposing.
+          await (sb as any).from('execution_pages').update({
+            snapshot_version: rec.snapshot_version,
+          }).eq('id', existing.id);
+          dispositionSkipped++;
+        } else if (existing && (existing as any).assignment_locked) {
           // User manually assigned this page to a topic (migration 038) —
           // Michael's re-run must not re-home it or overwrite its curated brief.
           await (sb as any).from('execution_pages').update({
@@ -2371,10 +2426,12 @@ async function syncMichael(
             silo: rec.silo,
             priority: rec.priority,
             snapshot_version: rec.snapshot_version,
+            ...declaredClusterFields(rec),
           }).eq('id', existing.id);
           preserved++;
         } else if (existing) {
-          // Not committed: full upsert with source
+          // Not committed (incl. deprecated pages re-added by this blueprint —
+          // revived to not_started since the 2026-07-08 isCommitted fix)
           await (sb as any).from('execution_pages').update({
             url_slug: slug,
             page_brief: rec.page_brief,
@@ -2383,6 +2440,7 @@ async function syncMichael(
             status: 'not_started',
             source: 'michael',
             snapshot_version: rec.snapshot_version,
+            ...declaredClusterFields(rec),
           }).eq('id', existing.id);
           updated++;
         } else {
@@ -2401,7 +2459,10 @@ async function syncMichael(
       let foreignPreserved = 0;
       for (const [key, ep] of existingBySlug) {
         if (newSlugs.has(key)) continue;
-        if ((ep as any).assignment_locked) {
+        if ((ep as any).operator_disposition) {
+          // Disposed pages (migration 044) hold their state — never stale-deprecated
+          foreignPreserved++;
+        } else if ((ep as any).assignment_locked) {
           // Locked pages are never auto-deprecated by an architecture re-run
           foreignPreserved++;
         } else if ((ep as any).source && (ep as any).source !== 'michael') {
@@ -2432,6 +2493,12 @@ async function syncMichael(
               console.log(`  [michael] Skipping deprecation recommendation for operator page: ${c.url_slug}`);
               continue;
             }
+            // Disposed pages (migration 044) already have an operator verdict —
+            // Michael's recommendation doesn't override it
+            if ((ep as any)?.operator_disposition) {
+              console.log(`  [michael] Skipping deprecation recommendation for disposed page: ${c.url_slug}`);
+              continue;
+            }
             if (ep && isCommitted(ep) && ep.status !== 'published') {
               // Michael explicitly recommends deprecation — only apply to non-published committed pages
               await (sb as any).from('execution_pages').update({ status: 'deprecated' }).eq('id', ep.id);
@@ -2447,30 +2514,32 @@ async function syncMichael(
         }
       }
 
-      console.log(`  [michael] Strategic re-run: ${preserved} preserved, ${updated} updated, ${inserted} new, ${deprecated} deprecated (stale), ${stalePreserved} stale-but-committed, ${lockedSkipped} assignment-locked (untouched)`);
+      console.log(`  [michael] Strategic re-run: ${preserved} preserved, ${updated} updated, ${inserted} new, ${deprecated} deprecated (stale), ${stalePreserved} stale-but-committed, ${lockedSkipped} assignment-locked (untouched), ${dispositionSkipped} operator-disposed (untouched)`);
     } else {
       // first_run or failure_resume: standard upsert with source
       for (const rec of execRecords) {
         const slug = rec.url_slug.replace(/^\/+/, '');
         const { data: existing } = await sb
           .from('execution_pages')
-          .select('id, assignment_locked')
+          .select('id, assignment_locked, operator_disposition')
           .eq('audit_id', auditId)
           .or(`url_slug.eq.${slug},url_slug.eq./${slug}`)
           .maybeSingle();
 
-        if (existing && (existing as any).assignment_locked) {
-          // User-assigned page (migration 038) — leave silo/brief untouched
+        if (existing && ((existing as any).assignment_locked || (existing as any).operator_disposition)) {
+          // User-assigned page (migration 038) or operator-disposed page
+          // (migration 044) — leave silo/brief/status untouched
           await (sb as any).from('execution_pages').update({
             snapshot_version: rec.snapshot_version,
           }).eq('id', (existing as any).id);
         } else if (existing) {
-          await sb.from('execution_pages').update({
+          await (sb as any).from('execution_pages').update({
             url_slug: slug,
             page_brief: rec.page_brief,
             silo: rec.silo,
             priority: rec.priority,
             snapshot_version: rec.snapshot_version,
+            ...(rec.canonical_key ? { canonical_key: rec.canonical_key, cluster_active: rec.cluster_active } : {}),
           }).eq('id', (existing as any).id);
         } else {
           await sb.from('execution_pages').insert({ ...rec, url_slug: slug });
@@ -2491,19 +2560,24 @@ async function syncMichael(
     }
     let canonicalUpdated = 0;
     for (const p of pages) {
+      // Declared Cluster Key (migration 044) wins — already written at seed
+      // time; the keyword backfill must not overwrite it.
+      if (p.cluster_key) continue;
       const pk = (p.primary_keyword ?? '').toLowerCase().trim();
       const ck = pkToCanonical.get(pk);
       if (ck) {
         const slug = p.url_slug.replace(/^\/+/, '');
-        // assignment_locked pages keep their user-assigned canonical_key
+        // assignment_locked pages keep their user-assigned canonical_key;
+        // operator-disposed pages keep their state (migration 044)
         await (sb as any).from('execution_pages').update({ canonical_key: ck })
           .eq('audit_id', auditId)
           .eq('assignment_locked', false)
+          .is('operator_disposition', null)
           .or(`url_slug.eq.${slug},url_slug.eq./${slug}`);
         canonicalUpdated++;
       }
     }
-    console.log(`  [michael] Backfilled canonical_key for ${canonicalUpdated} of ${pages.length} pages`);
+    console.log(`  [michael] Backfilled canonical_key for ${canonicalUpdated} of ${pages.length} pages (declared keys: ${pages.filter((p) => p.cluster_key).length})`);
   }
 
   // Backfill audit_keywords.cluster from silo assignments

@@ -9,13 +9,20 @@ export type RerunScenario = 'first_run' | 'strategic_rerun' | 'failure_resume';
 /**
  * A page is "committed" if any human or downstream process has acted on it.
  * Committed pages are protected during re-runs — syncMichael won't overwrite them.
+ *
+ * 'deprecated' is explicitly NOT committed (2026-07-08, supersedes the
+ * "protection already comprehensive" DECISIONS entry): a dead page isn't
+ * committed work. Before this, a deprecated page re-added by a later blueprint
+ * fell into the metadata-only branch and could never be revived (Weiser
+ * county-pages incident — docs/plans/weiser-architecture-revert-and-iscommitted-bug.md).
+ * published_at still protects a published-then-deprecated page.
  */
 export const isCommitted = (page: {
   status: string;
   source?: string | null;
   published_at?: string | null;
 }): boolean =>
-  page.status !== 'not_started' ||
+  (page.status !== 'not_started' && page.status !== 'deprecated') ||
   page.source === 'cluster_strategy' ||
   page.source === 'manual' ||
   page.published_at != null;

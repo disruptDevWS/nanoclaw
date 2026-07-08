@@ -664,11 +664,14 @@ REMINDER: Your response IS the cluster strategy document — start with "### 0. 
   }
 
   // 12. Flag execution_pages as cluster_active
-  const { error: pageErr, count: pageCount } = await sb
+  // Operator-disposed pages (rejected/deferred — migration 044) are excluded
+  // from production activation.
+  const { error: pageErr, count: pageCount } = await (sb as any)
     .from('execution_pages')
     .update({ cluster_active: true })
     .eq('audit_id', auditId)
-    .eq('canonical_key', args.canonicalKey);
+    .eq('canonical_key', args.canonicalKey)
+    .is('operator_disposition', null);
 
   if (pageErr) console.warn(`  [cluster-strategy] Failed to flag pages: ${pageErr.message}`);
   else console.log(`  [cluster-strategy] Flagged ${pageCount ?? 0} pages as cluster_active`);
@@ -678,12 +681,13 @@ REMINDER: Your response IS the cluster strategy document — start with "### 0. 
   // Set canonical_key here too so deactivation works correctly.
   const clusterTopic = cluster.canonical_topic ?? cluster.topic;
   if (clusterTopic) {
-    const { error: siloErr, count: siloCount } = await sb
+    const { error: siloErr, count: siloCount } = await (sb as any)
       .from('execution_pages')
       .update({ cluster_active: true, canonical_key: args.canonicalKey })
       .eq('audit_id', auditId)
       .eq('silo', clusterTopic)
-      .is('canonical_key', null);
+      .is('canonical_key', null)
+      .is('operator_disposition', null);
     if (siloErr) console.warn(`  [cluster-strategy] Silo-match activation failed: ${siloErr.message}`);
     else if (siloCount) console.log(`  [cluster-strategy] Activated ${siloCount} additional page(s) by silo match (canonical_key was null)`);
   }

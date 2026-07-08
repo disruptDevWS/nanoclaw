@@ -45,10 +45,15 @@ If no opportunities were deferred, omit this section entirely.
 ### Silo N: [Silo Name]
 [1-2 sentence description — state the primary entity this silo establishes authority for and the coverage strategy.]
 
-| URL Slug | Status | Silo | Role | Coverage Role | Primary Keyword | Volume | Action |
-|----------|--------|------|------|---------------|-----------------|--------|--------|
-| service-slug | new/exists | Silo Name | pillar/cluster/support | commercial/informational/geographic/comparison/faq/credential/outcome | target keyword | 1234 | create/optimize |
+| URL Slug | Status | Silo | Role | Coverage Role | Primary Keyword | Volume | Action | Cluster Key |
+|----------|--------|------|------|---------------|-----------------|--------|--------|-------------|
+| service-slug | new/exists | Silo Name | pillar/cluster/support | commercial/informational/geographic/comparison/faq/credential/outcome | target keyword | 1234 | create/optimize | topic_key |
 ```
+
+**Cluster Key column (REQUIRED on every page row).** Every page must declare the topic cluster it belongs to, in lowercase snake_case:
+- If the page targets keywords from a revenue cluster listed in your context data, use that cluster's exact canonical key (the Topic column in Revenue Clusters, snake_cased — e.g. "Towing Services" → `towing_services`).
+- If the page belongs to a structural silo with no keyword cluster backing (service-area pages, trust/credential pages, about/contact), declare a stable structural key for the silo — e.g. `service_area`, `trust_signals`. Reuse the same key for every page in that silo, and reuse keys from the PREVIOUS ARCHITECTURE BASELINE when re-running.
+- Never leave the cell blank or use a dash placeholder. Pages without a Cluster Key are invisible in the operator's content production queue — this column is what connects your architecture to content execution.
 
 **Pre-finalization self-check:** Before finalizing your silo tables, review them against the cannibalization patterns you are about to document in the Cannibalization Warnings section. If any pages in your own silo tables create cannibalization risk with other pages in your output — competing for the same primary keyword, near-duplicate intent coverage, parent/child topical overlap — consolidate or remove pages before finalizing the silo tables. The Cannibalization Warnings section should report resolved risks or cross-silo linking concerns, not flag risks you created and left unresolved in your own output.
 

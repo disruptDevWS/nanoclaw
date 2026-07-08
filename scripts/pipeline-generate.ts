@@ -2790,12 +2790,58 @@ ${parts.join('\n\n')}`;
     // Fetch existing execution pages for committed architecture table
     const { data: existingExecPages } = await (sb as any)
       .from('execution_pages')
-      .select('url_slug, silo, priority, status, source, published_at, page_brief, canonical_key, assignment_locked')
+      .select('url_slug, silo, priority, status, source, published_at, page_brief, canonical_key, assignment_locked, operator_disposition, disposition_reason, disposition_at')
       .eq('audit_id', auditId);
-    const committedPages = (existingExecPages ?? []).filter((p: any) => isCommitted(p));
+    // Operator-disposed pages (migration 044) are excluded from the committed
+    // "DO NOT REMOVE" table — they get their own do-not-re-propose block below.
+    const committedPages = (existingExecPages ?? []).filter((p: any) => !p.operator_disposition && isCommitted(p));
 
     // User-assigned pages (migration 038) — Michael must keep them where the human put them
-    const lockedPages = (existingExecPages ?? []).filter((p: any) => p.assignment_locked);
+    const lockedPages = (existingExecPages ?? []).filter((p: any) => p.assignment_locked && !p.operator_disposition);
+
+    // Operator-disposed recommendations (migration 044) — the feedback loop.
+    // Rejected/deferred pages must never be re-proposed; reasons teach Michael why.
+    const disposedPages = (existingExecPages ?? []).filter((p: any) => p.operator_disposition);
+    if (disposedPages.length > 0) {
+      const disposedTable = disposedPages
+        .map((p: any) => `${p.url_slug} | ${p.silo ?? ''} | ${p.operator_disposition} | ${(p.disposition_reason ?? '').replace(/\n/g, ' ')} | ${p.disposition_at ? String(p.disposition_at).slice(0, 10) : ''}`)
+        .join('\n');
+      rerunBlock += `\n## REJECTED RECOMMENDATIONS (${disposedPages.length} pages — DO NOT RE-PROPOSE)
+URL Slug | Silo | Disposition | Operator Reason | Date
+${disposedTable}
+
+CONSTRAINT: The operator explicitly rejected or deferred these recommendations. Do NOT include these pages (or near-equivalent pages targeting the same intent) in your silo tables, and do not list them as deprecation candidates — their state is already decided. Learn from the reasons: they tell you why the recommendation didn't fit this business.\n`;
+    }
+
+    // Previous architecture baseline (migration 044 diff-mode) — the prior
+    // synced blueprint, slim form. agent_architecture_pages/_blueprint still
+    // hold the previous run's rows at generate time (Phase 6b replaces them).
+    {
+      const { data: prevPages } = await (sb as any)
+        .from('agent_architecture_pages')
+        .select('url_slug, silo_name, page_status, role')
+        .eq('audit_id', auditId);
+      const { data: prevBp } = await (sb as any)
+        .from('agent_architecture_blueprint')
+        .select('executive_summary, snapshot_version')
+        .eq('audit_id', auditId)
+        .maybeSingle();
+      if ((prevPages ?? []).length > 0) {
+        const bySilo = new Map<string, string[]>();
+        for (const p of (prevPages ?? []) as any[]) {
+          const silo = p.silo_name || '(no silo)';
+          if (!bySilo.has(silo)) bySilo.set(silo, []);
+          bySilo.get(silo)!.push(`${p.url_slug}${p.role ? ` (${p.role})` : ''}`);
+        }
+        const baselineLines = [...bySilo.entries()]
+          .map(([silo, slugs]) => `### ${silo}\n${slugs.join('\n')}`)
+          .join('\n\n');
+        rerunBlock += `\n## PREVIOUS ARCHITECTURE BASELINE (v${(prevBp as any)?.snapshot_version ?? '?'} — ${(prevPages ?? []).length} pages)
+${(prevBp as any)?.executive_summary ? `Previous executive summary:\n${String((prevBp as any).executive_summary).slice(0, 1500)}\n\n` : ''}${baselineLines}
+
+CONSTRAINT: This is your own previous architecture, which the operator has been executing against. It is the DEFAULT — preserve it unless current data clearly justifies a change. Architecture stability compounds; churn destroys operator trust and wastes committed work. Every page you REMOVE from the baseline and every page you MOVE to a different silo must be listed with a one-line reason in the "Changes from Prior Architecture" paragraph of your Executive Summary.\n`;
+      }
+    }
     if (lockedPages.length > 0) {
       const lockedTable = lockedPages
         .map((p: any) => `${p.url_slug} | ${p.silo ?? ''} | ${p.canonical_key ?? ''}`)
@@ -2973,6 +3019,31 @@ This client has ${ceiling.owned_count} proven top-7 ranking(s) — too few to ju
     console.log(`  Note: proven ceiling unavailable (non-fatal): ${err.message}`);
   }
 
+  // --- Operator strategy directives (migration 044) — durable, binding,
+  // injected on EVERY run (not just re-runs). This is the operator's channel
+  // for correcting Michael's strategic calls so they stick across refreshes
+  // (e.g. "service-area pages are county-level, not city-level").
+  let michaelDirectivesBlock = '';
+  {
+    const { data: directives } = await (sb as any)
+      .from('audit_strategy_constraints')
+      .select('directive, reason, created_at')
+      .eq('audit_id', auditId)
+      .eq('active', true)
+      .order('created_at', { ascending: true });
+    const dRows = (directives ?? []) as any[];
+    if (dRows.length > 0) {
+      const dList = dRows
+        .map((d: any, i: number) => `${i + 1}. ${d.directive}${d.reason ? `\n   Why: ${d.reason}` : ''}`)
+        .join('\n');
+      michaelDirectivesBlock = `## OPERATOR STRATEGY DIRECTIVES (${dRows.length} — BINDING)
+The operator has issued the following standing directives for this client. They OVERRIDE data-driven preferences and any conflicting instruction elsewhere in this prompt. Do not propose architecture that violates them. If a directive conflicts with what the data suggests, follow the directive and note the tension in your Executive Summary.
+
+${dList}`;
+      console.log(`  Operator strategy directives: ${dRows.length} active`);
+    }
+  }
+
   // --- Build context blocks (variable data sections for prompt template) ---
   const contextBlockParts: string[] = [];
   // Entity context FIRST (entity-first input ordering)
@@ -2990,6 +3061,8 @@ This client has ${ceiling.owned_count} proven top-7 ranking(s) — too few to ju
   if (platformSection) contextBlockParts.push(`## Platform Constraints (from Dwight's Technical Audit)\nThe following platform/CMS observations were identified by the technical auditor. Your architecture MUST account for these constraints.\n\n${platformSection}`);
   if (michaelStrategyBlock) contextBlockParts.push(michaelStrategyBlock);
   if (michaelClientContextBlock) contextBlockParts.push(michaelClientContextBlock);
+  // Operator directives LAST — binding constraints, freshest in context
+  if (michaelDirectivesBlock) contextBlockParts.push(michaelDirectivesBlock);
   const contextBlocks = contextBlockParts.join('\n\n');
 
   // --- Sales mode section ---

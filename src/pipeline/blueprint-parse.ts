@@ -20,6 +20,11 @@ export interface ArchPage {
   /** 'starter' = thin test page (low-authority mode, D1); 'full' otherwise.
    * From the optional Mode column — absent on non-low-authority blueprints. */
   page_mode: 'full' | 'starter';
+  /** Declared topic cluster key from the optional "Cluster Key" column —
+   * either an existing audit_clusters.canonical_key or a structural key
+   * (e.g. 'service_area') Michael declares for silos with no keyword cluster.
+   * Empty when the column is absent (pre-044 blueprints) or the cell is blank. */
+  cluster_key: string;
 }
 
 export interface BlueprintParseWarning {
@@ -56,6 +61,17 @@ function validateBlueprintSlug(raw: string): { ok: true; clean: string } | { ok:
   const lowered = trimmed.toLowerCase();
   if (!/^[a-z0-9][a-z0-9\-\/]*$/.test(lowered)) return { ok: false, reason: 'non_slug_characters' };
   return { ok: true, clean: lowered };
+}
+
+/**
+ * Normalizes a declared Cluster Key cell to audit_clusters.canonical_key form
+ * (lowercase snake_case). Dash placeholders and non-key prose collapse to ''.
+ */
+function normalizeClusterKey(raw: string): string {
+  const cleaned = raw.replace(/[*`]/g, '').trim().toLowerCase();
+  if (!cleaned || cleaned === '—' || cleaned === '–' || cleaned === '-') return '';
+  const key = cleaned.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return /^[a-z0-9_]+$/.test(key) ? key : '';
 }
 
 export function parseBlueprintMarkdown(markdown: string): BlueprintParseResult {
@@ -137,7 +153,9 @@ export function parseBlueprintMarkdown(markdown: string): BlueprintParseResult {
     if (slugIdx < 0) continue;
 
     const statusIdx = headers.findIndex((h) => h.includes('status') || h.includes('exists') || h.includes('new'));
-    const siloColIdx = headers.findIndex((h) => h.includes('silo') || h.includes('cluster'));
+    // cluster_key detection MUST come before silo — "cluster key" also contains "cluster"
+    const clusterKeyIdx = headers.findIndex((h) => h.includes('cluster key') || h.includes('topic key') || h.includes('canonical'));
+    const siloColIdx = headers.findIndex((h, i) => i !== clusterKeyIdx && (h.includes('silo') || h.includes('cluster')));
     // coverage_role detection MUST come before role — both contain "role"
     const coverageRoleIdx = headers.findIndex((h) => h.includes('coverage'));
     const roleIdx = headers.findIndex((h) => h === 'role' || (h.includes('role') && !h.includes('coverage')));
@@ -182,6 +200,7 @@ export function parseBlueprintMarkdown(markdown: string): BlueprintParseResult {
         primary_keyword_volume: volIdx >= 0 ? parseInt(cells[volIdx] ?? '0', 10) || 0 : 0,
         action_required: actionIdx >= 0 ? (cells[actionIdx] ?? '').toLowerCase().replace(/[*`]/g, '') : '',
         page_mode: modeIdx >= 0 && (cells[modeIdx] ?? '').toLowerCase().includes('starter') ? 'starter' : 'full',
+        cluster_key: clusterKeyIdx >= 0 ? normalizeClusterKey(cells[clusterKeyIdx] ?? '') : '',
       });
     }
   }
