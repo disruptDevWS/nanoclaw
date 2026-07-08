@@ -1386,6 +1386,40 @@ Generates a personalized cold-outreach email for a **scouted prospect** and mate
 
 ---
 
+## Daily Prospector (Scheduled)
+
+Autonomous top-of-funnel: discovers prospective clients daily, qualifies them against ICP, scouts the best, and materializes outreach drafts — Matt only reviews a morning digest and sends. **Never sends outreach** (same draft-only guarantee as the Outreach section above). Built 2026-07-08; 4-week kill-criterion review in DECISIONS.md.
+
+### cron-prospector.ts
+
+**CLI:** `npx tsx scripts/cron-prospector.ts [--dry-run] [--max-scouts N]`
+`--dry-run` = discovery + qualification only (candidates persisted; no configs/scouts/outreach/digest draft).
+
+**Config:** `config/prospector-seeds.json` — verticals (medical academy, trade school, HVAC, plumbing, electrical, roofing, pest control) × geos (WA/OR/UT/MT/NV + non-Treasure-Valley ID metros) × query templates, plus caps (`daily_query_cap` 12, `daily_qualify_cap` 15, `daily_scout_cap` 3, `min_qualify_score` 60, SERP rank window 11–50) and exclusions (aggregator/franchise domain blocklist, `.gov/.edu/.mil/.org` TLDs, Treasure Valley domain-substring guard). **Treasure Valley is hard-excluded by design** (three layers: seed geos, domain substrings, qualifier hard-zero) — do not add Boise-area metros.
+
+**Daily flow:**
+1. **Rotate queries** — day-of-year × `daily_query_cap` over the flattened vertical×metro×template combos (~35-day full cycle at current matrix size)
+2. **Discover** — DataForSEO `serp/google/organic/live/regular` (depth 50, ~$0.008/query); keep organic ranks 11–50; dedup against `prospects` + `audits` + all prior `prospect_candidates`; budget guard `PROSPECTOR_DFS_BUDGET` (default $1.50) stops discovery early
+3. **Qualify** — up to `daily_qualify_cap`, best rank first, merged with the `status='discovered'` backlog: homepage fetch (12s timeout) → tech signals (schema/meta/viewport/builder fingerprints/copyright year/locations page) → one Haiku call (`phase: prospector_qualify`) scoring 0–100 (ICP fit 40, visibility struggle 30, site-quality opportunity 20, multi-location bonus 10). Hard zeros: franchise/national chain, directory/aggregator, serves Treasure Valley. Writes `prospect_candidates` (`qualified`/`rejected`)
+4. **Scout top N** — today's qualifiers + prior `status='qualified'` rows compete by score; top `daily_scout_cap`: one Sonnet call (`phase: prospector_config`) authors `audits/{domain}/prospect-config.json` (validated: geo_type, target_geos, ≥3 topic_patterns, Treasure Valley leak check; invalid → candidate `error`, no Scout run) → awaited `bash run-pipeline.sh {domain} {PROSPECTOR_EMAIL} --mode prospect --prospect-config …` (25-min timeout, sequential) → verifies `prospects.status='scouted'`
+5. **Contact discovery** — homepage + up to 2 contact/about pages → mailto/regex emails (junk-filtered) → Haiku picks best (`phase: prospector_contact`); writes `prospects.contact_email/contact_name` **only if currently null** (never overwrites manual entries)
+6. **Outreach draft** — awaited spawn of `generate-outreach-email.ts` (5-min timeout); variant/idempotency/Gmail logic unchanged from the Outreach section
+7. **Digest** — drafts-ready list (subject, variant, addressable, To:), generated configs for spot-checking, other candidates with scores/reasons; full dump to stdout (Railway logs) + Gmail draft addressed to the sender (`gmail.compose` only — no send scope exists)
+
+**Candidate lifecycle** (`prospect_candidates.status`): `discovered` (found, not yet qualified — resurfaces via backlog pull) → `qualified` (≥ threshold, competes for future scout slots) / `rejected` (durable no) → `scouted` → `drafted`; `error` with `rejection_reason` note.
+
+**Env:** `DATAFORSEO_LOGIN/PASSWORD`, `ANTHROPIC_API_KEY`/`ANTHROPIC_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_ADC_JSON` (Gmail DWD), optional `OUTREACH_SENDER`, `PROSPECTOR_EMAIL` (run-pipeline user resolution, default matt@forgegrowth.ai), `PROSPECTOR_DFS_BUDGET`.
+
+**Scheduling:** daily via a Railway cron service running `npx tsx scripts/cron-prospector.ts` (dashboard-configured, like cron-track-all — no repo file controls it).
+
+**Cost envelope:** ~$0.10/day discovery + ~$0.07/Scout DataForSEO + Claude tokens (Haiku qualify ×15, Sonnet config/outreach ×3) — roughly $1–3/day all-in at full volume.
+
+### Supabase Table
+
+`prospect_candidates` — see DATA_CONTRACT.md. **Migration:** `scripts/migrations/045-prospect-candidates.sql`
+
+---
+
 ## Cluster Activation (On-Demand)
 
 Cluster activation is an on-demand step that generates a strategy document for a specific topic cluster, marks it active, and flags its execution_pages. It runs outside the main pipeline, triggered via HTTP endpoint or CLI.

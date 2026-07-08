@@ -833,6 +833,25 @@ Written by Phase 6d (LocalPresence). One row per directory.
 
 ---
 
+### `prospect_candidates`
+
+Migration 045 (2026-07-08). Daily Prospector discovery queue — one row per candidate domain ever surfaced by `cron-prospector.ts`; doubles as the dedup source (a domain present in this table, any status, is never re-discovered). Written by the pipeline service role only; RLS mirrors `prospects` (`super_admin_full_access` via `has_role`). Dashboard has no consumer yet.
+
+| Column | Writer | Reader | Notes |
+|--------|--------|--------|-------|
+| `domain` | Pipeline (prospector) | Pipeline | Unique, normalized (no www) |
+| `business_name` | Pipeline (qualify step) | Pipeline | From Haiku qualification |
+| `seed_query`, `vertical`, `geo`, `serp_rank` | Pipeline (discovery) | Pipeline | Provenance: which rotation query found it, where it ranked (11–50 window). `geo` JSONB `{state, state_code, metro}` |
+| `signals` | Pipeline (qualify) | Pipeline | Homepage tech signals JSONB (schema/meta/builder/copyright/locations page…) |
+| `qualify` | Pipeline (qualify) | Pipeline | Full Haiku qualification JSONB (score breakdown, multi_location, franchise flags, reason) |
+| `score` | Pipeline (qualify) | Pipeline | 0–100; ≥ `min_qualify_score` (60) competes for scout slots |
+| `status` | Pipeline | Pipeline | `discovered` (backlog, resurfaces) → `qualified` / `rejected` → `scouted` → `drafted`; `error`. Text, not enum |
+| `rejection_reason` | Pipeline | Pipeline | Rejection reason or error note |
+| `prospect_id` | Pipeline (post-scout) | Pipeline | FK → `prospects.id` (ON DELETE SET NULL) once scouted |
+| `discovered_at`, `updated_at` | Pipeline | Pipeline | |
+
+---
+
 ### `market_value_estimates`
 
 Migration 042 (2026-07-05). Web-search-grounded typical job/customer values, cached per vertical+region. Written by Scout (service role) on cache miss; RLS enabled with no policies (service-role only). Rows are hand-editable overrides — Scout trusts a fresh row over a new lookup (180-day freshness window).

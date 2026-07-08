@@ -1,0 +1,105 @@
+{
+  "_comment": "Seed matrix for cron-prospector.ts. Verticals × geos × query templates are flattened and rotated daily (day-of-year based), daily_query_cap queries per run. Extend metros/verticals freely — the rotation adapts. Treasure Valley is HARD-EXCLUDED by design (Matt's prior agency territory); do not add Boise-area metros.",
+  "daily_query_cap": 12,
+  "daily_qualify_cap": 15,
+  "daily_scout_cap": 3,
+  "min_qualify_score": 60,
+  "serp_rank_min": 11,
+  "serp_rank_max": 50,
+  "exclusions": {
+    "_comment": "domains: exact registrable-domain blocklist (aggregators, franchises, orgs). domain_substrings: candidate domains containing these are skipped (Treasure Valley guard). tlds: never prospect these.",
+    "domains": [
+      "yelp.com", "angi.com", "thumbtack.com", "homeadvisor.com", "houzz.com",
+      "porch.com", "bark.com", "expertise.com", "threebestrated.com",
+      "yellowpages.com", "bbb.org", "mapquest.com", "manta.com", "foursquare.com",
+      "facebook.com", "instagram.com", "linkedin.com", "nextdoor.com", "reddit.com",
+      "wikipedia.org", "craigslist.org", "indeed.com", "ziprecruiter.com", "glassdoor.com",
+      "google.com", "youtube.com", "amazon.com", "groupon.com",
+      "rotorooter.com", "mrrooter.com", "benjaminfranklinplumbing.com", "aireserv.com",
+      "onehourheatandair.com", "horizonservices.com", "arswaterheaters.com", "ars.com",
+      "redcross.org", "heart.org", "nationalcprfoundation.com", "cprcertified.com",
+      "indeed.org", "niche.com", "trade-schools.net", "vocationaltraining.org",
+      "bestcolleges.com", "affordablecolleges.com", "collegefactual.com"
+    ],
+    "domain_substrings": ["boise", "treasurevalley", "nampa", "caldwell", "meridian"],
+    "tlds": [".gov", ".edu", ".mil", ".org"]
+  },
+  "verticals": [
+    {
+      "key": "medical_academy",
+      "label": "Medical/allied-health training academy",
+      "topic_patterns": ["EMT course", "CPR certification", "CNA training", "phlebotomy certification", "medical assistant program"],
+      "query_templates": [
+        "EMT training {metro}",
+        "CNA classes {metro}",
+        "phlebotomy certification {metro}",
+        "medical assistant program {metro}"
+      ]
+    },
+    {
+      "key": "trade_school",
+      "label": "Skilled-trades training school",
+      "topic_patterns": ["HVAC certification", "electrician apprenticeship program", "welding certification", "CDL training"],
+      "query_templates": [
+        "HVAC certification classes {metro}",
+        "welding school {metro}",
+        "CDL training {metro}"
+      ]
+    },
+    {
+      "key": "hvac",
+      "label": "HVAC contractor",
+      "topic_patterns": ["ac repair", "furnace repair", "hvac installation", "heating and cooling"],
+      "query_templates": [
+        "hvac repair {metro}",
+        "furnace repair {metro}",
+        "ac installation {metro}"
+      ]
+    },
+    {
+      "key": "plumbing",
+      "label": "Plumbing contractor",
+      "topic_patterns": ["plumber", "drain cleaning", "water heater repair", "emergency plumbing"],
+      "query_templates": [
+        "plumber {metro}",
+        "water heater replacement {metro}",
+        "drain cleaning {metro}"
+      ]
+    },
+    {
+      "key": "electrical",
+      "label": "Electrical contractor",
+      "topic_patterns": ["electrician", "electrical panel upgrade", "ev charger installation"],
+      "query_templates": [
+        "electrician {metro}",
+        "electrical panel upgrade {metro}"
+      ]
+    },
+    {
+      "key": "roofing",
+      "label": "Roofing contractor",
+      "topic_patterns": ["roof replacement", "roof repair", "roofing contractor"],
+      "query_templates": [
+        "roof replacement {metro}",
+        "roofing company {metro}"
+      ]
+    },
+    {
+      "key": "pest_control",
+      "label": "Pest control company",
+      "topic_patterns": ["pest control", "exterminator", "termite treatment"],
+      "query_templates": [
+        "pest control {metro}",
+        "exterminator {metro}"
+      ]
+    }
+  ],
+  "geos": [
+    { "state": "Washington", "state_code": "WA", "metros": ["Spokane", "Tacoma", "Vancouver WA", "Kennewick", "Yakima", "Bellingham", "Olympia"] },
+    { "state": "Oregon", "state_code": "OR", "metros": ["Portland", "Salem", "Eugene", "Bend", "Medford"] },
+    { "state": "Utah", "state_code": "UT", "metros": ["Salt Lake City", "Provo", "Ogden", "St George"] },
+    { "state": "Montana", "state_code": "MT", "metros": ["Missoula", "Billings", "Bozeman", "Great Falls"] },
+    { "state": "Nevada", "state_code": "NV", "metros": ["Reno", "Sparks", "Carson City"] },
+    { "state": "Idaho", "state_code": "ID", "metros": ["Idaho Falls", "Pocatello", "Twin Falls", "Coeur d'Alene"] }
+  ]
+}
