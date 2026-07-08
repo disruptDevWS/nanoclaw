@@ -262,6 +262,8 @@ Pam's `generate-brief.ts` had two queries against `cluster_strategy` (entity_map
 
 **2026-04-21: syncMichael execution_pages.status protection is already comprehensive — no additional guard needed**
 
+> **SUPERSEDED in part (2026-07-08):** this entry's claim was wrong for `deprecated`. `isCommitted()` treating `deprecated` as committed made deprecation permanent — a deprecated page re-added by a later blueprint hit the metadata-only branch and could never be revived (Weiser county-pages incident, `docs/plans/weiser-architecture-revert-and-iscommitted-bug.md`). `isCommitted()` now excludes `deprecated`; `published_at` still protects published-then-deprecated pages. See the 2026-07-08 feedback-loop entry below.
+
 Session B Check 5 verified that `isCommitted()` in `rerun-utils.ts` + syncMichael's manual SELECT→UPDATE/INSERT branching in `sync-to-dashboard.ts` already protects `execution_pages.status` from being reset on re-runs. The `isCommitted()` predicate covers: non-`not_started` status (catches Oscar `in_progress`/`review`), `source='cluster_strategy'`, `source='manual'`, and `published_at != null`. All paths confirmed:
 
 - Strategic rerun + committed page: metadata-only update, status preserved.
@@ -1528,3 +1530,19 @@ Both prompts were inline in pipeline-generate.ts and generate-brief.ts respectiv
 
 **Copy persists to `prospects` before the Gmail step, which is non-fatal.** The DB row (`outreach_subject/body`, status `generated` → `drafted`) is the source of truth; the Gmail draft is a materialization keyed by `gmail_draft_id` (update-in-place on `--force`, recreate on 404). DWD misconfiguration therefore costs nothing — copy lands, status says `generated`, error names the runbook. Contact emails are a manual field (migration 043): no scraping in v1, drafts generate with an empty To: when absent.
 
+
+---
+
+**2026-07-08: Michael feedback loop + architecture resilience (migration 044) — re-runs adjust instead of restart**
+
+Root cause session for the Weiser Towing incident (city-level revert + permanently-deprecated county pages). Four mechanisms, plus the design decisions behind them:
+
+**1. `isCommitted()` excludes `deprecated` (predicate fix over call-site patch).** Chosen over the surgical call-site option because all four call sites were verified safe: `sync-to-dashboard.ts` committed-branch (the bug — deprecated pages re-added by a blueprint now fall through to the revive branch), stale-loop (no-op change), deprecation-candidates (already-deprecated candidate becomes a no-op), and `pipeline-generate.ts` COMMITTED ARCHITECTURE table (improvement: Michael is no longer told to preserve dead pages). `published_at` still protects published-then-deprecated pages. Supersedes the 2026-04-21 "protection already comprehensive" entry.
+
+**2. Operator dispositions are a COLUMN on `execution_pages` (`operator_disposition` rejected|deferred + reason + timestamp), not an overlay table.** The `page_dismissals` overlay pattern was rejected because sync must consult disposition in the hot upsert path — a column keeps it in the existing SELECT. Disposition is deliberately orthogonal to `status` (no new status values) so no status-pattern-matching logic can misfire. Disposed pages are immovable in both sync paths, never stale-deprecated, excluded from cluster activation, excluded from public share payloads (share-audit filter), and rejected pages are injected into Michael's re-run prompt as REJECTED RECOMMENDATIONS with reasons — the feedback loop that stops re-proposals.
+
+**3. Structural clusters use a NEW `is_structural` flag, not `is_manual`.** `is_manual` means "human created via dashboard" and drives the ✦ badge; overloading it for Michael-declared clusters would corrupt that semantic. Both flags survive the Phase 3d rebuild delete (`.eq('is_manual', false).eq('is_structural', false)`). Blueprint pages now declare a `Cluster Key` column (parser detects it BEFORE the silo/cluster detector — "cluster key" contains "cluster"); declared keys win over the keyword backfill, and undeclared keys fall back to old behavior (backward compatible with pre-044 blueprints).
+
+**4. Diff-mode is the DEFAULT strategic_rerun behavior, not a flag.** The cluster-action edge function body stays `{domain, email}` — no edge contract change. Michael's re-run prompt now carries: PREVIOUS ARCHITECTURE BASELINE (slim: silo→pages from `agent_architecture_pages` + executive summary, NOT full markdown — output-truncation risk), REJECTED RECOMMENDATIONS, and OPERATOR STRATEGY DIRECTIVES (from `audit_strategy_constraints`, injected on EVERY run, framed as binding overrides). Directives are the durable channel for strategic corrections — the Weiser county-vs-city call is now a directive, not 16 locked rows. michael max_tokens 16384→32768 to absorb the added context.
+
+**Prompt-block read-timing invariant:** the baseline blocks read `agent_architecture_pages`/`agent_architecture_blueprint`, which are deleted+reinserted by syncMichael (Phase 6b). Michael generate (Phase 6) always runs BEFORE sync in both `run-pipeline.sh` and `refresh-architecture.ts`, so the prior run's rows are still present at read time. Do not reorder those phases.

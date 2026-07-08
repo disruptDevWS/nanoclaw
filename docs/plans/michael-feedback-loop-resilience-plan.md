@@ -1,6 +1,6 @@
 # Michael Feedback Loop + Architecture Resilience — Integrated Cross-Repo Plan
 
-**Status:** 📋 PLANNED — awaiting approval. Nothing implemented.
+**Status:** ✅ IMPLEMENTED + VERIFIED 2026-07-08 — migration 044 applied; pipeline @ 73a65b8, dashboard @ ff8cb6f; Weiser recovery completed via self-healing refresh (12 county pages revived, structural `service_area`/`trust_signals` clusters created, directive honored, `service-area/weiser-id` rejected via the new disposition mechanism). Note: Michael superseded the old `service-area/*-county` pages with county coverage under the service silos — accepted as better architecture; those 6 rows stay deprecated with briefs intact.
 **Date:** 2026-07-08. All schema facts below verified against the live DB via Management API on this date; all code anchors verified against working trees.
 **Origin:** Weiser Towing incident (see `weiser-architecture-revert-and-iscommitted-bug.md`) — county pages invisible in production queue, deprecation permanent, no way to give Michael durable strategic feedback.
 

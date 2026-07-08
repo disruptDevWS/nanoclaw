@@ -132,8 +132,9 @@
 | `authority_score_updated_at` | Pipeline | Dashboard | |
 | `is_manual` | Dashboard | Both | Migration 038. User-created topic — rebuilds never delete it; derived inserts colliding on its `canonical_key` are skipped (manual wins) |
 | `edited_at` / `edited_by` | Dashboard | Both | Migration 038. User rename/annotation marker — rebuild restores `topic`/`canonical_topic`/`notes`/`primary_entity_type` for edited rows |
+| `is_structural` | syncMichael | Both | Migration 044. Michael-declared structural cluster (Cluster Key with no keyword backing, e.g. `service_area`) — auto-created by syncMichael at seed time (`status='inactive'`), survives Phase 3d rebuild deletes like `is_manual`. Distinct from `is_manual` (human-origin, ✦ badge). |
 
-**Pipeline writes**: Phase 3b (initial), Phase 3d (rebuild with canonical keys, preserves status/activation/hidden/entity_type + manual/edited rows per migration 038)
+**Pipeline writes**: Phase 3b (initial), Phase 3d (rebuild with canonical keys, preserves status/activation/hidden/entity_type + manual/edited/structural rows per migrations 038/044), Phase 6b syncMichael (structural cluster upsert, migration 044)
 **Dashboard reads**: `useAuditClusters()`, `useAudit()` relation, ClustersPage, StrategyPage, OverviewPage
 **Dashboard writes**: Via `cluster-action` edge function (activate/deactivate/refresh_architecture) AND direct table writes under RLS: hide/unhide (`useHideCluster`/`useUnhideCluster`), delete cascade (`useDeleteCluster`), create manual topic (`useCreateCluster`, INSERT), rename/annotate (`useUpdateCluster`, UPDATE). RLS: owner-scoped INSERT + UPDATE policies codified in migration 038 (the UPDATE policy previously existed only as live drift).
 
@@ -601,11 +602,14 @@ Written by syncMichael (Phase 6b) and Cluster Strategy (on-demand), updated by P
 | `published_at` | Dashboard | Set when status → published |
 | `snapshot_version` | syncMichael | |
 | `assignment_locked` | Dashboard | Migration 038. TRUE when the user manually assigned this page to a topic (`useAssignPageToCluster` — also sets `canonical_key` + `silo`). syncMichael then updates ONLY `snapshot_version` for the row, never auto-deprecates it, and the canonical_key backfill skips it. `useUnlockPageAssignment` releases it. |
+| `operator_disposition` | Dashboard | Migration 044. `rejected` \| `deferred` \| NULL (CHECK). Operator verdict on a recommendation — orthogonal to `status`. Disposed pages: immovable in syncMichael (both paths — only `snapshot_version` bumps), never stale-deprecated, skipped by deprecation-candidates + canonical_key backfill, excluded from cluster activation (`generate-cluster-strategy.ts` steps 12/12b) and from share-audit public payloads. `rejected` rows are injected into Michael's re-run prompt as REJECTED RECOMMENDATIONS (do-not-re-propose, with reasons). Set by `useSetPageDisposition` (also sets `cluster_active=false`); cleared by `useClearPageDisposition`. |
+| `disposition_reason` | Dashboard | Migration 044. Why — fed back to Michael for rejected pages (required for reject in the UI). |
+| `disposition_at` | Dashboard | Migration 044. When the disposition was set. |
 
-**Dual taxonomy — `silo` vs `canonical_topic`**: `silo` is Michael's architectural grouping (human-readable name from blueprint silo headers). `canonical_topic` on `audit_clusters` is Phase 3c's semantic grouping. They overlap but are NOT identical — Michael may group pages differently than Phase 3c groups keywords. `canonical_key` is the contractual join between `execution_pages` and `audit_clusters`. `silo` is a display label with no foreign key relationship. The silo-match fallback in cluster activation (step 12b) bridges the gap for pages where `canonical_key` is NULL by matching `silo = canonical_topic`.
+**Dual taxonomy — `silo` vs `canonical_topic`**: `silo` is Michael's architectural grouping (human-readable name from blueprint silo headers). `canonical_topic` on `audit_clusters` is Phase 3c's semantic grouping. They overlap but are NOT identical — Michael may group pages differently than Phase 3c groups keywords. `canonical_key` is the contractual join between `execution_pages` and `audit_clusters`. `silo` is a display label with no foreign key relationship. The silo-match fallback in cluster activation (step 12b) bridges the gap for pages where `canonical_key` is NULL by matching `silo = canonical_topic`. **Since migration 044 the primary path is Michael's declared `Cluster Key` blueprint column**: syncMichael writes it to `canonical_key` at seed time (declared key wins; keyword backfill is the fallback for undeclared pages), and declared keys with no `audit_clusters` row get a structural cluster auto-created (`is_structural=true`). The dashboard's `/execution` Unassigned bucket surfaces any remaining `canonical_key IS NULL` pages hidden by the cluster filter, so orphan pages are never invisible.
 
-**Dashboard reads**: `useExecutionPages()` → ContentPage, ImplementationPage, ClustersPage. Query filters `.neq('status','deprecated')` — deprecated rows are invisible to the dashboard.
-**Dashboard writes**: `useUpdateExecutionPageStatus()` (status), `useAddRecommendedPages()` (INSERT), `useDeprecateExecutionPage()` (sets status=deprecated, soft-delete)
+**Dashboard reads**: `useExecutionPages()` → ContentPage, ImplementationPage, ClustersPage. Query filters `.neq('status','deprecated')` — deprecated rows are invisible to the dashboard. Disposed rows (`operator_disposition NOT NULL`) ARE returned and partition client-side into the collapsed hidden lane on /execution (off by default).
+**Dashboard writes**: `useUpdateExecutionPageStatus()` (status), `useAddRecommendedPages()` (INSERT), `useDeprecateExecutionPage()` (sets status=deprecated, soft-delete), `useSetPageDisposition()`/`useClearPageDisposition()` (migration 044 dispositions)
 
 ---
 
@@ -719,6 +723,22 @@ Worklist noise control — overlay input lane (dashboard-written, URL-keyed per 
 **RLS**: `authenticated` full CRUD via audit ownership; service_role ALL.
 **Dashboard**: `usePageDismissals()` / `useDismissPage()` (upsert) / `useRestorePage()` (delete) → PageAuditPage; dismissed rows collapse into a restorable section.
 **Pipeline**: does not read (v1) — dismissals are a display concern; the crawl keeps scoring every page.
+
+---
+
+### `audit_strategy_constraints` (migration 044)
+
+Durable operator strategy directives — the feedback channel for correcting Michael's strategic calls so they stick across refreshes (e.g. "service-area pages are county-level, not city-level"). Overlay input lane like `cornerstone_pages`: dashboard writes, pipeline reads.
+
+| Column | Writer | Notes |
+|--------|--------|-------|
+| `directive` | Dashboard | The binding instruction, written directly to Michael |
+| `reason` | Dashboard | Why — shown to Michael for context (nullable) |
+| `active` | Dashboard | Inactive rows are kept for history but not injected (default true) |
+
+**RLS**: SELECT via `can_view_audit(audit_id)` (shared-audit/super_admin parity); owner FOR ALL via audits.user_id; service_role ALL.
+**Dashboard**: `useStrategyConstraints()` CRUD hooks → `StrategyConstraintsEditor` card on AuditSettings (Business Profile section).
+**Pipeline**: `pipeline-generate.ts` Michael phase reads `active=true` rows on EVERY run (not just re-runs) and injects them as the `OPERATOR STRATEGY DIRECTIVES` context block — binding, overrides data-driven preferences.
 
 ---
 
