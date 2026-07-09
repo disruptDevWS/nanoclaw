@@ -371,26 +371,44 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
   }
 
   // 7b. Strategy brief — Visibility Posture + Architecture Directive
+  // (disk → Supabase fallback: Railway container disk is ephemeral)
   let strategyContext = '';
   try {
+    let briefContent = '';
     const researchBase2 = path.join(AUDITS_BASE, req.domain, 'research');
     const researchDate2 = getLatestDateDir(researchBase2);
     if (researchDate2) {
       const briefPath = path.join(researchBase2, researchDate2, 'strategy_brief.md');
       if (fs.existsSync(briefPath)) {
-        const briefContent = fs.readFileSync(briefPath, 'utf-8');
-        const extractSection = (heading: string) => {
-          const re = new RegExp(`## ${heading}\\n([\\s\\S]*?)(?=\\n## |\\n---\\s*$|$)`);
-          return re.exec(briefContent)?.[1]?.trim() ?? '';
-        };
-        const posture = extractSection('Visibility Posture');
-        const archDirective = extractSection('Architecture Directive');
-        const parts: string[] = [];
-        if (posture) parts.push(`**Visibility Posture:** ${posture}`);
-        if (archDirective) parts.push(`**Architecture Directive:**\n${archDirective}`);
-        if (parts.length > 0) {
-          strategyContext = parts.join('\n\n');
-        }
+        briefContent = fs.readFileSync(briefPath, 'utf-8');
+      }
+    }
+    if (!briefContent) {
+      const { data: sbRow } = await sb
+        .from('audit_snapshots')
+        .select('strategy_brief_markdown')
+        .eq('audit_id', req.audit_id)
+        .eq('agent_name', 'strategy-brief')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sbRow?.strategy_brief_markdown) {
+        briefContent = sbRow.strategy_brief_markdown;
+        console.log('  Strategy brief: loaded from Supabase (no disk artifact)');
+      }
+    }
+    if (briefContent) {
+      const extractSection = (heading: string) => {
+        const re = new RegExp(`## ${heading}\\n([\\s\\S]*?)(?=\\n## |\\n---\\s*$|$)`);
+        return re.exec(briefContent)?.[1]?.trim() ?? '';
+      };
+      const posture = extractSection('Visibility Posture');
+      const archDirective = extractSection('Architecture Directive');
+      const parts: string[] = [];
+      if (posture) parts.push(`**Visibility Posture:** ${posture}`);
+      if (archDirective) parts.push(`**Architecture Directive:**\n${archDirective}`);
+      if (parts.length > 0) {
+        strategyContext = parts.join('\n\n');
       }
     }
   } catch {

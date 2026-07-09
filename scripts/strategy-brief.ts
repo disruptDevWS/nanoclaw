@@ -461,6 +461,25 @@ ${prompt}`;
   fs.writeFileSync(outPath, result, 'utf-8');
   console.log(`  Written strategy_brief.md (${result.length} chars) to ${path.relative(process.cwd(), outDir)}/`);
 
+  // 6b. Upsert to Supabase (agent_name='strategy-brief', snapshot_version
+  // pinned to 1 = latest wins). Railway container disk is ephemeral, so the
+  // DB copy is what survives redeploys — Pam's context 7b falls back to it.
+  // Non-fatal: the disk artifact is still the primary source for this run.
+  const { error: sbErr } = await sb.from('audit_snapshots').upsert(
+    {
+      audit_id: audit.id,
+      agent_name: 'strategy-brief',
+      snapshot_version: 1,
+      strategy_brief_markdown: result,
+    },
+    { onConflict: 'audit_id,agent_name,snapshot_version' },
+  );
+  if (sbErr) {
+    console.warn(`  WARNING: strategy brief Supabase upsert failed: ${sbErr.message}`);
+  } else {
+    console.log('  Strategy brief upserted to audit_snapshots');
+  }
+
   // 7. Log agent_runs
   await sb.from('agent_runs').insert({
     audit_id: audit.id,

@@ -402,7 +402,7 @@ Client Brief (auto after Phase 6d, non-fatal)
 **Steps:**
 1. **Gather** — Loads AUDIT_REPORT.md (cross-date fallback), scope.json + scout markdown (optional), client_context from prospect-config.json (optional), client_profiles from Supabase (optional), audit metadata (geo_mode, market_geos, service_key), and the proven ranking ceiling (`fetchProvenCeiling()` over `audit_keywords` → `{{PROVEN_CEILING_BLOCK}}` — empty on first runs since Phase 1b precedes Jim; re-runs get the prior run's empirical ceiling as a quantified authority assessment; cold-start sites get a cold-start note; non-fatal)
 2. **Synthesize** — Single Sonnet call produces `strategy_brief.md` with four sections: Visibility Posture, Entity Authority Directive, Architecture Directive, Risk Flags
-3. **Write** — Brief saved to `audits/{domain}/research/{date}/strategy_brief.md`
+3. **Write** — Brief saved to `audits/{domain}/research/{date}/strategy_brief.md` **and upserted to Supabase** (2026-07-09, migration 046): `audit_snapshots` row `agent_name='strategy-brief'`, `snapshot_version=1` (latest wins), `strategy_brief_markdown` column. The DB copy survives Railway redeploys (ephemeral disk) and feeds Pam's context 7b fallback. Upsert failure is non-fatal (warning only)
 
 **Downstream consumption:**
 - **Phase 2 (KeywordResearch):** Entity Authority Directive section injected into the Sonnet synthesis prompt (not the Haiku extraction prompt)
@@ -1008,7 +1008,7 @@ Oscar (generate-content.ts) — polls oscar_requests
 4. **Visibility Queries** — `cluster_strategy.visibility_queries` (JSONB) — AI visibility measurement queries for the page's cluster
 5. **Information Gain Directive** — evaluates `client_profiles` for proprietary knowledge; outputs one of: `PROPRIETARY KNOWLEDGE AVAILABLE` / `LIMITED PROPRIETARY KNOWLEDGE` / `COMMODITY CONTENT RISK`
 6. `architecture_blueprint.md` — silo excerpt from disk; **Supabase fallback** (2026-07-09): if the disk file is absent (Railway container disk is ephemeral — no volume mounted, artifacts wiped on every deploy), the latest `agent_architecture_blueprint.blueprint_markdown` for the audit is used with the same silo-excerpt logic
-7. `research_summary.md` — striking distance + key takeaways from Jim; **Supabase fallback** (2026-07-09): if absent on disk, rebuilt from the latest `audit_snapshots` row (`agent_name='jim'`) — `striking_distance` (top 25, table) + `key_takeaways`. NOTE: `strategy_brief.md` (context 7b) has NO fallback — it exists only on disk, so its context is silently absent on a post-deploy Railway container
+7. `research_summary.md` — striking distance + key takeaways from Jim; **Supabase fallback** (2026-07-09): if absent on disk, rebuilt from the latest `audit_snapshots` row (`agent_name='jim'`) — `striking_distance` (top 25, table) + `key_takeaways`. Context 7b (`strategy_brief.md`, Visibility Posture + Architecture Directive) likewise falls back to `audit_snapshots.strategy_brief_markdown` (`agent_name='strategy-brief'`, migration 046) — all three Pam disk-context readers now have DB fallbacks
 8. `audit_snapshots` (agent='gap') — authority gaps and format gaps
 9. **Keywords** — `audit_keywords` sharing the page's `canonical_key` (Session B: join via `canonical_key`, with volume-based fallback if empty). Includes `primary_entity_type`. (Demoted from position #2 to #9 — entity context takes priority over raw keyword data.)
 10. `client_profiles` — brand voice, USPs, differentiators (optional)

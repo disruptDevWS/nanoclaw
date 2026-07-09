@@ -187,7 +187,9 @@
 | `jim` | Phase 3 (syncJim) | `research_summary_markdown`, `keyword_overview{}`, `position_distribution[]`, `branded_split{}`, `intent_breakdown[]`, `top_ranking_urls[]`, `competitor_analysis[]`, `competitor_summary{}`, `striking_distance[]`, `content_gap_observations[]`, `key_takeaways[]`. **Numeric columns now sourced from `research_data.json` (deterministic) when available; falls back to regex-parsed `research_summary.md` for backward compat.** | `useResearchSiteFindings()` → ResearchPage |
 | `gap` | Phase 5 | `keyword_overview` (JSONB with `authority_gaps[]`, `format_gaps[]`, `gap_summary`, `ai_citation_gaps[]`) | `useAuditSnapshots()`, `useAiCitationGaps()` |
 
-**Pipeline reads** (2026-07-09): `generate-brief.ts` (Pam) reads the latest `jim` row's `striking_distance[]` + `key_takeaways[]` as the market-context fallback when `research_summary.md` is absent on disk (Railway disk is ephemeral).
+| `strategy-brief` | Phase 1b (`strategy-brief.ts`, migration 046) | `strategy_brief_markdown` (TEXT, only populated on these rows; `snapshot_version` pinned to 1 — upsert on `(audit_id, agent_name, snapshot_version)` = latest wins) | none (pipeline-only) |
+
+**Pipeline reads** (2026-07-09): `generate-brief.ts` (Pam) reads the latest `jim` row's `striking_distance[]` + `key_takeaways[]` as the market-context fallback when `research_summary.md` is absent on disk, and the latest `strategy-brief` row's `strategy_brief_markdown` when `strategy_brief.md` is absent (Railway disk is ephemeral). Backfilled 2026-07-09 from local disk for boiseheatingair.com, forgegrowth.ai, idahomedicalacademy.com, summitmedicalacademy.com; other audits populate on their next Phase 1b run.
 
 **Gap `keyword_overview` sub-key changes (Session 3):**
 - `authority_gaps[].coverage_note` (NEW) — one sentence describing what the competitor covers that the client does not
