@@ -47,7 +47,8 @@ Single semantic HTML file:
 ## Writing Rules
 - Write for the end customer, not the search engine
 - Tone from intent: commercial = confident and authoritative, transactional = direct and conversion-focused, informational = thorough and educational
-- No filler, no padding, no AI-isms: "navigating", "landscape", "leverage", "delve", "it's worth noting", "in today's world", em dashes as crutches
+- No filler, no padding, no AI-isms: "navigating", "landscape", "leverage", "delve", "it's worth noting", "in today's world"
+- Em dashes only on rare occasion — they have become a recognized AI tell. Where one is tempting, prefer starting a new sentence, a semicolon, "and", or restructuring the sentence. A full page should ship with zero or one em dash; two is the absolute ceiling and needs to earn its place
 - Keywords woven in naturally — never bolded for emphasis, never stuffed, varied across geo modifiers and semantic synonyms
 - Use `[PLACEHOLDER: description]` for any unconfirmed client data — never fabricate specifics
 - Schema-to-prose consistency: any attribute declared in the schema (program duration, cost, location, credential type, service area) must be stated in identical terms in the prose where it appears. The schema is the canonical declaration; the prose must mirror it, not approximate it. Where schema values contain placeholders, the corresponding prose must also use `[PLACEHOLDER: same_field]` — never substitute a vague approximation for an unconfirmed specific.
