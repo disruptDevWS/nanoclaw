@@ -189,7 +189,7 @@
 
 | `strategy-brief` | Phase 1b (`strategy-brief.ts`, migration 046) | `strategy_brief_markdown` (TEXT, only populated on these rows; `snapshot_version` pinned to 1 — upsert on `(audit_id, agent_name, snapshot_version)` = latest wins) | none (pipeline-only) |
 
-**Pipeline reads** (2026-07-09): `generate-brief.ts` (Pam) reads the latest `jim` row's `striking_distance[]` + `key_takeaways[]` as the market-context fallback when `research_summary.md` is absent on disk, and the latest `strategy-brief` row's `strategy_brief_markdown` when `strategy_brief.md` is absent (Railway disk is ephemeral). Backfilled 2026-07-09 from local disk for boiseheatingair.com, forgegrowth.ai, idahomedicalacademy.com, summitmedicalacademy.com; other audits populate on their next Phase 1b run.
+**Pipeline reads** (2026-07-09): `generate-brief.ts` (Pam) reads the latest `jim` row's `striking_distance[]` + `key_takeaways[]` as the market-context fallback when `research_summary.md` is absent on disk, and the latest `strategy-brief` row's `strategy_brief_markdown` when `strategy_brief.md` is absent (covers cron services and local runs, which don't share the main Railway service's `/app/audits` volume). Backfilled 2026-07-09 from local disk for boiseheatingair.com, forgegrowth.ai, idahomedicalacademy.com, summitmedicalacademy.com; other audits populate on their next Phase 1b run.
 
 **Gap `keyword_overview` sub-key changes (Session 3):**
 - `authority_gaps[].coverage_note` (NEW) — one sentence describing what the competitor covers that the client does not
@@ -273,7 +273,7 @@ Written by syncMichael (Phase 6b). One row per audit.
 | `snapshot_version` | |
 
 **Dashboard reads**: `useAgentBlueprint()` → StrategyPage
-**Pipeline reads**: `generate-brief.ts` (Pam) — fallback source for the blueprint silo excerpt when `audits/{domain}/architecture/{date}/architecture_blueprint.md` is absent on disk (Railway disk is ephemeral; 2026-07-09)
+**Pipeline reads**: `generate-brief.ts` (Pam) — fallback source for the blueprint silo excerpt when `audits/{domain}/architecture/{date}/architecture_blueprint.md` is absent on disk (cron services / local runs, which don't share the main Railway service's `/app/audits` volume; 2026-07-09)
 
 ---
 

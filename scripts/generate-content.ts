@@ -520,38 +520,60 @@ async function main() {
   // Polling mode: read from oscar_requests table
   console.log('Polling mode: checking oscar_requests...');
   try {
-    let query = sb
-      .from('oscar_requests')
-      .select('*')
-      .eq('status', 'pending')
-      .order('requested_at', { ascending: true });
+    const fetchPending = () => {
+      let query = sb
+        .from('oscar_requests')
+        .select('*')
+        .eq('status', 'pending')
+        .order('requested_at', { ascending: true });
+      if (flags.domain) {
+        query = query.eq('domain', flags.domain);
+      }
+      return query;
+    };
 
-    if (flags.domain) {
-      query = query.eq('domain', flags.domain);
-    }
+    // Drain loop (same fix as generate-brief.ts, 2026-07-09): requests queued
+    // while a batch is processing get 409'd at the server's per-domain
+    // inFlight guard and would strand at 'pending' unless this worker
+    // re-queries before exiting. Failed rows go to status='failed', so the
+    // loop cannot spin; the round cap is a backstop.
+    const MAX_DRAIN_ROUNDS = 25;
+    let totalProcessed = 0;
 
-    const { data: requests, error } = await query;
-    if (error) {
-      console.warn(`Warning: oscar_requests query failed (table may not exist): ${error.message}`);
-      console.log('Use --domain X --slug Y for direct mode without the oscar_requests table.');
-      return;
-    }
+    for (let round = 1; round <= MAX_DRAIN_ROUNDS; round++) {
+      const { data: requests, error } = await fetchPending();
+      if (error) {
+        console.warn(`Warning: oscar_requests query failed (table may not exist): ${error.message}`);
+        console.log('Use --domain X --slug Y for direct mode without the oscar_requests table.');
+        return;
+      }
 
-    if (!requests || requests.length === 0) {
-      console.log('No pending oscar_requests found.');
-      return;
-    }
+      let batch = requests ?? [];
+      if (batch.length === 0 && totalProcessed > 0) {
+        // Grace re-check: a burst-queued request can land just after the
+        // empty check while the server is still rejecting its trigger POST.
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        const retry = await fetchPending();
+        batch = retry.data ?? [];
+      }
 
-    console.log(`Found ${requests.length} pending request(s)`);
+      if (batch.length === 0) {
+        if (totalProcessed === 0) console.log('No pending oscar_requests found.');
+        break;
+      }
 
-    for (const row of requests) {
-      const req: OscarRequest = {
-        id: row.id,
-        audit_id: row.audit_id,
-        page_url: row.page_url,
-        domain: row.domain,
-      };
-      await processOscarRequest(sb, req);
+      console.log(`Found ${batch.length} pending request(s)${round > 1 ? ` (drain round ${round})` : ''}`);
+
+      for (const row of batch) {
+        const req: OscarRequest = {
+          id: row.id,
+          audit_id: row.audit_id,
+          page_url: row.page_url,
+          domain: row.domain,
+        };
+        await processOscarRequest(sb, req);
+        totalProcessed++;
+      }
     }
   } catch (err: any) {
     console.warn(`Warning: oscar_requests polling failed: ${err.message}`);
