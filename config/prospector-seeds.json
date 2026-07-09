@@ -1,5 +1,5 @@
 {
-  "_comment": "Seed matrix for cron-prospector.ts. Verticals × geos × query templates are flattened and rotated daily (day-of-year based), daily_query_cap queries per run. Extend metros/verticals freely — the rotation adapts. Treasure Valley is HARD-EXCLUDED by design (Matt's prior agency territory); do not add Boise-area metros.",
+  "_comment": "Seed matrix for cron-prospector.ts. Verticals × geos × query templates are flattened and rotated daily (day-of-year based), daily_query_cap queries per run. Extend metros/verticals freely — the rotation adapts. Boise and Meridian are HARD-EXCLUDED (saturated agency market); Nampa/Caldwell allowed per Matt 2026-07-09. Footprint: ID, eastern OR/WA, western MT/WY, northern UT (no SLC — saturated).",
   "daily_query_cap": 12,
   "daily_qualify_cap": 15,
   "daily_scout_cap": 3,
@@ -21,7 +21,7 @@
       "indeed.org", "niche.com", "trade-schools.net", "vocationaltraining.org",
       "bestcolleges.com", "affordablecolleges.com", "collegefactual.com"
     ],
-    "domain_substrings": ["boise", "treasurevalley", "nampa", "caldwell", "meridian"],
+    "domain_substrings": ["boise", "meridian", "treasurevalley"],
     "tlds": [".gov", ".edu", ".mil", ".org"]
   },
   "verticals": [
@@ -95,11 +95,11 @@
     }
   ],
   "geos": [
-    { "state": "Washington", "state_code": "WA", "metros": ["Spokane", "Tacoma", "Vancouver WA", "Kennewick", "Yakima", "Bellingham", "Olympia"] },
-    { "state": "Oregon", "state_code": "OR", "metros": ["Portland", "Salem", "Eugene", "Bend", "Medford"] },
-    { "state": "Utah", "state_code": "UT", "metros": ["Salt Lake City", "Provo", "Ogden", "St George"] },
-    { "state": "Montana", "state_code": "MT", "metros": ["Missoula", "Billings", "Bozeman", "Great Falls"] },
-    { "state": "Nevada", "state_code": "NV", "metros": ["Reno", "Sparks", "Carson City"] },
-    { "state": "Idaho", "state_code": "ID", "metros": ["Idaho Falls", "Pocatello", "Twin Falls", "Coeur d'Alene"] }
+    { "state": "Idaho", "state_code": "ID", "metros": ["Idaho Falls", "Pocatello", "Twin Falls", "Coeur d'Alene", "Lewiston", "Nampa", "Caldwell"] },
+    { "state": "Washington", "state_code": "WA", "metros": ["Spokane", "Kennewick", "Yakima", "Walla Walla"] },
+    { "state": "Oregon", "state_code": "OR", "metros": ["Bend", "Pendleton", "La Grande", "Baker City"] },
+    { "state": "Montana", "state_code": "MT", "metros": ["Missoula", "Bozeman", "Kalispell", "Helena", "Butte"] },
+    { "state": "Wyoming", "state_code": "WY", "metros": ["Jackson", "Rock Springs", "Cody", "Evanston"] },
+    { "state": "Utah", "state_code": "UT", "metros": ["Ogden", "Provo", "Logan"] }
   ]
 }

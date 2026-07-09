@@ -318,9 +318,9 @@ ${(c.homepageText || '(fetch failed — no homepage text)').slice(0, 3000)}
 ## Hard zeros (score = 0)
 - Franchise or national chain (independent multi-location is GOOD; franchise is a zero)
 - Directory/aggregator/marketplace/media site rather than an actual business
-- Business is based in or primarily serves Boise / Meridian / Nampa / Caldwell / Treasure Valley, Idaho
+- Business is based in or primarily serves Boise or Meridian, Idaho (Nampa- or Caldwell-based businesses are FINE and are NOT a zero, even though they are in the Treasure Valley — only zero a business whose home base or primary market is Boise/Meridian proper)
 
-Respond with ONLY a JSON object:
+Respond with ONLY a JSON object ("serves_treasure_valley" means based in / primarily serving Boise or Meridian specifically):
 {"business_name": string, "score": number, "vertical_fit": number, "multi_location": boolean, "franchise_or_national": boolean, "serves_treasure_valley": boolean, "site_quality_issues": string[], "reason": "one sentence"}`;
 
   const output = await callClaude(prompt, { model: 'haiku', phase: 'prospector_qualify' });
@@ -362,7 +362,7 @@ ${(c.homepageText || '').slice(0, 4000)}
 
 ## Rules
 - topic_patterns: 3-8 short service phrases the business ACTUALLY offers per the homepage evidence. Start from the vertical defaults, drop anything unsupported, add clearly-offered services that are missing. Lowercase, no geo terms inside the patterns.
-- target_geos: the discovery metro (${c.seed.geo.metro}) always included. Add other metros ONLY with homepage evidence (locations page, "serving X and Y"). Never include Boise/Meridian/Nampa/Caldwell, Idaho.
+- target_geos: the discovery metro (${c.seed.geo.metro}) always included. Add other metros ONLY with homepage evidence (locations page, "serving X and Y"). Never include Boise or Meridian, Idaho (Nampa/Caldwell are allowed).
 - geo_type: "city" for a single metro, "state_metro" if evidence supports 2+ metros.
 - state: two-letter code ${c.seed.geo.state_code} (or the business's actual home state if the homepage clearly shows otherwise).
 
@@ -387,9 +387,9 @@ Respond with ONLY the JSON object:
   if (!Array.isArray(config.topic_patterns) || config.topic_patterns.length < 3) {
     throw new Error('config: fewer than 3 topic_patterns');
   }
-  const tvGuard = /boise|meridian|nampa|caldwell/i;
+  const tvGuard = /boise|meridian/i;
   if (config.target_geos.some((g) => g.metros.some((m) => tvGuard.test(m)))) {
-    throw new Error('config: Treasure Valley metro leaked into target_geos');
+    throw new Error('config: Boise/Meridian metro leaked into target_geos');
   }
 
   const dir = path.join(AUDITS_BASE, c.domain);
@@ -634,12 +634,16 @@ async function main() {
   // ── Backlog: prior 'discovered' rows compete with today's finds for the
   // qualify slots, so overflow candidates surface on later days instead of
   // being buried forever by the dedup.
+  // Rows whose seed metro is no longer in seeds stay buried, same as removed
+  // verticals — the footprint in prospector-seeds.json is the source of truth.
+  const allowedMetros = seeds.geos.flatMap((g) => g.metros);
   const backlog: Candidate[] = [];
   {
     const { data: rows } = await sb
       .from('prospect_candidates')
       .select('domain, seed_query, vertical, geo, serp_rank')
       .eq('status', 'discovered')
+      .in('geo->>metro', allowedMetros)
       .order('serp_rank', { ascending: true })
       .limit(seeds.daily_qualify_cap);
     for (const row of rows ?? []) {
@@ -736,6 +740,7 @@ async function main() {
       .from('prospect_candidates')
       .select('domain, seed_query, vertical, geo, serp_rank, qualify, score')
       .eq('status', 'qualified')
+      .in('geo->>metro', allowedMetros)
       .order('score', { ascending: false })
       .limit(maxScouts * 2);
     for (const row of rows ?? []) {
