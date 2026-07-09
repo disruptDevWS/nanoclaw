@@ -241,28 +241,45 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
     console.log('  Skipping related-pages computation (OPENAI_API_KEY not set)');
   }
 
-  // 5. Architecture blueprint excerpt
+  // 5. Architecture blueprint excerpt (disk → Supabase fallback: Railway
+  // container disk is ephemeral, so the file may only exist in the DB)
   let blueprintExcerpt = '';
   try {
+    let blueprintMd = '';
     const blueprintBase = path.join(AUDITS_BASE, req.domain, 'architecture');
     const blueprintDate = getLatestDateDir(blueprintBase);
     if (blueprintDate) {
       const blueprintPath = path.join(blueprintBase, blueprintDate, 'architecture_blueprint.md');
       if (fs.existsSync(blueprintPath)) {
-        const blueprintMd = fs.readFileSync(blueprintPath, 'utf-8');
-        // Extract the silo section relevant to this page
-        if (siloName) {
-          const siloRegex = new RegExp(
-            `(#{1,3}\\s*(?:.*?${escapeRegex(siloName)}.*?)\\n[\\s\\S]*?)(?=\\n#{1,3}\\s|$)`,
-            'i'
-          );
-          const siloMatch = blueprintMd.match(siloRegex);
-          blueprintExcerpt = siloMatch ? siloMatch[1].trim() : '';
-        }
-        if (!blueprintExcerpt) {
-          // Fallback: include the first 2000 chars of the blueprint
-          blueprintExcerpt = blueprintMd.slice(0, 2000);
-        }
+        blueprintMd = fs.readFileSync(blueprintPath, 'utf-8');
+      }
+    }
+    if (!blueprintMd) {
+      const { data: bp } = await sb
+        .from('agent_architecture_blueprint')
+        .select('blueprint_markdown')
+        .eq('audit_id', req.audit_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (bp?.blueprint_markdown) {
+        blueprintMd = bp.blueprint_markdown;
+        console.log('  Blueprint: loaded from Supabase (no disk artifact)');
+      }
+    }
+    if (blueprintMd) {
+      // Extract the silo section relevant to this page
+      if (siloName) {
+        const siloRegex = new RegExp(
+          `(#{1,3}\\s*(?:.*?${escapeRegex(siloName)}.*?)\\n[\\s\\S]*?)(?=\\n#{1,3}\\s|$)`,
+          'i'
+        );
+        const siloMatch = blueprintMd.match(siloRegex);
+        blueprintExcerpt = siloMatch ? siloMatch[1].trim() : '';
+      }
+      if (!blueprintExcerpt) {
+        // Fallback: include the first 2000 chars of the blueprint
+        blueprintExcerpt = blueprintMd.slice(0, 2000);
       }
     }
   } catch {
@@ -312,6 +329,38 @@ async function gatherContext(sb: SupabaseClient, req: PamRequest) {
             marketContext += section.trim() + '\n\n';
           }
         }
+      }
+    }
+    if (!marketContext) {
+      // Supabase fallback: Railway container disk is ephemeral — rebuild the
+      // same two sections from Jim's latest audit_snapshots row.
+      const { data: jim } = await sb
+        .from('audit_snapshots')
+        .select('striking_distance, key_takeaways')
+        .eq('audit_id', req.audit_id)
+        .eq('agent_name', 'jim')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const sd = Array.isArray(jim?.striking_distance) ? jim!.striking_distance : [];
+      const kt = Array.isArray(jim?.key_takeaways) ? jim!.key_takeaways : [];
+      if (sd.length > 0) {
+        marketContext += '## Striking Distance\n\n| Keyword | Position | Volume | CPC | Intent |\n|---|---|---|---|---|\n';
+        for (const k of sd.slice(0, 25)) {
+          const cpc = k.cpc != null ? `$${Number(k.cpc).toFixed(2)}` : '—';
+          marketContext += `| ${k.keyword} | ${k.position ?? '—'} | ${k.volume ?? '—'} | ${cpc} | ${k.intent ?? '—'} |\n`;
+        }
+        marketContext += '\n';
+      }
+      if (kt.length > 0) {
+        marketContext += '## Key Takeaways\n\n';
+        for (const t of kt) {
+          marketContext += `- **${t.section}**: ${t.takeaway}\n`;
+        }
+        marketContext += '\n';
+      }
+      if (marketContext) {
+        console.log('  Market context: loaded from Supabase (no disk artifact)');
       }
     }
   } catch {
@@ -1489,35 +1538,59 @@ async function main() {
   const domainArg = process.argv.find((a) => a.startsWith('--domain='))?.split('=')[1]
     ?? (process.argv.includes('--domain') ? process.argv[process.argv.indexOf('--domain') + 1] : undefined);
 
-  // Fetch pending requests
-  let query = sb
-    .from('pam_requests')
-    .select('*')
-    .eq('status', 'pending')
-    .order('requested_at', { ascending: true });
+  const fetchPending = async () => {
+    let query = sb
+      .from('pam_requests')
+      .select('*')
+      .eq('status', 'pending')
+      .order('requested_at', { ascending: true });
+    if (domainArg) {
+      query = query.eq('domain', domainArg);
+    }
+    return query;
+  };
 
-  if (domainArg) {
-    query = query.eq('domain', domainArg);
+  // Drain loop: requests queued while a batch is processing get 409'd at the
+  // server (per-domain inFlight guard) and would otherwise strand at
+  // 'pending' — re-query until the queue is empty. Failed rows go to
+  // status='failed', so they cannot spin the loop; the round cap is a
+  // backstop against pathological states.
+  const MAX_DRAIN_ROUNDS = 25;
+  let totalProcessed = 0;
+
+  for (let round = 1; round <= MAX_DRAIN_ROUNDS; round++) {
+    const { data: requests, error } = await fetchPending();
+    if (error) {
+      console.error('Failed to fetch pam_requests:', error.message);
+      process.exit(1);
+    }
+
+    let batch = (requests ?? []) as PamRequest[];
+    if (batch.length === 0 && totalProcessed > 0) {
+      // Grace re-check: a burst-queued request can land just after the empty
+      // check while the server is still rejecting its trigger POST.
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const retry = await fetchPending();
+      batch = (retry.data ?? []) as PamRequest[];
+    }
+
+    if (batch.length === 0) {
+      if (totalProcessed === 0) {
+        console.log('No pending brief requests found.');
+        return;
+      }
+      break;
+    }
+
+    console.log(`Found ${batch.length} pending request(s)${round > 1 ? ` (drain round ${round})` : ''}`);
+
+    for (const req of batch) {
+      await processRequest(sb, req);
+      totalProcessed++;
+    }
   }
 
-  const { data: requests, error } = await query;
-  if (error) {
-    console.error('Failed to fetch pam_requests:', error.message);
-    process.exit(1);
-  }
-
-  if (!requests || requests.length === 0) {
-    console.log('No pending brief requests found.');
-    return;
-  }
-
-  console.log(`Found ${requests.length} pending request(s)`);
-
-  for (const req of requests as PamRequest[]) {
-    await processRequest(sb, req);
-  }
-
-  console.log('\nAll requests processed.');
+  console.log(`\nAll requests processed (${totalProcessed} total).`);
 }
 
 main().catch((err) => {

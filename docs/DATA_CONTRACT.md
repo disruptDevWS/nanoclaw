@@ -187,6 +187,8 @@
 | `jim` | Phase 3 (syncJim) | `research_summary_markdown`, `keyword_overview{}`, `position_distribution[]`, `branded_split{}`, `intent_breakdown[]`, `top_ranking_urls[]`, `competitor_analysis[]`, `competitor_summary{}`, `striking_distance[]`, `content_gap_observations[]`, `key_takeaways[]`. **Numeric columns now sourced from `research_data.json` (deterministic) when available; falls back to regex-parsed `research_summary.md` for backward compat.** | `useResearchSiteFindings()` → ResearchPage |
 | `gap` | Phase 5 | `keyword_overview` (JSONB with `authority_gaps[]`, `format_gaps[]`, `gap_summary`, `ai_citation_gaps[]`) | `useAuditSnapshots()`, `useAiCitationGaps()` |
 
+**Pipeline reads** (2026-07-09): `generate-brief.ts` (Pam) reads the latest `jim` row's `striking_distance[]` + `key_takeaways[]` as the market-context fallback when `research_summary.md` is absent on disk (Railway disk is ephemeral).
+
 **Gap `keyword_overview` sub-key changes (Session 3):**
 - `authority_gaps[].coverage_note` (NEW) — one sentence describing what the competitor covers that the client does not
 - `authority_gaps[].revenue_opportunity` (FORMAT CHANGE) — was mixed-format string, now `{ value: number|null, basis: string }` object. ALL consumers must use `formatRevenueOpportunity()` from `src/agents/gap/format-revenue.ts` (handles both formats, pipe-escapes, truncates) — raw interpolation renders `[object Object]`. Consumers: `buildGapAnalysisMd()`, Pam's `buildContentGapSection()` (generate-brief.ts), cluster strategy gap section (generate-cluster-strategy.ts).
@@ -269,6 +271,7 @@ Written by syncMichael (Phase 6b). One row per audit.
 | `snapshot_version` | |
 
 **Dashboard reads**: `useAgentBlueprint()` → StrategyPage
+**Pipeline reads**: `generate-brief.ts` (Pam) — fallback source for the blueprint silo excerpt when `audits/{domain}/architecture/{date}/architecture_blueprint.md` is absent on disk (Railway disk is ephemeral; 2026-07-09)
 
 ---
 

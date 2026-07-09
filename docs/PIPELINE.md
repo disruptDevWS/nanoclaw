@@ -995,7 +995,7 @@ Oscar (generate-content.ts) — polls oscar_requests
 
 **Prompt:** Extracted to `configs/agents/pam/system-prompt.md` (30+ placeholders). Loaded via `fs.readFileSync()` + `.replace()` chain. Many interpolations are replaced with pre-built section strings assembled in runtime code.
 
-**Trigger:** `pam_requests` table (status='pending'). Polled by running `npx tsx scripts/generate-brief.ts [--domain <d>]`.
+**Trigger:** `pam_requests` table (status='pending'). Processed by running `npx tsx scripts/generate-brief.ts [--domain <d>]` — the script **drain-loops**: after each batch it re-queries for pending rows (capped at 25 rounds, with a 5s grace re-check before exit) until the queue is empty. This closes the burst-queue race (2026-07-09): the server's per-domain `inFlight` guard 409s trigger POSTs while a worker is alive, so requests queued mid-run must be picked up by that worker or they strand at `pending`. Failed rows go to `status='failed'` (never back to `pending`), so the loop cannot spin.
 
 **What it does:** For each `execution_pages` row created by sync-michael, generates a complete content brief: metadata (meta title, description, H1, intent), JSON-LD schema, and a detailed content outline with per-section word counts, keyword targets, and internal linking maps.
 
@@ -1007,8 +1007,8 @@ Oscar (generate-content.ts) — polls oscar_requests
 3. **Page Identity** — `execution_pages` — page_brief (including `coverage_role`), silo, url_slug, buyer_stage, strategy_rationale (from sync-michael or cluster strategy)
 4. **Visibility Queries** — `cluster_strategy.visibility_queries` (JSONB) — AI visibility measurement queries for the page's cluster
 5. **Information Gain Directive** — evaluates `client_profiles` for proprietary knowledge; outputs one of: `PROPRIETARY KNOWLEDGE AVAILABLE` / `LIMITED PROPRIETARY KNOWLEDGE` / `COMMODITY CONTENT RISK`
-6. `architecture_blueprint.md` — silo excerpt from disk
-7. `research_summary.md` — striking distance + key takeaways from Jim
+6. `architecture_blueprint.md` — silo excerpt from disk; **Supabase fallback** (2026-07-09): if the disk file is absent (Railway container disk is ephemeral — no volume mounted, artifacts wiped on every deploy), the latest `agent_architecture_blueprint.blueprint_markdown` for the audit is used with the same silo-excerpt logic
+7. `research_summary.md` — striking distance + key takeaways from Jim; **Supabase fallback** (2026-07-09): if absent on disk, rebuilt from the latest `audit_snapshots` row (`agent_name='jim'`) — `striking_distance` (top 25, table) + `key_takeaways`. NOTE: `strategy_brief.md` (context 7b) has NO fallback — it exists only on disk, so its context is silently absent on a post-deploy Railway container
 8. `audit_snapshots` (agent='gap') — authority gaps and format gaps
 9. **Keywords** — `audit_keywords` sharing the page's `canonical_key` (Session B: join via `canonical_key`, with volume-based fallback if empty). Includes `primary_entity_type`. (Demoted from position #2 to #9 — entity context takes priority over raw keyword data.)
 10. `client_profiles` — brand voice, USPs, differentiators (optional)
