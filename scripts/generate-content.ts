@@ -376,16 +376,14 @@ async function processOscarRequest(sb: SupabaseClient, req: OscarRequest) {
     // 6. Build prompt
     const prompt = buildOscarPrompt(config, brief, clientProfile, competitiveFallback);
 
-    // 7. Call Claude. Web search is enabled but restricted to trusted
-    // authoritative sources so Oscar can VERIFY uncertain geographic specifics
-    // (which towns are in a county, road names, etc.) instead of inferring them
-    // from memory. The model only searches when the prompt's grounding rules say
-    // to; pages with no geographic uncertainty incur no searches.
-    const htmlOutput = await callClaudeAsync(prompt, {
-      model: 'sonnet',
-      phase: 'content',
-      webSearch: { maxUses: 3, allowedDomains: ['en.wikipedia.org', 'census.gov'] },
-    });
+    // 7. Call Claude. Deliberately NO tools here: giving Oscar web_search
+    // (tried 2026-07-10) flipped it into agentic narration — it described its
+    // searches and "exported a file" instead of emitting the HTML artifact.
+    // Geographic grounding is enforced by prompt instead (verify from brief
+    // inputs or placeholder — never fabricate); a separate pre-generation
+    // grounding step that feeds verified locale facts INTO the brief is the
+    // planned robust path (see DECISIONS.md 2026-07-10).
+    const htmlOutput = await callClaudeAsync(prompt, { model: 'sonnet', phase: 'content' });
     console.log(`  Claude output: ${htmlOutput.length} chars`);
 
     // 8. Write debug output (raw, before parsing)

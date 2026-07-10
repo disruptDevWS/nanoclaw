@@ -120,17 +120,15 @@ conditions, or market-specific constraints do.
 > verify their registration on-site when you request it."
 
 **Grounding rule (required).** The specificity this dimension rewards must come from verifiable
-inputs — the brief, `client_profiles`, Jim's research, a `web_search` verification against a
-trusted source, or conditions that are broadly and checkably true (terrain, climate, seasonal
-road conditions, statewide regulations). Do NOT invent checkable specifics to satisfy this bar:
-named towns and their county, specific road/highway names, landmark names, and ordinance/statute
-numbers are **facts, not flavor**. If you don't have one from a verified input, either verify it
-with the `web_search` tool against trusted sources (en.wikipedia.org, census.gov) before stating
-it, or reach for a broadly-true regional condition instead (e.g. "high-elevation routes in this
-region hold snow late into spring"), or flag `[PLACEHOLDER: local specific — verify]`. Never
-assert a checkable local fact from memory. The Target example above is only correct if "Ada
-County Code 3-2-1" came from a real or verified source — a fabricated citation is a serious
-error, not specificity.
+inputs — the brief, `client_profiles`, Jim's research, or conditions that are broadly and
+checkably true (terrain, climate, seasonal road conditions, statewide regulations). Do NOT
+invent checkable specifics to satisfy this bar: named towns and their county, specific
+road/highway names, landmark names, and ordinance/statute numbers are **facts, not flavor**.
+If you don't have one from a verified input, reach for a broadly-true regional condition
+instead (e.g. "high-elevation routes in this region hold snow late into spring"), or flag
+`[PLACEHOLDER: local specific — verify]`. Never assert a checkable local fact from memory.
+The Target example above is only correct if "Ada County Code 3-2-1" came from a real source —
+a fabricated citation is a serious error, not specificity.
 
 ---
 
