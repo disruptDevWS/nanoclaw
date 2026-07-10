@@ -116,8 +116,9 @@ export interface CallClaudeOptions {
   phase?: string;       // phase name for max_tokens lookup
   timeoutMs?: number;   // request timeout (default: 600_000)
   warnOnTruncation?: boolean; // throw TruncationError if stop_reason === 'max_tokens'
-  /** Enable the Anthropic server-side web search tool (runs on Anthropic infra; no client-side loop). */
-  webSearch?: { maxUses?: number };
+  /** Enable the Anthropic server-side web search tool (runs on Anthropic infra; no client-side loop).
+   *  allowedDomains restricts results to trusted sources (maps to the tool's allowed_domains). */
+  webSearch?: { maxUses?: number; allowedDomains?: string[] };
 }
 
 // Server-side tool loops can return stop_reason 'pause_turn' at the API's
@@ -150,7 +151,12 @@ export async function callClaude(
   // web_search_20260209 is newer than this SDK's type definitions; the API
   // validates the tool shape server-side, so pass it structurally.
   const tools = opts.webSearch
-    ? ([{ type: 'web_search_20260209', name: 'web_search', max_uses: opts.webSearch.maxUses ?? 5 }] as any)
+    ? ([{
+        type: 'web_search_20260209',
+        name: 'web_search',
+        max_uses: opts.webSearch.maxUses ?? 5,
+        ...(opts.webSearch.allowedDomains?.length ? { allowed_domains: opts.webSearch.allowedDomains } : {}),
+      }] as any)
     : undefined;
 
   let lastError: unknown;

@@ -376,9 +376,16 @@ async function processOscarRequest(sb: SupabaseClient, req: OscarRequest) {
     // 6. Build prompt
     const prompt = buildOscarPrompt(config, brief, clientProfile, competitiveFallback);
 
-    // 7. Call Claude
-    console.log('  Running claude --print (sonnet)...');
-    const htmlOutput = await callClaudeAsync(prompt, { model: 'sonnet', phase: 'content' });
+    // 7. Call Claude. Web search is enabled but restricted to trusted
+    // authoritative sources so Oscar can VERIFY uncertain geographic specifics
+    // (which towns are in a county, road names, etc.) instead of inferring them
+    // from memory. The model only searches when the prompt's grounding rules say
+    // to; pages with no geographic uncertainty incur no searches.
+    const htmlOutput = await callClaudeAsync(prompt, {
+      model: 'sonnet',
+      phase: 'content',
+      webSearch: { maxUses: 3, allowedDomains: ['en.wikipedia.org', 'census.gov'] },
+    });
     console.log(`  Claude output: ${htmlOutput.length} chars`);
 
     // 8. Write debug output (raw, before parsing)

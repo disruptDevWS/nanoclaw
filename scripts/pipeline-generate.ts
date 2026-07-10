@@ -2486,6 +2486,8 @@ The business has geographic service delivery. Geographic pages are part of the a
 
 **Produce service+location pages where combined signal justifies them.** A service+location page is justified when (a) the service is location-sensitive (service delivery involves on-site execution, local dispatch, same-day response, market-specific pricing, or local permits/regulations) AND (b) either aggregate keyword volume for the service+location combination is meaningful OR competitive gap analysis shows weak or absent competitors for that combination. Do not produce service+location pages for every service × location combination — coverage should be intentional, where the data supports it, not exhaustive.
 
+**Match geographic granularity to where demand exists — city OR county.** The location qualifier is not always a city. For low-population or rural service areas where individual cities lack meaningful search volume, the **county** is the correct geographic container (e.g. \`/services/{service}/{county}-county-{state}\`): one county page absorbs the intent for all the small towns within it. In that case, name the significant towns of the county within the page body — that is what earns "near me" relevance for those towns — rather than creating a separate thin page for each town. Conversely, where a city genuinely has service-delivery volume and competition, build the city page. Do NOT default to city-level pages for sparsely populated areas: that produces thin, near-duplicate pages competing for near-zero volume. Let population, competition, and keyword signal choose the tier, exactly as a strategist would.
+
 **Services that are not location-sensitive do not get location variants.** Educational content, general service explainers, pricing guides, maintenance tips remain as service-level pillars or support pages without geographic children. Location pages exist for service delivery, not for content that applies regardless of market.
 
 **Geographic hub pages are complementary, not primary.** If the business has multiple delivery markets, produce a geographic hub per market (\`/service-area/{location}\` or similar, matching client naming convention). City/metro hubs capture the high-volume generic local query (e.g., "plumber boise") and link to all service+location pages for that market. They do not compete with service pillars for topical authority.
@@ -2503,6 +2505,7 @@ The business operates across one or more states. Geographic pages are part of th
 **"Location" can be state or city depending on where keyword signal exists.** For state-mode clients, search intent occurs at multiple geographic levels:
 
 - **Delivery-intent queries** are typically city-level ("emt course boise," "paramedic program spokane"). When keyword data shows city-level volume, produce service+city pages (\`/services/{service}/{city}\`). This is where most search traffic for service delivery happens.
+- **County-level** is the correct container for low-population or rural service areas where individual cities lack meaningful search volume. Produce one service+county page (\`/services/{service}/{county}-county-{state}\`) that absorbs the intent for all the small towns within it, and name the county's significant towns in the page body rather than creating a thin page per town. Do NOT default to city-level pages for sparsely populated areas — that yields thin, near-duplicate pages competing for near-zero volume. Choose city vs. county by population, competition, and keyword signal, the way a strategist would.
 - **Regulatory, licensing, certification, and state-varying service queries** are typically state-level ("idaho emt license requirements," "washington paramedic certification," "emt salary oregon"). When keyword data shows state-level volume for these query types, produce service+state pages (\`/services/{service}/{state}\`) or state-qualified support pages. These capture state-scoped intent that doesn't exist at the city level.
 - **Comparative/evaluative queries** may exist at either level ("best emt schools idaho," "top paramedic programs in seattle"). Place these where the data shows volume.
 
@@ -2992,7 +2995,6 @@ These pages receive organic traffic but are not in the current architecture. Eva
 
   // --- Proven ranking ceiling (A3 → architecture stretch-target gating) ---
   let michaelCeilingBlock = '';
-  let michaelStarterBlock = '';
   try {
     const ceiling = await fetchProvenCeiling(sb, auditId);
     michaelCeilingBlock = buildCeilingPromptBlock(
@@ -3001,20 +3003,13 @@ These pages receive organic traffic but are not in the current architecture. Eva
     );
     if (michaelCeilingBlock) console.log(`  Proven ceiling block: ${ceiling.cold_start ? 'cold start' : `site KD ${ceiling.site_ceiling}`}`);
 
-    // D1/D2: low-authority clients get thin-starter-page architecture. Cold start
-    // (<15 proven top-7 rankings, incl. zero) is the trigger — full content
-    // investment on untested keywords is not justified until Google confirms
-    // impressions. See docs/research/kb-extraction-map.md Workstream D.
-    if (ceiling.cold_start || (ceiling.site_ceiling !== null && ceiling.site_ceiling < 15)) {
-      michaelStarterBlock = `## LOW-AUTHORITY MODE — Thin Starter Pages (Mode column required)
-This client has ${ceiling.owned_count} proven top-7 ranking(s) — too few to justify full content investment on untested keywords. Apply starter-page architecture:
-- Add a "Mode" column to EVERY silo page table (after "Action"). Values: full | starter.
-- Mark a page \`starter\` when its primary keyword is UNTESTED (the client has no current ranking for it in the keyword data) AND no proven ranking evidence covers it. Starter pages are thin 200-400-word direct-answer test pages with a single internal link to their pillar — published to learn whether Google sends impressions BEFORE investing in full content.
-- Keep \`full\` for: pillar pages, conversion-critical pages, and any page whose primary keyword the client already ranks for (any position).
-- Individual FAQ pages (PAA expansion): when question-form queries (how/what/can/should/does...) appear in a cluster's keyword data, prefer INDIVIDUAL /faq/{question-slug} starter pages — the exact question as H1 and title, a ~120-word direct answer, one link to the parent pillar — over FAQ accordion sections on the pillar. Individual pages maximize title-query match, which is the cheapest ranking signal available to a low-authority site. List them as normal silo-table rows with Mode=starter and Role=support.
-- Lifecycle context (not your output): starter pages are monitored via GSC after publish; those earning impressions get expanded to full content, those without get deprioritized.`;
-      console.log(`  Low-authority mode: ON (${ceiling.owned_count} owned) — starter-page architecture instructed`);
-    }
+    // NOTE: The former LOW-AUTHORITY MODE / thin-starter-page architecture was
+    // removed (2026-07-10). Operator standard: every page gets best-effort,
+    // comprehensive treatment — starter/thin test pages are no longer produced.
+    // The proven-ceiling stretch-target sequencing above (michaelCeilingBlock)
+    // is a separate mechanism and is retained. FAQ/PAA intent is now delivered
+    // as on-page Q&A sections + FAQPage schema on the parent pillar/cluster page
+    // (see Michael system-prompt), not standalone thin /faq/ pages.
   } catch (err: any) {
     console.log(`  Note: proven ceiling unavailable (non-fatal): ${err.message}`);
   }
@@ -3051,7 +3046,6 @@ ${dList}`;
   // Cornerstone content next — user-declared ground truth outranks derived signals
   if (cornerstoneBlock) contextBlockParts.push(cornerstoneBlock);
   if (michaelCeilingBlock) contextBlockParts.push(michaelCeilingBlock.trim());
-  if (michaelStarterBlock) contextBlockParts.push(michaelStarterBlock);
   if (researchSummary) contextBlockParts.push(`## Jim's Research Summary (Foundational Search Intelligence)\n${researchSummary}`);
   if (keywordSection) contextBlockParts.push(keywordSection);
   contextBlockParts.push(`## Revenue Clusters (by opportunity — from syncJim with revenue estimates)\nTopic | Volume | Revenue Range | Sample Keywords\n${clusterTable || 'No cluster data available yet.'}`);
