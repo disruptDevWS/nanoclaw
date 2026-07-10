@@ -428,11 +428,14 @@ Stores GSC/GA4 property IDs per audit. Service account handles auth centrally.
 | Column | Writer | Notes |
 |--------|--------|-------|
 | `audit_id` | Manual insert | FK audits, UNIQUE |
-| `gsc_property_url` | Manual insert | e.g. `https://www.example.com/` |
-| `ga4_property_id` | Manual insert | e.g. `513955424` |
+| `gsc_property_url` | Manual insert | e.g. `https://www.example.com/` or `sc-domain:example.com` (domain property) |
+| `ga4_property_id` | Manual insert | numeric GA4 **property ID** (e.g. `448438674`), NOT the `G-` measurement ID |
 | `last_gsc_sync_at` | Pipeline | Updated by fetch-gsc-data.ts |
 | `last_ga4_sync_at` | Pipeline | Updated by fetch-ga4-data.ts |
-| `status` | Manual | `active`, `disabled`, or `error` |
+| `status` | Manual | `active`, `disabled`, or `error`. **`getAnalyticsConnection()` gates on `status='active'`** — do NOT set `'error'` on a transient pull failure (it locks the connection out of all future runs). `status` is the on/off gate only. |
+| `error_message` | Pipeline (fetch-gsc-data.ts, track-rankings.ts) + Dashboard read | Set on a GSC/GA4 pull failure, prefixed `GSC fetch failed …` / `GA4 fetch failed …`; cleared (source-scoped, via `LIKE`) on the next success. Read by the dashboard `useTrackingHealth()` badge and by `check-tracking-health.ts`. The health signal that avoids the `status` lockout. |
+
+**Tracking-health check** (`scripts/check-tracking-health.ts`, run at the end of `cron-track-all.ts`): scans active connections for (1) `error_message` set, (2) stale `last_*_sync_at` (GSC >14d / GA4 >40d), (3) published `execution_pages` older than 10d with zero matching `gsc_page_snapshots` + `ga4_page_snapshots` rows. Writes an `agent_runs` row (`agent_name='tracking_health'`, `status='completed_with_errors'` when issues found) and emits a `[TRACKING-HEALTH]` console block.
 
 **RLS**: service_role ALL + super_admin SELECT
 

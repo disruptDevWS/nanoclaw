@@ -370,9 +370,6 @@ export async function runGscFetch(
   const propertyUrl = connection.gsc_property_url;
   console.log(`  GSC property: ${propertyUrl}`);
 
-  // Get access token
-  const token = await getServiceAccountAccessToken([GSC_SCOPE]);
-
   // Date range: use override or default 28 days ending 3 days ago (GSC data delay)
   let dateRange: { start: string; end: string };
   if (dateOverride) {
@@ -386,16 +383,31 @@ export async function runGscFetch(
   }
   console.log(`  Date range: ${dateRange.start} to ${dateRange.end}`);
 
-  // Fetch data
-  const { pageRows, queryPageRows } = await fetchGscSearchAnalytics(
-    propertyUrl,
-    dateRange.start,
-    dateRange.end,
-    token,
-  );
+  // Fetch data. Record hard failures on the connection via error_message ONLY —
+  // never status: getAnalyticsConnection() gates on status='active', so flipping
+  // it to 'error' would lock this connection out of every future run (no retry,
+  // no self-heal). error_message is a passive health signal the tracking-health
+  // check and the dashboard badge read.
+  let fetched: Awaited<ReturnType<typeof fetchGscSearchAnalytics>>;
+  try {
+    const token = await getServiceAccountAccessToken([GSC_SCOPE]);
+    fetched = await fetchGscSearchAnalytics(
+      propertyUrl,
+      dateRange.start,
+      dateRange.end,
+      token,
+    );
+  } catch (err: any) {
+    await (sb as any)
+      .from('analytics_connections')
+      .update({ error_message: `GSC fetch failed ${new Date().toISOString()}: ${String(err?.message ?? err).slice(0, 500)}` })
+      .eq('audit_id', auditId);
+    throw err;
+  }
+  const { pageRows, queryPageRows } = fetched;
 
   if (pageRows.length === 0) {
-    console.log('  GSC returned 0 page rows — no data to process');
+    console.log('  GSC returned 0 page rows — no data (healthy, not an error)');
     return false;
   }
 
@@ -465,11 +477,17 @@ export async function runGscFetch(
   }
   console.log(`  Upserted ${upsertedCount} GSC page snapshots`);
 
-  // Update last_gsc_sync_at
+  // Update sync timestamp; clear only a prior GSC-sourced error (leave any GA4
+  // error intact — the two sources share one error_message column in v1).
   await (sb as any)
     .from('analytics_connections')
     .update({ last_gsc_sync_at: new Date().toISOString() })
     .eq('audit_id', auditId);
+  await (sb as any)
+    .from('analytics_connections')
+    .update({ error_message: null })
+    .eq('audit_id', auditId)
+    .like('error_message', 'GSC fetch failed%');
 
   return true;
 }

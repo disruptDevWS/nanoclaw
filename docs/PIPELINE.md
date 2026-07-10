@@ -1125,9 +1125,9 @@ Ranking performance tracking runs independently of the audit pipeline — weekly
 6. Aggregate `cluster_performance_snapshots` — groups by `canonical_key`, computes `avg_position` (mean of ranked keywords only; unranked `rank_position=null` excluded), position bucket counts (`keywords_p1_3/p4_10/p11_30/p31_100` — ranked only), `keyword_count` (all keywords including unranked), `authority_score` (position-weighted 0-100, see DECISIONS.md), `authority_score_delta` (vs previous snapshot)
 7. Update `audit_clusters.authority_score` with the latest score from step 6
 8. Track published pages in `page_performance` — matches ranking URLs against published `execution_pages`, computes `current_avg_position` (ranked keywords only, same exclusion as clusters)
-9. GA4 behavioral data (non-fatal) — fetches page-level GA4 data for published slugs, upserts to `ga4_page_snapshots`, updates `page_performance` behavioral columns, computes `observed_cr` in `audit_assumptions`
+9. GA4 behavioral data (non-fatal to the rankings snapshot, but NOT silent) — fetches page-level GA4 data for published slugs, upserts to `ga4_page_snapshots`, updates `page_performance` behavioral columns, computes `observed_cr` in `audit_assumptions`. On failure the GA4 error is recorded to `analytics_connections.error_message` (prefixed `GA4 fetch failed …`); on success a prior GA4-scoped error is cleared.
 9b. GA4 event-level conversions (non-fatal) — fetches site-wide event data from GA4 (dimensions: `eventName` + `sessionDefaultChannelGroup`, metrics: `eventCount` + `eventRevenue`, filtered to 4 conversion events), upserts to `ga4_event_snapshots`
-10. Log to `agent_runs` (agent_name='performance_tracker', metadata includes `ga4_page_count` + `ga4_event_count`)
+10. Log to `agent_runs` (agent_name='performance_tracker', metadata includes `ga4_page_count` + `ga4_event_count` + `ga4_error`). **Status is `completed_with_errors` when GA4 failed** (previously always `completed` — a GA4 failure used to masquerade as a clean run). Similarly, `track-gsc.ts` records `analytics_connections.error_message` on a GSC pull failure (via `runGscFetch`) and clears the GSC-scoped error on success.
 
 **External APIs:**
 
@@ -1141,9 +1141,15 @@ Ranking performance tracking runs independently of the audit pipeline — weekly
 
 **Invocation:** `npx tsx scripts/cron-track-all.ts [--force]`
 
-**Logic:** Queries all audits where `status='completed'`, resolves user emails, runs `track-rankings.ts` sequentially with 30-second delays between domains (DataForSEO rate limits). The 6-day recency check in `track-rankings.ts` prevents double-runs.
+**Logic:** Queries all audits where `status='completed'` AND `performance_tracking_enabled=true`, resolves user emails, runs `track-rankings.ts` + `track-gsc.ts` sequentially with 30-second delays between domains (DataForSEO rate limits). The 6-day recency check prevents double-runs. **After all domains, calls `checkTrackingHealth(sb)`** (see below); the cron's own `agent_runs` row is `completed_with_errors` if any domain failed OR any health issue was found (`health_issue_count` in metadata).
 
-**Scheduling:** Railway cron job or external scheduler, weekly.
+**Scheduling:** Railway cron job or external scheduler, weekly (dashboard-configured — no repo file controls it).
+
+### check-tracking-health.ts — Silent-failure detector
+
+**Script:** `scripts/check-tracking-health.ts` (exported `checkTrackingHealth(sb)`; also standalone: `npx tsx scripts/check-tracking-health.ts`)
+
+**Logic:** For each `analytics_connections` row with `status='active'`, flags three silent states: (1) `error_message` set (last pull threw), (2) stale sync — `last_gsc_sync_at` >14d or `last_ga4_sync_at` >40d, (3) **zero_metrics** — a published `execution_pages` row older than a **10-day grace** with zero matching rows in both `gsc_page_snapshots` and `ga4_page_snapshots` (path matched with leading/trailing-slash variants). Emits a `[TRACKING-HEALTH]` console block and one `agent_runs` row (`agent_name='tracking_health'`, `completed_with_errors` when issues found, `issues[]` in metadata). Dashboard surfaces connection-level health via the `useTrackingHealth()` badge on the Performance page.
 
 ### Pipeline Server Endpoint
 

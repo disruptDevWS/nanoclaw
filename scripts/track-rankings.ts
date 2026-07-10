@@ -365,6 +365,7 @@ async function trackRankings(cliArgs: CliArgs) {
   // 9. GA4 behavioral data (non-fatal)
   let ga4PageCount = 0;
   let ga4EventCount = 0;
+  let ga4Error: string | null = null;
   try {
     // Set env vars for google-auth.ts (loadEnv already ran)
     if (env.GOOGLE_ADC_JSON) {
@@ -485,21 +486,39 @@ async function trackRankings(cliArgs: CliArgs) {
       ga4EventCount = eventRecords.length;
     }
   } catch (ga4Err: any) {
-    console.warn(`  [ga4] GA4 fetch failed (non-fatal): ${ga4Err.message}`);
+    // GA4 is non-fatal to the rankings snapshot, but it must NOT be silent:
+    // record it on the connection and downgrade the run status below.
+    ga4Error = String(ga4Err?.message ?? ga4Err).slice(0, 500);
+    console.warn(`  [ga4] GA4 fetch failed (recorded, not silent): ${ga4Error}`);
+    await (sb as any)
+      .from('analytics_connections')
+      .update({ error_message: `GA4 fetch failed ${new Date().toISOString()}: ${ga4Error}` })
+      .eq('audit_id', audit.id);
   }
 
-  // 10. Log agent_runs
+  // Clear a prior GA4-sourced error on success (leave any GSC error intact).
+  if (!ga4Error) {
+    await (sb as any)
+      .from('analytics_connections')
+      .update({ error_message: null })
+      .eq('audit_id', audit.id)
+      .like('error_message', 'GA4 fetch failed%');
+  }
+
+  // 10. Log agent_runs — truthful status: a GA4 failure downgrades the run
+  // instead of masquerading as a clean 'completed'.
   await sb.from('agent_runs').insert({
     audit_id: audit.id,
     agent_name: 'performance_tracker',
     run_date: snapshotDate,
-    status: 'completed',
+    status: ga4Error ? 'completed_with_errors' : 'completed',
     metadata: {
       keyword_count: snapshotRecords.length,
       dataforseo_total: totalCount,
       ranked_count: currentRankings.length,
       ga4_page_count: ga4PageCount,
       ga4_event_count: ga4EventCount,
+      ga4_error: ga4Error,
       snapshot_date: snapshotDate,
     },
   });

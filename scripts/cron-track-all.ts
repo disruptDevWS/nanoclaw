@@ -186,9 +186,19 @@ async function main() {
   console.log(`  Rankings: ${stats.rankings.tracked} tracked, ${stats.rankings.skipped} skipped, ${stats.rankings.failed} failed`);
   console.log(`  GSC:      ${stats.gsc.tracked} tracked, ${stats.gsc.skipped} skipped, ${stats.gsc.failed} failed\n`);
 
+  // Post-run tracking-health audit — surfaces zero-metric published pages, stale
+  // syncs, and recorded pull errors that the per-domain steps above hide.
+  const { checkTrackingHealth } = await import('./check-tracking-health.js');
+  let healthIssues: unknown[] = [];
+  try {
+    ({ issues: healthIssues } = await checkTrackingHealth(sb));
+  } catch (err: any) {
+    console.warn(`  [TRACKING-HEALTH] health check failed: ${err?.message ?? err}`);
+  }
+
   // Log cron run to agent_runs for operational visibility
   const runDate = new Date().toISOString().slice(0, 10);
-  const status = totalFailed > 0 ? 'completed_with_errors' : 'completed';
+  const status = (totalFailed > 0 || healthIssues.length > 0) ? 'completed_with_errors' : 'completed';
   await sb.from('agent_runs').insert({
     audit_id: audits[0]?.id, // attach to first audit as anchor
     agent_name: 'cron_track_all',
@@ -199,6 +209,7 @@ async function main() {
       rankings: stats.rankings,
       gsc: stats.gsc,
       failed_domains: failedDomains,
+      health_issue_count: healthIssues.length,
     },
   });
 }
