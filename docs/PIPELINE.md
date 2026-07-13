@@ -1598,7 +1598,7 @@ The pipeline server (`src/pipeline-server-standalone.ts`) is an HTTP server that
 | GET | `/health` | Health check (uptime, in-flight domains, env var presence) |
 | POST | `/trigger-pipeline` | Start a full/sales/prospect pipeline run |
 | POST | `/scout-config` | Write prospect-config.json to disk |
-| POST | `/scout-report` | Read scout markdown + scope.json |
+| POST | `/scout-report` | Read scout markdown + scope.json (disk primary; falls back to `prospects` DB columns when the scout dir is absent — cron-scouted prospects never write to this service's volume. `file` requests stay disk-only) |
 | POST | `/artifact` | Download pipeline output files |
 | POST | `/track-rankings` | On-demand ranking tracking for a single domain |
 | POST | `/recanonicalize` | Re-run Phase 3c+3d with status preservation (async, 202) |

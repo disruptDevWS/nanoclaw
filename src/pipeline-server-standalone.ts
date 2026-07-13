@@ -275,6 +275,36 @@ async function handleScoutConfig(req: http.IncomingMessage, res: http.ServerResp
   json(res, 200, { status: 'written', path: path.relative(process.cwd(), configPath) });
 }
 
+// Cron-scouted prospects write scout artifacts to the cron service's ephemeral
+// disk — this service's volume never sees them. The scout sync already persists
+// the full report to prospects (scout_markdown/scout_scope_json/prospect_narrative),
+// so serve that copy when the disk artifacts are absent. Disk stays primary.
+async function serveScoutReportFromDb(domain: string, res: http.ServerResponse): Promise<boolean> {
+  const sb = getSb();
+  if (!sb) return false;
+  try {
+    const { data, error } = await sb
+      .from('prospects')
+      .select('scout_markdown, scout_scope_json, prospect_narrative, scout_run_at')
+      .eq('domain', domain)
+      .order('scout_run_at', { ascending: false, nullsFirst: false })
+      .limit(1);
+    const row = data?.[0];
+    if (error || !row?.scout_markdown) return false;
+    const date = row.scout_run_at ? String(row.scout_run_at).slice(0, 10) : '';
+    console.log(`Scout report served from DB fallback: ${domain} (${date})`);
+    json(res, 200, {
+      markdown: row.scout_markdown,
+      scope: row.scout_scope_json ?? {},
+      date,
+      narrative: row.prospect_narrative ?? '',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function handleScoutReport(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   if (!checkAuth(req, res)) return;
 
@@ -297,15 +327,14 @@ async function handleScoutReport(req: http.IncomingMessage, res: http.ServerResp
   }
 
   const scoutBase = path.join(AUDITS_BASE, domain, 'scout');
-  if (!fs.existsSync(scoutBase)) {
-    json(res, 404, { error: 'No scout directory found' });
-    return;
-  }
-
-  const dateDirs = fs.readdirSync(scoutBase)
-    .filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e))
-    .sort();
+  const dateDirs = fs.existsSync(scoutBase)
+    ? fs.readdirSync(scoutBase)
+        .filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e))
+        .sort()
+    : [];
   if (dateDirs.length === 0) {
+    // Specific-file requests are disk-only; the default report has a DB copy
+    if (!requestedFile && await serveScoutReportFromDb(domain, res)) return;
     json(res, 404, { error: 'No scout runs found' });
     return;
   }
