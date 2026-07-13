@@ -200,3 +200,28 @@ Each entry is self-contained: picking it up 3 months later should not require re
 - **Captured:** Page Optimizer feedback session, 2026-07-05
 
 ---
+
+### [Cross-repo] Move the Scout share page onto forgegrowth.ai (marketing domain)
+
+- **Status:** Deferred 2026-07-13 — the share surface was upgraded in place on app.forgegrowth.ai instead (DECISIONS.md 2026-07-13). Deliverability is identical (same registrable domain); the remaining argument is positioning (sales collateral on the marketing surface).
+- **Action:** Template port to `~/localgrowth-spark/forgegrowth-next` (Next.js App Router, live on main): a `/scout/[token]` server-rendered route reading the SAME prospect columns (token, scope, narrative, bridge line, expiry). Requires solving cross-project Supabase access (marketing repo has no connection to `hohuimkcpihdufunrzvg` — service-role key in Vercel env vs. reusing the scout-config edge function). Data contract doesn't change; the render surface does. Retire or internal-preview the app route after cutover.
+- **Trigger:** outbound volume/results justify the polish, or the marketing site grows other gated sales surfaces.
+- **Scope estimate:** M
+
+---
+
+### [Pipeline/Dashboard] Trades-vs-training positioning fork on the share page
+
+- **Status:** Deferred by design (one-pager copy spec §Segmentation; upgrade session 2026-07-13 shipped one page for both buyers, "structured data" wording chosen for the trades-heavy pool).
+- **Action:** When training-org prospecting resumes, add a segment dial (prospect vertical → copy variant): "entity-grade schema" wording, segment-appropriate System card bodies, possibly a different headline. Copy variants already drafted in the spec.
+- **Scope estimate:** S
+
+---
+
+### [Ops] booking_completed / inquired attribution stays manual
+
+- **Status:** By design (2026-07-13). `viewed` and `booking_intent` are automatic; `booking_completed` is a manual email-match from the calendar invite, `inquired` is manual observation in the Gmail thread — both seen in the normal course of review.
+- **Action:** Only revisit if volume makes manual matching lossy (e.g. Gmail API poll for calendar invites matched to prospect contact_email).
+- **Scope estimate:** M (if ever)
+
+---

@@ -835,9 +835,14 @@ Written by Phase 6d (LocalPresence). One row per directory.
 | `outreach_status` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | `none` \| `generated` (copy in DB, Gmail step failed/pending) \| `drafted` (Gmail draft exists). Text, not enum |
 | `gmail_draft_id` | Pipeline (generate-outreach-email.ts) | Pipeline | Gmail API draft id; idempotency anchor for update-in-place on `--force` |
 | `outreach_generated_at` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | |
+| `share_expires_at` | Edge fn (generate_share_token), Pipeline (generate-outreach-email.ts token mint), Dashboard (Mark-sent) | Edge fn (get_share_report, log_booking_intent), Dashboard | Migration 047 (2026-07-13). 14-day capability window; past it get_share_report/log_booking_intent serve 410. Mark-sent restarts the clock from the send |
+| `first_viewed_at`, `last_viewed_at`, `view_count` | Edge fn (get_share_report) | Dashboard | Migration 047. Share-page view logging on token hit (service role) |
+| `booking_intent_at` | Edge fn (log_booking_intent) | Dashboard | Migration 047. First `/book/scout/:token` click — the attributable report→CTA conversion. `booking_completed`/`inquired` stay manual observations |
+| `prospect_bridge_line` | Pipeline (Scout) | Edge fn (get_share_report) | Migration 047. Scout-authored 1–2 sentence seam between report data and positioning on the share page; share page falls back to generic copy when null |
 
 **Dashboard reads**: `useProspects()`, `useProspect()`, `useProspectStatus()` (2s poll while running)
-**Pipeline writes**: Scout updates status, scout_run_at, scout_output_path, brand_favicon_url, scout_markdown, scout_scope_json, prospect_narrative; generate-outreach-email.ts updates outreach_* + gmail_draft_id
+**Dashboard writes**: `useMarkOutreachSent()` — `outreach_status='sent'` + `share_expires_at=now()+14d` (super_admin RLS)
+**Pipeline writes**: Scout updates status, scout_run_at, scout_output_path, brand_favicon_url, scout_markdown, scout_scope_json, prospect_narrative, prospect_bridge_line; generate-outreach-email.ts updates outreach_* + gmail_draft_id, and mints/replaces share_token + share_expires_at when missing or expired (the drafted email embeds the share URL)
 
 ---
 
@@ -986,8 +991,9 @@ Server-side view computing position changes from `ranking_snapshots`.
 | `scout-config` | `write_config` | `/scout-config` | `{domain, config}` | `{ok}` |
 | `scout-config` | `trigger_scout` | `/trigger-pipeline` | `{domain}` | `{ok}` or `{status:'pipeline_already_running'}` |
 | `scout-config` | `read_report` | `/scout-report` | `{domain}` | `{markdown, scope, date, narrative}` |
-| `scout-config` | `generate_share_token` | (Supabase-only) | `{prospect_id}` | `{token, share_url, domain, name}` |
-| `scout-config` | `get_share_report` | (Supabase-only, **no auth**) | `{token}` | `{prospect, markdown, scope, narrative}` |
+| `scout-config` | `generate_share_token` | (Supabase-only) | `{prospect_id}` | `{token, share_url, expires_at, domain, name}` — also sets `share_expires_at = now()+14d` |
+| `scout-config` | `get_share_report` | (Supabase-only, **no auth**) | `{token}` | `{prospect, scope, narrative, bridge_line, booking_available}`; 410 `{error:'expired'}` past `share_expires_at`; logs first/last_viewed_at + view_count on hit |
+| `scout-config` | `log_booking_intent` | (Supabase-only, **no auth**) | `{token}` | `{redirect: BOOKING_URL}` (secret; Google Calendar link); stamps `booking_intent_at` (first hit); 410 when expired |
 | `pipeline-controls` | `recanonicalize` | `/recanonicalize` | `{domain, email}` | `{ok}` |
 | `pipeline-controls` | `track_rankings` | `/track-rankings` | `{domain, email, force: true}` | `{ok}` |
 | `pipeline-controls` | `track_gsc` | `/track-gsc` | `{domain, email}` | `{ok}` |

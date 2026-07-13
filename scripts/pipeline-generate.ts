@@ -27,6 +27,7 @@ import { embedAuditKeywords } from './embed-keywords.js';
 import { embedBatch, cosineSimilarity } from '../src/embeddings/index.js';
 import type { EmbeddingResult } from '../src/embeddings/index.js';
 import { formatRevenueOpportunity } from '../src/agents/gap/format-revenue.js';
+import { extractBridgeLine } from '../src/pipeline/bridge-line.js';
 import {
   buildSerpCompositionEntry,
   buildSerpCompositionBlock,
@@ -5948,8 +5949,11 @@ REMINDER: Your response IS the report — start with "# Scout Report". No preamb
 
   // Generate prospect narrative (non-fatal)
   let narrativeContent: string | null = null;
+  let bridgeLineContent: string | null = null;
   try {
-    narrativeContent = await generateProspectNarrative(domain, reportContent, scopeData, scoutDir, Object.fromEntries(topicMaxCpc));
+    const result = await generateProspectNarrative(domain, reportContent, scopeData, scoutDir, Object.fromEntries(topicMaxCpc));
+    narrativeContent = result.narrative;
+    bridgeLineContent = result.bridgeLine;
   } catch (err: any) {
     console.warn(`  [WARN] Prospect narrative generation failed: ${err.message}`);
   }
@@ -5966,6 +5970,7 @@ REMINDER: Your response IS the report — start with "# Scout Report". No preamb
       scout_markdown: reportContent,
       scout_scope_json: scopeData,
       prospect_narrative: narrativeContent,
+      prospect_bridge_line: bridgeLineContent,
     })
     .eq('id', prospect.id);
 
@@ -6069,12 +6074,16 @@ If Service Coverage data is provided and shows gaps across multiple service line
 ## What a Full Analysis Would Reveal
 [ONE paragraph, max 3 sentences. Name 2-3 things the full audit covers (technical issues slowing the site, competitor strategy, revenue-per-keyword modeling). End with one forward-looking sentence. Do NOT list more than 3 items.]
 
+Then, after the narrative, output exactly one final line in this format (it is extracted before the narrative is stored — it is NOT part of the narrative document):
+
+BRIDGE_LINE: [One or two sentences, first-person singular ("I"), on a single line. Bridge from THIS prospect's sharpest specific finding (name a real service, city, or number from their data) to why a systematic approach is the logical next step. No greeting, no call-to-action, no "book a call" — it renders between their report and the "What Forge Growth Does" section on the shared page, easing the transition out of their data.]
+
 STYLE RULES:
 - Avoid em dashes (—). Use periods, commas, or restructure sentences instead. One em dash per section maximum.
 - Write short, direct sentences. Vary sentence length naturally.
 - No filler phrases like "it's worth noting" or "the reality is."
 
-REMINDER: Your response IS the narrative — start with "# Where ${businessName} Stands Online". No preamble, no narration. Write for a business owner, not an SEO professional.`;
+REMINDER: Your response IS the narrative — start with "# Where ${businessName} Stands Online". No preamble, no narration. Write for a business owner, not an SEO professional. End with the single BRIDGE_LINE: line.`;
 }
 
 async function generateProspectNarrative(
@@ -6083,19 +6092,25 @@ async function generateProspectNarrative(
   scopeJson: Record<string, any>,
   outputDir: string,
   topicMaxCpc?: Record<string, number>,
-): Promise<string> {
+): Promise<{ narrative: string; bridgeLine: string | null }> {
   console.log('\n--- Prospect Narrative ---');
 
   const prompt = buildProspectNarrativePrompt(scoutReport, scopeJson, topicMaxCpc);
-  const narrative = await callClaude(prompt, { model: 'sonnet', phase: 'prospect_narrative' });
+  const raw = await callClaude(prompt, { model: 'sonnet', phase: 'prospect_narrative' });
+  const { narrative, bridgeLine } = extractBridgeLine(raw);
 
   const outputPath = path.join(outputDir, 'prospect-narrative.md');
   fs.writeFileSync(outputPath, narrative, 'utf-8');
+  if (bridgeLine) {
+    fs.writeFileSync(path.join(outputDir, 'prospect-bridge-line.txt'), bridgeLine, 'utf-8');
+  } else {
+    console.warn('  [WARN] No BRIDGE_LINE in narrative output — share page will use generic seam copy');
+  }
 
   validateArtifact(outputPath, 'Prospect narrative', 300);
   console.log(`  Prospect narrative: ${(fs.statSync(outputPath).size / 1024).toFixed(1)}KB`);
 
-  return narrative;
+  return { narrative, bridgeLine };
 }
 
 // ============================================================

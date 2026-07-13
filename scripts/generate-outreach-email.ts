@@ -24,6 +24,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { callClaude, PHASE_MAX_TOKENS } from './anthropic-client.js';
 import { loadEnv, createSb, parseFlags, AUDITS_BASE } from './analysis-shared.js';
 import { getDelegatedUserAccessToken } from './google-auth.js';
@@ -41,6 +42,10 @@ PHASE_MAX_TOKENS['outreach_email'] = 2048;
 const FIT_THRESHOLD_MONTHLY = 2500;
 
 const DEFAULT_SENDER = 'matt@forgegrowth.ai';
+
+// Share links live on the dashboard origin (public token route).
+const DEFAULT_DASHBOARD_URL = 'https://app.forgegrowth.ai';
+const SHARE_LINK_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -75,6 +80,8 @@ interface ProspectRow {
   prospect_narrative: string | null;
   scout_scope_json: OutreachScope | null;
   gmail_draft_id: string | null;
+  share_token: string | null;
+  share_expires_at: string | null;
 }
 
 // ── Data loading (disk first, DB fallback) ───────────────────
@@ -148,6 +155,7 @@ function buildPrompt(
   variant: Variant,
   addressable: number | null,
   contactName: string | null,
+  shareUrl: string,
 ): string {
   const businessName = scope.business_type || scope.domain;
   const gs = scope.gap_summary;
@@ -160,18 +168,22 @@ function buildPrompt(
 - Basis: ${ra.value_label}${ra.basis ? ` — ${ra.basis}` : ''}`
       : '';
 
+  const linkRule = `- Include this exact URL once, on its own sentence, as plain text (no markdown, no link text wrapping, no shorteners): ${shareUrl}
+  Frame it as their prepared report, e.g. "I put together a short scouting report on your search presence: <url>". The report is the deliverable the email promises — the email's only job is to earn that click.
+- Exactly one URL in the entire email. No other links.`;
+
   const variantInstructions =
     variant === 'pitch'
       ? `Write a PITCH email: 100-140 words.
 - The first two sentences must contain one concrete, quantified hook pulled from the data (e.g. a specific search gap or the searches-per-month they are missing).
 - One line of credibility framing (Matt runs search-growth analysis for local service businesses; do not invent client names or results).
-- Close with a soft CTA: worth a 15-minute call?
-- Do NOT include any links or URLs.`
+${linkRule}
+- Close with a soft CTA: worth a 15-minute call? (The report page has a booking link — do not put a second URL in the email.)`
       : `Write a COURTESY NOTE email: 80-120 words.
 - Be honest: we ran the numbers and their search gap is modest — probably not worth paying an agency.
 - Point out the one or two highest-value things from the data they could do themselves.
-- No sales pitch, no CTA beyond "happy to point you in the right direction if useful."
-- Do NOT include any links or URLs.`;
+${linkRule}
+- No sales pitch, no CTA beyond "happy to point you in the right direction if useful."`;
 
   return `You are writing a short cold outreach email from Matt, founder of Forge Growth (a search-growth consultancy for local service businesses), to ${contactName || 'the owner'} of ${businessName}. The recipient is skeptical and will give this email a 30-second read at most.
 
@@ -223,8 +235,9 @@ async function generateEmail(
   variant: Variant,
   addressable: number | null,
   contactName: string | null,
+  shareUrl: string,
 ): Promise<{ subject: string; body: string }> {
-  const prompt = buildPrompt(scope, narrative, variant, addressable, contactName);
+  const prompt = buildPrompt(scope, narrative, variant, addressable, contactName, shareUrl);
   const output = await callClaude(prompt, { model: 'sonnet', phase: 'outreach_email' });
 
   const subjectMatch = output.match(/---SUBJECT---([\s\S]*?)---BODY---/);
@@ -265,7 +278,7 @@ async function main() {
   const { data: prospect, error } = await sb
     .from('prospects')
     .select(
-      'id, name, domain, status, contact_email, contact_name, prospect_narrative, scout_scope_json, gmail_draft_id',
+      'id, name, domain, status, contact_email, contact_name, prospect_narrative, scout_scope_json, gmail_draft_id, share_token, share_expires_at',
     )
     .eq('domain', domain)
     .maybeSingle();
@@ -301,7 +314,31 @@ async function main() {
     console.log('  Revenue estimate suppressed/absent — pitch will carry no revenue numbers.');
   }
 
-  // 5. Generate copy
+  // 5. Ensure a live share link — the email's one URL. A missing token gets
+  //    minted here; an expired one gets a fresh token so the drafted link
+  //    can't be dead on arrival. (Expiry restarts again at Mark-sent.)
+  let shareToken = row.share_token;
+  const tokenExpired =
+    !!row.share_expires_at && new Date(row.share_expires_at).getTime() < Date.now();
+  if (!shareToken || tokenExpired) {
+    shareToken = randomUUID();
+    const mintedAt = new Date();
+    const { error: tokenError } = await sb
+      .from('prospects')
+      .update({
+        share_token: shareToken,
+        share_token_created_at: mintedAt.toISOString(),
+        share_expires_at: new Date(mintedAt.getTime() + SHARE_LINK_TTL_MS).toISOString(),
+        updated_at: mintedAt.toISOString(),
+      })
+      .eq('id', row.id);
+    if (tokenError) throw new Error(`Failed to mint share token: ${tokenError.message}`);
+    console.log(`  ${tokenExpired ? 'Expired share token replaced' : 'Share token minted'} (expires in 14 days)`);
+  }
+  const dashboardUrl = (env.DASHBOARD_URL || process.env.DASHBOARD_URL || DEFAULT_DASHBOARD_URL).replace(/\/+$/, '');
+  const shareUrl = `${dashboardUrl}/share/scout/${shareToken}`;
+
+  // 6. Generate copy
   console.log(`  Generating ${variant} email for ${row.name || domain}...`);
   const { subject, body } = await generateEmail(
     scope,
@@ -309,6 +346,7 @@ async function main() {
     variant,
     addressable,
     row.contact_name,
+    shareUrl,
   );
 
   // 6. Persist copy first — the DB row is the durable output; Gmail is a
