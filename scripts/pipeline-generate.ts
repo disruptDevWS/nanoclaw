@@ -1030,57 +1030,14 @@ function buildSyntheticRankedKeywords(volumeResults: BulkVolumeResult[]): any {
 
 // ============================================================
 // ── Near-duplicate keyword deduplication ──
-
-/** Normalize a keyword into a canonical key for dedup. Suffix-only state stripping. */
-function buildCanonicalKey(kw: string, stateNames: Set<string>): string {
-  const tokens = kw.toLowerCase().trim().split(/\s+/);
-  // Strip ONLY the last token if it exactly matches a state name
-  if (tokens.length > 1 && stateNames.has(tokens[tokens.length - 1])) {
-    tokens.pop();
-  }
-  return tokens.sort().join(' ');
-}
-
-/** Deduplicate ranked keywords: best position wins, tie-break by highest volume. */
-function deduplicateKeywords<T extends { keyword: string; position: number; volume: number }>(
-  keywords: T[],
-  stateNames: string[],
-): T[] {
-  const stateSet = new Set(stateNames.map((s) => s.toLowerCase()));
-  const map = new Map<string, T>();
-  for (const kw of keywords) {
-    const key = buildCanonicalKey(kw.keyword, stateSet);
-    const existing = map.get(key);
-    if (!existing) {
-      map.set(key, kw);
-    } else if (
-      kw.position < existing.position ||
-      (kw.position === existing.position && kw.volume > existing.volume)
-    ) {
-      map.set(key, kw);
-    }
-  }
-  return [...map.values()];
-}
-
-/** Deduplicate bulk volume results: highest volume wins. */
-function deduplicateVolumeResults(
-  results: BulkVolumeResult[],
-  stateNames: string[],
-): BulkVolumeResult[] {
-  const stateSet = new Set(stateNames.map((s) => s.toLowerCase()));
-  const map = new Map<string, BulkVolumeResult>();
-  for (const r of results) {
-    const key = buildCanonicalKey(r.keyword, stateSet);
-    const existing = map.get(key);
-    if (!existing || r.volume > existing.volume) {
-      map.set(key, r);
-    }
-  }
-  return [...map.values()];
-}
-
-// ── Scout top-opportunity hygiene (recipient-facing rows) ──
+//
+// ONE canonical key (canonicalKeywordKey) is used for every scout keyword
+// comparison: within-set dedup of ranked + opportunity keywords, the
+// gap-matrix cross-join, and the recipient-facing variant collapse. Google
+// treats word-order, state-qualifier, plural, and -ing/-er variants as the
+// same query ("idaho falls plumbing" / "plumber idaho falls"), so a prospect
+// must never see one variant ranked and another called a gap. Over-merging
+// errs conservative: worst case the report claims slightly less opportunity.
 
 const ALL_STATE_TOKENS = new Set([
   ...Object.keys(US_STATE_LOCATION_CODES).map((s) => s.toLowerCase()),
@@ -1088,39 +1045,102 @@ const ALL_STATE_TOKENS = new Set([
 ]);
 
 /**
- * Canonical key for recipient-facing opportunity rows. More aggressive than
- * buildCanonicalKey: drops state tokens (full names and abbreviations) anywhere
- * in the keyword and normalizes simple plurals, so "locksmith boise",
- * "locksmith boise id", "locksmiths boise idaho", and "boise idaho locksmith"
- * collapse to a single row instead of four near-identical ones.
+ * Stem a keyword token to its service root: plurals first, then -ing/-er
+ * morphology, so "plumbers"/"plumber"/"plumbing" → "plumb" and
+ * "heating"/"heater" → "heat". Length floors keep short words intact
+ * ("water", "sewer" are unchanged). Stems are join keys, never displayed.
  */
-function buildOpportunityKey(kw: string): string {
+function stemKeywordToken(t: string): string {
+  if (t.length > 3 && t.endsWith('s') && !t.endsWith('ss')) t = t.slice(0, -1);
+  if (t.length >= 6 && t.endsWith('ing')) return t.slice(0, -3);
+  if (t.length >= 6 && t.endsWith('er')) return t.slice(0, -2);
+  return t;
+}
+
+/**
+ * Canonical key for scout keyword identity. Drops state tokens (full names
+ * and abbreviations) anywhere in the keyword, normalizes "&" to "and", stems
+ * plurals and -ing/-er forms, and sorts tokens, so "locksmith boise",
+ * "locksmiths boise idaho", "boise locksmith", and "boise locksmithing"
+ * collapse to a single key.
+ */
+function canonicalKeywordKey(kw: string): string {
   const tokens = kw
     .toLowerCase()
     .trim()
     .split(/[\s-]+/) // hyphens too: "tri-valley" and "tri valley" are the same variant
-    .filter((t) => !ALL_STATE_TOKENS.has(t))
-    .map((t) => (t.length > 3 && t.endsWith('s') && !t.endsWith('ss') ? t.slice(0, -1) : t));
+    .map((t) => (t === '&' ? 'and' : t))
+    .filter((t) => t.length > 0 && !ALL_STATE_TOKENS.has(t))
+    .map(stemKeywordToken);
   return tokens.sort().join(' ') || kw.toLowerCase().trim();
 }
+
+/**
+ * Deduplicate ranked keywords: best position wins, tie-break by highest
+ * volume. Survivors carry variant_count so downstream rows can show how many
+ * spellings were merged.
+ */
+function deduplicateKeywords<T extends { keyword: string; position: number; volume: number }>(
+  keywords: T[],
+): T[] {
+  const map = new Map<string, T & { variant_count: number }>();
+  for (const kw of keywords) {
+    const key = canonicalKeywordKey(kw.keyword);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...kw, variant_count: 1 });
+    } else {
+      existing.variant_count++;
+      if (
+        kw.position < existing.position ||
+        (kw.position === existing.position && kw.volume > existing.volume)
+      ) {
+        map.set(key, { ...kw, variant_count: existing.variant_count });
+      }
+    }
+  }
+  return [...map.values()];
+}
+
+/** Deduplicate bulk volume results: highest volume wins (volumes are NOT summed — variants double-count the same demand). */
+function deduplicateVolumeResults(results: BulkVolumeResult[]): BulkVolumeResult[] {
+  const map = new Map<string, BulkVolumeResult & { variant_count: number }>();
+  for (const r of results) {
+    const key = canonicalKeywordKey(r.keyword);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...r, variant_count: 1 });
+    } else {
+      existing.variant_count++;
+      if (r.volume > existing.volume) {
+        map.set(key, { ...r, variant_count: existing.variant_count });
+      }
+    }
+  }
+  return [...map.values()];
+}
+
+// ── Scout top-opportunity hygiene (recipient-facing rows) ──
 
 /**
  * Collapse near-variant keywords into one row each. Input must be pre-sorted by
  * volume descending: the first occurrence (highest volume) becomes the
  * representative row — volumes are deliberately NOT summed, since keyword
- * variants largely double-count the same demand.
+ * variants largely double-count the same demand. Pre-existing variant_count
+ * from upstream dedup passes is accumulated, not reset.
  */
 function collapseOpportunityVariants<T extends { keyword: string; volume: number }>(
   entries: T[],
 ): Array<T & { variant_count: number }> {
   const map = new Map<string, T & { variant_count: number }>();
   for (const e of entries) {
-    const key = buildOpportunityKey(e.keyword);
+    const key = canonicalKeywordKey(e.keyword);
+    const inc = (e as { variant_count?: number }).variant_count ?? 1;
     const existing = map.get(key);
     if (!existing) {
-      map.set(key, { ...e, variant_count: 1 });
+      map.set(key, { ...e, variant_count: inc });
     } else {
-      existing.variant_count++;
+      existing.variant_count += inc;
     }
   }
   return [...map.values()];
@@ -1276,9 +1296,12 @@ async function deduplicateByEmbedding<T extends { keyword: string; position?: nu
         if (posA !== posB) return posA - posB;
         return items[b].volume - items[a].volume;
       });
-      // Keep first (best), remove rest
+      // Keep first (best), remove rest — representative absorbs their variant counts
+      const rep = items[comp[0]] as T & { variant_count?: number };
       for (let i = 1; i < comp.length; i++) {
         removed.add(comp[i]);
+        const dupCount = (items[comp[i]] as T & { variant_count?: number }).variant_count ?? 1;
+        rep.variant_count = (rep.variant_count ?? 1) + dupCount;
       }
     }
 
@@ -1290,6 +1313,56 @@ async function deduplicateByEmbedding<T extends { keyword: string; position?: nu
   } catch (err: any) {
     console.log(`  Warning: Embedding dedup failed (${err.message}) — using string dedup only`);
     return items;
+  }
+}
+
+/**
+ * Cross-set semantic join for the gap matrix: map opportunity keywords that
+ * have no canonical-key match in the ranked set to a ranked keyword whose
+ * embedding says it is the same query (e.g. "idaho falls plumbing company" vs
+ * "plumber idaho falls"). Prevents calling a keyword a gap when the site
+ * already ranks for a paraphrase of it.
+ *
+ * Returns a map of opp keyword (lowercased) → matched ranked item.
+ * Non-fatal: returns an empty map on any embedding failure.
+ */
+async function matchOpportunitiesToRanked<R extends { keyword: string; position: number }>(
+  oppKeywords: string[],
+  ranked: R[],
+  domain: string,
+  threshold: number = SCOUT_EMBEDDING_DEDUP_THRESHOLD,
+): Promise<Map<string, R>> {
+  const out = new Map<string, R>();
+  if (oppKeywords.length === 0 || ranked.length === 0) return out;
+  try {
+    const embedItems = [...oppKeywords, ...ranked.map((r) => r.keyword)].map((k) => ({
+      text: k,
+      contentType: 'keyword' as const,
+      contentId: `scout:${domain}:${k.toLowerCase().trim().replace(/\s+/g, '_')}`,
+    }));
+    const embeddings = await embedBatch(embedItems);
+    const oppVecs = embeddings.slice(0, oppKeywords.length);
+    const rankedVecs = embeddings.slice(oppKeywords.length);
+    for (let i = 0; i < oppKeywords.length; i++) {
+      const ov = oppVecs[i]?.embedding;
+      if (!ov) continue;
+      let best: R | null = null;
+      let bestSim = threshold;
+      for (let j = 0; j < ranked.length; j++) {
+        const rv = rankedVecs[j]?.embedding;
+        if (!rv) continue;
+        const sim = cosineSimilarity(ov, rv);
+        if (sim >= bestSim) {
+          bestSim = sim;
+          best = ranked[j];
+        }
+      }
+      if (best) out.set(oppKeywords[i].toLowerCase(), best);
+    }
+    return out;
+  } catch (err: any) {
+    console.log(`  Warning: cross-set ranked match failed (${err.message}) — canonical-key join only`);
+    return out;
   }
 }
 
@@ -5309,9 +5382,8 @@ async function runScout(sb: SupabaseClient, domain: string, prospectConfigPath: 
   }
 
   // Deduplicate near-variant ranked keywords (e.g., "plumber boise" vs "plumber boise idaho")
-  const stateNames = config.target_geos.map((g) => g.state).filter(Boolean);
   const preDedup = rankedKeywords.length;
-  rankedKeywords = deduplicateKeywords(rankedKeywords, stateNames);
+  rankedKeywords = deduplicateKeywords(rankedKeywords);
   if (rankedKeywords.length < preDedup) {
     console.log(`  Deduped ranked keywords: ${preDedup} → ${rankedKeywords.length} (removed ${preDedup - rankedKeywords.length} near-duplicates)`);
   }
@@ -5478,7 +5550,7 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
 
     // Deduplicate near-variant opportunity keywords
     const preOppDedup = opportunityMap.length;
-    opportunityMap = deduplicateVolumeResults(opportunityMap, stateNames);
+    opportunityMap = deduplicateVolumeResults(opportunityMap);
     if (opportunityMap.length < preOppDedup) {
       console.log(`  Deduped opportunity map: ${preOppDedup} → ${opportunityMap.length} (removed ${preOppDedup - opportunityMap.length} near-duplicates)`);
     }
@@ -5498,23 +5570,48 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
     volume: number;
     cpc: number;
     cpc_inferred?: boolean;
+    variant_count?: number;
   }
 
   const gapMatrix: GapEntry[] = [];
+
+  // Both sets join on the canonical key, NOT the raw string: "furnace repair
+  // medford" must find the ranked "furnace repair medford or" or the matrix
+  // reports a gap for a keyword the site already ranks for.
   const rankedLookup = new Map<string, typeof rankedKeywords[0]>();
   for (const kw of rankedKeywords) {
-    rankedLookup.set(kw.keyword.toLowerCase(), kw);
+    const key = canonicalKeywordKey(kw.keyword);
+    const existing = rankedLookup.get(key);
+    if (!existing || kw.position < existing.position) rankedLookup.set(key, kw);
   }
 
-  const opportunityLookup = new Map<string, BulkVolumeResult>();
+  const opportunityKeys = new Set<string>();
   for (const opp of opportunityMap) {
-    opportunityLookup.set(opp.keyword.toLowerCase(), opp);
+    opportunityKeys.add(canonicalKeywordKey(opp.keyword));
   }
+
+  // Canonical-key misses get an embedding pass so morphology/paraphrase
+  // variants ("idaho falls plumbing company" vs "plumber idaho falls") still
+  // join instead of surfacing as phantom gaps.
+  const keyMisses = opportunityMap.filter((o) => !rankedLookup.has(canonicalKeywordKey(o.keyword)));
+  const embeddingMatches = await matchOpportunitiesToRanked(
+    keyMisses.map((o) => o.keyword),
+    rankedKeywords,
+    domain,
+  );
+  if (embeddingMatches.size > 0) {
+    console.log(`  Cross-set join: ${embeddingMatches.size} opportunity keyword(s) matched to existing rankings by embedding`);
+  }
+
+  // Ranked keywords already represented by an opportunity row (via embedding
+  // match) must not be re-added as standalone rows below.
+  const consumedRanked = new Set<string>();
 
   // Cross-reference: for each opportunity keyword, check ranking
   for (const opp of opportunityMap) {
     const kwLower = opp.keyword.toLowerCase();
-    const ranked = rankedLookup.get(kwLower);
+    const ranked = rankedLookup.get(canonicalKeywordKey(opp.keyword)) ?? embeddingMatches.get(kwLower);
+    if (ranked) consumedRanked.add(ranked.keyword.toLowerCase());
     const topicMatch = matchKeywordToTopic(kwLower);
 
     let status: GapEntry['status'];
@@ -5536,23 +5633,24 @@ Group related keywords into single topics. YOUR ENTIRE RESPONSE IS RAW JSON — 
       position,
       volume: opp.volume,
       cpc: opp.cpc,
+      variant_count: (opp as BulkVolumeResult & { variant_count?: number }).variant_count ?? 1,
     });
   }
 
-  // Add ranked keywords that weren't in opportunity map
+  // Add ranked keywords that weren't matched to any opportunity row
   for (const kw of topicRankings) {
-    const kwLower = kw.keyword.toLowerCase();
-    if (!opportunityLookup.has(kwLower)) {
-      const topicMatch = matchKeywordToTopic(kwLower);
-      gapMatrix.push({
-        keyword: kw.keyword,
-        topic: topicMatch?.label ?? 'Other',
-        status: kw.position <= 10 ? 'defending' : kw.position <= 30 ? 'weak' : 'gap',
-        position: kw.position,
-        volume: kw.volume,
-        cpc: kw.cpc,
-      });
-    }
+    if (opportunityKeys.has(canonicalKeywordKey(kw.keyword))) continue;
+    if (consumedRanked.has(kw.keyword.toLowerCase())) continue;
+    const topicMatch = matchKeywordToTopic(kw.keyword.toLowerCase());
+    gapMatrix.push({
+      keyword: kw.keyword,
+      topic: topicMatch?.label ?? 'Other',
+      status: kw.position <= 10 ? 'defending' : kw.position <= 30 ? 'weak' : 'gap',
+      position: kw.position,
+      volume: kw.volume,
+      cpc: kw.cpc,
+      variant_count: (kw as typeof kw & { variant_count?: number }).variant_count ?? 1,
+    });
   }
 
   // Sort by volume descending within each topic
