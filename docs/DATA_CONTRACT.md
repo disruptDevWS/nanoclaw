@@ -861,7 +861,7 @@ Token-keyed engagement log for the Scout share funnel — the ad-blocker-resista
 | `meta` | Edge fn | analysis | jsonb overflow (percent, seconds, cta_location, `client_ts`) |
 | `occurred_at` | Edge fn | analysis | server receipt time (source of truth); client ts kept in `meta.client_ts` |
 
-RLS: `super_admin_full_access` (mirrors prospects). Service role bypasses for edge-fn writes; anon has no policy. **Writer**: the `scout-engagement` edge fn, POSTed to by the Scout share page (`src/lib/scoutTracking.ts`) — a "small fetch in the app" dual-write, since the SPA has no GTM container yet.
+RLS: `super_admin_full_access` (mirrors prospects). Service role bypasses for edge-fn writes; anon has no policy. **Writer**: the `scout-engagement` edge fn, POSTed to by the Scout share page (`src/lib/scoutTracking.ts`) — a "small fetch in the app" dual-write. **Dashboard read-view**: `/scout/engagement` (`src/pages/ScoutEngagement.tsx` via `useScoutEngagement`, direct RLS read, paginated past 1k) — funnel + per-variant rollup + per-prospect activity. Also mirrored to GA4 property `G-XC149NH2L1` via GTM container `GTM-M8LL6LG3`.
 
 ---
 
