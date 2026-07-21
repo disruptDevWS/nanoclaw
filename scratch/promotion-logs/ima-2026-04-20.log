@@ -1,0 +1,300 @@
+=== Post-Audit Pipeline: idahomedicalacademy.com (2026-04-20) [mode=full] ===
+Pipeline status → audit (audit 08409ae8-28ab-4a34-b92c-2c92f73e5af7)
+  Resuming from Phase 3c (skipping earlier phases)
+  [SKIP] Phase 1: Dwight
+  [SKIP] Phase 1a: Verify Dwight
+  [SKIP] Phase 1c: GSC Data Fetch
+  [SKIP] Phase 1b: Strategy Brief
+  [SKIP] Phase 2: Keyword Research
+  [SKIP] Phase 3: Jim
+  [SKIP] Phase 3b: Sync Jim
+
+--- Phase 3c: Canonicalize Topics (Claude Sonnet) [canonicalize-mode=hybrid] ---
+  Audit: 08409ae8-28ab-4a34-b92c-2c92f73e5af7 (running)
+  [canonicalize] Mode: hybrid
+  [canonicalize] 1000 keywords to classify
+  [canonicalize] Split into 4 batches (250, 250, 250, 250 keywords)
+  [canonicalize] Processing batch 1/4 (250 keywords)...
+  [truncation] Phase "canonicalize" hit max_tokens (4096). Last 100 chars: … { "index": 191, "is_brand": false, "intent_type": "commercial" },
+        { "index": 192, "is_brand
+  [canonicalize] Batch 1: 8 groups identified
+  [canonicalize] Processing batch 2/4 (250 keywords)...
+  [truncation] Phase "canonicalize" hit max_tokens (4096). Last 100 chars: …ent_type": "commercial" },
+        { "index": 225, "is_brand": false, "intent_type": "transactional"
+  [canonicalize] Batch 2: 8 groups identified
+  [canonicalize] Processing batch 3/4 (250 keywords)...
+  [truncation] Phase "canonicalize" hit max_tokens (4096). Last 100 chars: …
+        { "index": 164, "is_brand": false, "intent_type": "informational" },
+        { "index": 166
+  [canonicalize] Batch 3: 5 groups identified
+  [canonicalize] Processing batch 4/4 (250 keywords)...
+  [truncation] Phase "canonicalize" hit max_tokens (4096). Last 100 chars: …": 36, "is_brand": false, "intent_type": "informational" },
+        { "index": 37, "is_brand": false
+  [canonicalize] Batch 4: 13 groups identified
+  [canonicalize] Flagging 31 near-me keywords
+  [canonicalize] Updated 395/1000 keywords across 29 topics
+  [hybrid] Processing 1000 keywords
+  [hybrid] 64 existing canonical topics
+  [hybrid/pre-cluster] 1000 variants → 990 unique hashes
+  [hybrid/pre-cluster] Computed centroids for 64/64 topics
+  [hybrid/pre-cluster] Decisions: 85 auto-assigned, 42 size-gated, 232 ambiguous, 631 new-topic, 0 prior-locked
+  [hybrid/arbitrator] Arbitrating 905 cases via Sonnet (batch size 40)
+  [hybrid/arbitrator] Batch 1/23 (40 cases)
+  [hybrid/arbitrator] Batch 2/23 (40 cases)
+  [hybrid/arbitrator] Batch 3/23 (40 cases)
+  [hybrid/arbitrator] Batch 4/23 (40 cases)
+  [hybrid/arbitrator] Batch 5/23 (40 cases)
+  [hybrid/arbitrator] Batch 6/23 (40 cases)
+  [hybrid/arbitrator] Batch 7/23 (40 cases)
+  [hybrid/arbitrator] Batch 8/23 (40 cases)
+  [hybrid/arbitrator] Batch 9/23 (40 cases)
+  [hybrid/arbitrator] Batch 10/23 (40 cases)
+  [hybrid/arbitrator] Batch 11/23 (40 cases)
+  [hybrid/arbitrator] Batch 12/23 (40 cases)
+  [hybrid/arbitrator] Batch 13/23 (40 cases)
+  [hybrid/arbitrator] Batch 14/23 (40 cases)
+  [hybrid/arbitrator] Batch 15/23 (40 cases)
+  [hybrid/arbitrator] Batch 16/23 (40 cases)
+  [hybrid/arbitrator] Batch 17/23 (40 cases)
+  [hybrid/arbitrator] Batch 18/23 (40 cases)
+  [hybrid/arbitrator] Batch 19/23 (40 cases)
+  [hybrid/arbitrator] Batch 20/23 (40 cases)
+  [hybrid/arbitrator] Batch 21/23 (40 cases)
+  [hybrid/arbitrator] Batch 22/23 (40 cases)
+  [hybrid/arbitrator] Batch 23/23 (25 cases)
+  [hybrid/arbitrator] Resolved 905/905 cases
+  [hybrid/persist] Updated 1000/1000 keywords → primary columns (0 failures)
+  [canonicalize] Hybrid path completed: 85 auto-assigned, 905 arbitrated, 0 prior-locked
+
+--- Phase 3d: Rebuild Clusters (post-canonicalize) ---
+
+Sync Bridge — idahomedicalacademy.com
+==================================================
+User: matt@forgegrowth.ai (6cd46a54-4449-44c4-a632-bcf5ee12c106)
+Audit ID: 08409ae8-28ab-4a34-b92c-2c92f73e5af7
+
+--- REBUILD CLUSTERS ---
+  [rebuild] 1000 keywords with canonical_key, 64 clusters, 20 near-miss
+  [rebuild] Inserted 64 clusters
+  [rebuild] Near-miss revenue: $840 / $3950.63 / $9187.5 per mo
+  [rebuild] TAR (pos 5): $581664 / $2735638.5 / $6361950 per mo
+
+Cluster rebuild complete.
+Pipeline status → architecture (audit 08409ae8-28ab-4a34-b92c-2c92f73e5af7)
+
+--- Phase 4: Competitor SERP Analysis ---
+  Audit: 08409ae8-28ab-4a34-b92c-2c92f73e5af7 (running)
+  Loading keywords from Supabase...
+  690 eligible keywords across 100 topics (processing top 20)
+    [1/20] Medical Assistant Program: 35 competitors (5 SERP calls)
+    [2/20] CPR Training & Certification: 19 competitors (4 SERP calls)
+    [3/20] EMT Course: 36 competitors (5 SERP calls)
+    [4/20] Medical Coding: 26 competitors (5 SERP calls)
+    [5/20] NREMT Test Prep: 19 competitors (3 SERP calls)
+    [6/20] Stop the Bleed Training: 17 competitors (5 SERP calls)
+    [7/20] BLS CPR Certification: 14 competitors (5 SERP calls)
+    [8/20] EMT Basic Certification: 19 competitors (5 SERP calls)
+    [9/20] CPR & First Aid Training: 23 competitors (5 SERP calls)
+    [10/20] First Aid Training: 22 competitors (5 SERP calls)
+    [11/20] Pharmacy Technician Program: 22 competitors (3 SERP calls)
+    [12/20] PALS Certification: 18 competitors (3 SERP calls)
+    [13/20] ACLS Certification: 20 competitors (5 SERP calls)
+    [14/20] AED Training: 25 competitors (5 SERP calls)
+    [15/20] Wilderness First Aid Course: 28 competitors (5 SERP calls)
+    [16/20] PHTLS / Prehospital Trauma Life Support: 20 competitors (5 SERP calls)
+    [17/20] Phlebotomy Technician Course: 22 competitors (5 SERP calls)
+    [18/20] Medical Assistant Training: 17 competitors (2 SERP calls)
+    [19/20] Advanced EMT (AEMT) Course: 28 competitors (5 SERP calls)
+    [20/20] Group Classes: 14 competitors (3 SERP calls)
+  Competitor analysis complete: 20 topics, 88 SERP API calls
+  Classifying 314 competitor domains (industry: medical_training, market: Idaho)...
+    Classified chunk 1: 80 domains
+    Classified chunk 2: 80 domains
+    Classified chunk 3: 80 domains
+    Classified chunk 4: 74 domains
+  Classification complete: 314/314 domains updated
+    aggregator: 23, industry_competitor: 114, authority_site: 141, unrelated: 35, brand_confusion: 1
+
+--- Phase 5: Content Gap Analysis ---
+  Audit: 08409ae8-28ab-4a34-b92c-2c92f73e5af7 (running)
+  Gathering competitive data from Supabase...
+  Context: 173 competitor entries, 6 dominance scores, 1000 keywords, 64 clusters, 54 planned pages
+  Generating content gap analysis via Anthropic API...
+  Gap analysis: 12 authority gaps, 8 format gaps, 7 unaddressed, 8 recommendations
+  Written content_gap_analysis.md to audits/idahomedicalacademy.com/research/2026-04-20/
+  Gap analysis complete — snapshot v3, run 890ee6e5-ca8b-41bb-8359-1b216aafa3c4
+--- QA: Gap ---
+  QA PASSED: Gap
+
+--- Phase 6: Michael Architecture ---
+  Audit: 08409ae8-28ab-4a34-b92c-2c92f73e5af7 (failed)
+  Gathering context from disk + Supabase...
+  research_summary.md: using 2026-03-12/ (date fallback from 2026-04-20)
+  research_summary.md: 20537 chars
+  ranked_keywords.json: using 2026-03-12/ (date fallback from 2026-04-20)
+  ranked_keywords.json: 1000 keywords → top 200 for prompt
+  content_gap_analysis.md: 13625 chars
+  internal_all.csv: using 2026-03-12/ (date fallback from 2026-04-20)
+  internal_all.csv: 1 pages
+  semantically_similar_report.csv: using 2026-03-12/ (date fallback from 2026-04-20)
+  semantically_similar_report.csv: 39471 pairs
+  Platform Observations from AUDIT_REPORT.md: 1179 chars
+  Client context loaded: 18 services, 2 out-of-scope items
+  Re-run mode: 1 committed pages, isRerun=true
+  Context loaded: 64 clusters, research=true, keywords=true, gap=true, crawl=true, platform=true, rerun=true
+  Generating architecture blueprint via Anthropic API (sonnet)...
+  Blueprint: 37979 chars
+  WARNING: Blueprint has 22.9% invalid url_slug rows (22 rejected / 74 valid) — retrying...
+  Retry blueprint: 40807 chars
+  ERROR: Blueprint still has 21.1% invalid url_slug rows after retry (23 rejected / 86 valid) — syncMichael will drop these rows
+  Written architecture_blueprint.md to audits/idahomedicalacademy.com/architecture/2026-04-20/
+--- QA: Michael ---
+  QA PASSED: Michael
+
+--- Phase 6.5: Coverage Validation ---
+  Audit: 08409ae8-28ab-4a34-b92c-2c92f73e5af7 (failed)
+  Gap analysis: 13625 chars, Blueprint: 40807 chars
+  Running coverage validation via Anthropic API (sonnet)...
+  Coverage: 22 addressed, 5 partially addressed, 0 unaddressed (of 27 gaps)
+  Written coverage_validation.md to audits/idahomedicalacademy.com/research/2026-04-20/
+  Inserted 27 rows into audit_coverage_validation
+  Validator complete — 22/27 gaps addressed
+
+--- Phase 6b: Sync Michael → Supabase ---
+
+Sync Bridge — idahomedicalacademy.com
+==================================================
+User: matt@forgegrowth.ai (6cd46a54-4449-44c4-a632-bcf5ee12c106)
+Audit ID: 08409ae8-28ab-4a34-b92c-2c92f73e5af7
+
+--- MICHAEL ---
+  [michael] Parsing /home/forgegrowth/forge-os-pipeline/audits/idahomedicalacademy.com/architecture/2026-04-20/architecture_blueprint.md
+  [michael] Extracted 86 architecture pages from tables
+  [michael] Rejected 23 row(s) with invalid url_slug values — see agent_runs.metadata.parse_warnings
+  [michael]   reject: forbidden_punctuation → how-to-become-an-emt-in-idaho, emt-career-hub, emt-salary-idaho, why-you-should-get-emt-certified
+  [michael]   reject: forbidden_punctuation → emt-online-v-hybrid-v-in-person-classes, emt-vs-aemt-idaho, fire-ems-courses/hybrid-emt
+  [michael]   reject: forbidden_punctuation → online-emt-course, fire-ems-courses/emt-boise-campus, emt-seattle, fire-ems-courses/emt-oregon, online-emt-course/cost
+  [michael]   reject: forbidden_punctuation → nremt-recertification-guide, state-licensing-with-nremt, what-to-do-when-your-nremt-has-lapsed, fire-ems-courses/emt-accelerated-recertification-course
+  [michael]   reject: forbidden_punctuation → fire-ems-courses/aemt, emt-vs-aemt-idaho (Silo 1 cross-link)
+  [michael] Re-run scenario: strategic_rerun
+  [michael] Inserted 86 architecture pages
+  [michael] Inserted blueprint (40KB)
+  [michael] Strategic re-run: 1 preserved, 38 updated, 47 new, 33 deprecated (stale), 0 stale-but-committed
+  [michael] Backfilled canonical_key for 39 of 86 pages
+  [michael] Backfilled cluster (silo) for 831 of 1000 keywords
+
+Pipeline status: architecture (unchanged — architecture does not advance)
+
+Sync complete.
+
+--- Phase 6c: Sync Dwight → Supabase ---
+
+Sync Bridge — idahomedicalacademy.com
+==================================================
+User: matt@forgegrowth.ai (6cd46a54-4449-44c4-a632-bcf5ee12c106)
+Audit ID: 08409ae8-28ab-4a34-b92c-2c92f73e5af7
+
+--- DWIGHT ---
+  [dwight] Parsing /home/forgegrowth/forge-os-pipeline/audits/idahomedicalacademy.com/auditor/2026-03-12/internal_all.csv
+  [dwight] Inserted 1 technical pages
+  [dwight] 0 pages with semantic flags
+  [dwight] Parsing /home/forgegrowth/forge-os-pipeline/audits/idahomedicalacademy.com/auditor/2026-03-12/AUDIT_REPORT.md for site-level findings
+  [dwight] Extracted: 10 fixes, 11 agentic signals, 0 schema issues, 0 heading issues, 0 security issues, 0 URL identity issues, 0 over-length titles
+  [dwight] Merging 2 verification correction(s)
+  [dwight]   Corrected fix #2: "No sitemap accessible" → false_positive
+  [dwight]   Corrected fix #1: "No structured data confirmed" → false_positive
+  [dwight]   Corrected fix #1: "`FAQPage` schema absent (unverified)" → false_positive
+
+Pipeline status: architecture (unchanged — audit does not advance)
+
+Sync complete.
+
+--- Phase 6d: Local Presence Diagnostic (GBP + Citations) ---
+
+=== Local Presence Diagnostic: idahomedicalacademy.com (2026-04-20) ===
+
+  Audit: 08409ae8-28ab-4a34-b92c-2c92f73e5af7 (status: failed)
+  City from client_profiles address: Boise
+  Business: "Idaho Medical Academy", Location: Boise, Idaho
+
+--- GBP Lookup ---
+  Fetching GBP listing for "Idaho Medical Academy" in Boise, Idaho...
+  GBP lookup cost: $0.0054
+  GBP found: "Idaho Medical Academy" (confidence: exact, rating: 4.9, reviews: 402)
+  GBP snapshot saved (listing_found: true)
+
+--- Citation Scan (SERP) ---
+  Scanning Apple Maps (maps.apple.com)...
+    Apple Maps: FOUND (NAP mismatch)
+  Scanning Bing Places (bing.com)...
+    Bing Places: not found
+  Scanning Facebook (facebook.com)...
+    Facebook: FOUND (NAP mismatch)
+  Scanning Yelp (yelp.com)...
+    Yelp: FOUND (NAP mismatch)
+  Scanning BBB (bbb.org)...
+    BBB: FOUND (NAP mismatch)
+  Scanning Angi (angi.com)...
+    Angi: FOUND (NAP mismatch)
+  Scanning Thumbtack (thumbtack.com)...
+    Thumbtack: FOUND
+  Scanning Foursquare (foursquare.com)...
+    Foursquare: not found
+  Scanning Yellow Pages (yellowpages.com)...
+    Yellow Pages: FOUND (NAP mismatch)
+  Scanning Manta (manta.com)...
+    Manta: FOUND (NAP consistent)
+
+  Citations: 9/11 found, 2 NAP-consistent
+
+  Done. Local presence snapshot 2026-04-20 for idahomedicalacademy.com complete.
+
+
+--- Client Intelligence Brief ---
+
+=== Client Intelligence Brief: idahomedicalacademy.com ===
+
+--- Loading disk artifacts ---
+  AUDIT_REPORT.md: 12.8KB
+  research_summary.md: not found
+  architecture_blueprint.md: 39.9KB
+  strategy_brief.md: not found
+
+--- Loading Supabase data ---
+  rollup: found
+  clusters: 0
+  gbp: found
+  citations: 20 (17 found)
+
+--- Generating narrative sections (Sonnet) ---
+  exec_summary: 1673 chars
+  technical: 1209 chars
+  revenue: 1262 chars
+  architecture: 1534 chars
+  local_presence: 756 chars
+  next_steps: 1271 chars
+
+--- Building HTML brief ---
+
+  Output: audits/idahomedicalacademy.com/reports/client_brief.html (25.7KB)
+=== Client Brief Complete ===
+
+Pipeline status → complete (audit 08409ae8-28ab-4a34-b92c-2c92f73e5af7)
+
+=== Pipeline Complete [mode=full] ===
+  Phase 1:  Dwight   — DataForSEO OnPage crawl → AUDIT_REPORT.md [QA ✓]
+  Phase 1c: GSC      — Google Search Console data fetch (non-fatal)
+  Phase 2:  KWRes.   — Service × city × intent matrix → keyword_research_summary.md
+  Phase 3:  Jim      — DataForSEO ranked-keywords + competitors → research_summary.md [QA ✓]
+  Phase 3b: sync     — ranked_keywords.json → audit_keywords (preliminary clusters)
+  Phase 3c: canon.   — Claude Haiku semantic topic grouping → canonical_key/topic
+  Phase 3d: rebuild  — Re-aggregate clusters using canonical groupings
+  Phase 4:  Compet.  — SERP analysis → audit_topic_competitors/dominance
+  Phase 5:  Gap      — Competitive gap synthesis → content_gap_analysis.md [QA ✓]
+  Phase 6:  Michael  — All artifacts → architecture_blueprint.md [QA ✓]
+  Phase 6.5: Valid.  — Coverage validation (gap vs blueprint cross-check)
+  Phase 6b: sync     — architecture_blueprint.md → Supabase
+  Phase 6c: sync     — internal_all.csv + AUDIT_REPORT.md → Supabase
+  Phase 6d: local    — GBP lookup + citation scan (11 directories)
+
+Dashboard tabs: Research, Strategy, Content Factory, Technical Audit

@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-04-21T01:07:50.082Z",
+  "audit_id": "c07eb21d-3120-4242-8754-361a429a6f2c",
+  "keyword_count": 127,
+  "distinct_canonical_keys": 14,
+  "canonical_keys": [
+    "aemt_course",
+    "branded_competitor_ems_orgs",
+    "branded_idaho_medical_academy",
+    "cpr_aha_training",
+    "emt_basic_course",
+    "emt_career_info",
+    "emt_continuing_education",
+    "emt_scholarships",
+    "medical_assistant_programs",
+    "medication_certification",
+    "nremt_test_prep",
+    "other",
+    "pharmacy_technician_training",
+    "phlebotomy_training"
+  ],
+  "classification_methods": {
+    "prior_assignment_locked": 127
+  },
+  "cluster_count": 9,
+  "execution_pages_count": 77,
+  "performance_snapshots_count": 13,
+  "note": "Post-Phase-2.3b accepted baseline. 14 distinct keys (includes 2 from legacy contamination during failed attempt 2). This is the new baseline — not a regression target."
+}

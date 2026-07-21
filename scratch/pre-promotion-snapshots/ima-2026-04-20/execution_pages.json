@@ -1,0 +1,578 @@
+[
+  {
+    "id": "3eb79e0b-9eca-4e60-988a-afc2aeeb84e3",
+    "url_slug": "wilderness-first-aid-course",
+    "canonical_key": null,
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "0c5cce9a-aa22-4f05-9b06-484d77bf0468",
+    "url_slug": "medical-health-care-courses/2-day-ekg-technician-course",
+    "canonical_key": null,
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "948beaf9-b29e-41df-bef5-393ae16fa0f4",
+    "url_slug": "what-to-do-when-your-nremt-has-lapsed",
+    "canonical_key": null,
+    "silo": "EMS — AEMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "95e74d2f-8410-4f24-a807-9cde01999923",
+    "url_slug": "aha-training-site-boise",
+    "canonical_key": null,
+    "silo": "B2B & Group Training",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "45c54598-5b4d-4de6-b976-1f51eeed1f41",
+    "url_slug": "fire-ems-courses/emt",
+    "canonical_key": "emt_training",
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "25e10c7a-f7d1-4fbb-a899-d16d7a74e05a",
+    "url_slug": "emt-online-course-idaho",
+    "canonical_key": "emt_course",
+    "silo": "EMT & AEMT Training",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "07bb4b65-8c73-44c8-8584-2d51e6060130",
+    "url_slug": "career-possibilities-with-an-emt-certification-2",
+    "canonical_key": "emt_career",
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "409ff0b9-9e18-4dbb-8d0e-0ebbe22b61a0",
+    "url_slug": "cpr-aha-courses/advanced-cardiac-life-support-acls",
+    "canonical_key": "acls_certification",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "2da91e95-b162-4662-96ff-f334333dddc8",
+    "url_slug": "medical-assistant-course-boise-idaho",
+    "canonical_key": "medical_assistant_course",
+    "silo": "Medical Assistant & Allied Health",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "5ddddfa0-a8b6-4d5e-8afe-d7f64624bdca",
+    "url_slug": "the-process-of-becoming-a-phlebotomist",
+    "canonical_key": "phlebotomy_training",
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "0a011886-8a6e-4790-a610-ad517e7697a5",
+    "url_slug": "emt-course-cost-and-payment-plans",
+    "canonical_key": null,
+    "silo": "EMT & AEMT Training",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "0365cdec-8379-42a6-88ec-52a64b1e69ed",
+    "url_slug": "acls-certification-boise-idaho",
+    "canonical_key": null,
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "b28e57de-818a-455c-935e-b60e08910922",
+    "url_slug": "how-to-become-a-phlebotomist",
+    "canonical_key": null,
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "b4f65537-874e-47eb-8831-cbe20692c78b",
+    "url_slug": "public-safety-interview-course-boise",
+    "canonical_key": null,
+    "silo": "NREMT & Career Development",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "cd787713-b076-4f00-8b23-a266cd60457a",
+    "url_slug": "employers",
+    "canonical_key": null,
+    "silo": "B2B & Group Training",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "5fdace46-cc44-4cda-a385-18cf3e9e32f4",
+    "url_slug": "emt-course-boise-idaho",
+    "canonical_key": "emt_training",
+    "silo": "EMT & AEMT Training",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "4a864b4b-7cd1-4a60-907d-f60a11d2c232",
+    "url_slug": "cpr-aha-courses/aeds",
+    "canonical_key": "aed_training",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "2e54537d-f4aa-47d4-a44e-8685fba65e03",
+    "url_slug": "medical-health-care-courses/medical-assistant",
+    "canonical_key": "medical_assistant_training",
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "53353365-8a8d-4690-87b7-03390ac787c5",
+    "url_slug": "medical-health-care-courses/phlebotomy-technician",
+    "canonical_key": "phlebotomy_training",
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "03cc8906-b071-4c96-bd29-14c9862d8d75",
+    "url_slug": "fire-ems-courses/aemt",
+    "canonical_key": "aemt_course",
+    "silo": "EMS — AEMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "33229d12-f12a-433e-9316-66127f7e2e60",
+    "url_slug": "aemt-course-boise-idaho",
+    "canonical_key": null,
+    "silo": "EMT & AEMT Training",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "30129ee9-865a-45da-ab48-8cd0646432e3",
+    "url_slug": "pediatric-advances-life-support-pals",
+    "canonical_key": null,
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "ff086428-9042-4a42-a2af-f2246f04852a",
+    "url_slug": "what-is-medical-assisting",
+    "canonical_key": null,
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "48820fbb-e948-41d0-b0fe-84419a4b73ec",
+    "url_slug": "medical-health-care-courses/phlebotomy-online-technician-course",
+    "canonical_key": null,
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "bf7842d2-0b90-457a-81f2-24e7e891ae39",
+    "url_slug": "phlebotomy-technician-salary-idaho",
+    "canonical_key": null,
+    "silo": "Phlebotomy",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "69c6681e-825d-4e3f-868f-2211d4d5488b",
+    "url_slug": "about-us/clinical-partners",
+    "canonical_key": null,
+    "silo": "B2B & Group Training",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "7056f8ec-bab9-4819-b61d-8b24657f9c25",
+    "url_slug": "emt-online-self-paced",
+    "canonical_key": "emt_training",
+    "silo": "EMT & AEMT Training",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "4bacde43-2069-48f2-8f05-3f9647e45fa4",
+    "url_slug": "cpr-aha-courses",
+    "canonical_key": "cpr_first_aid_training",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "aa301e41-6a04-4d64-9065-54944950968a",
+    "url_slug": "group-cpr-training-boise",
+    "canonical_key": "bls_certification",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "be699e53-3c10-4774-8504-acf16962d3b5",
+    "url_slug": "how-to-become-an-emt-in-idaho",
+    "canonical_key": "emt_training",
+    "silo": "EMS — EMT Courses",
+    "status": "in_progress",
+    "source": "michael"
+  },
+  {
+    "id": "6d77bc4f-16f2-44c6-88c7-b3dfc7bc66e9",
+    "url_slug": "fire-ems-courses/hybrid-emt",
+    "canonical_key": null,
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "6261ef82-0240-4f72-a7ec-9a59d157d693",
+    "url_slug": "medical-assistant-salary-idaho",
+    "canonical_key": null,
+    "silo": "Medical Assistant & Allied Health",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "fd9506b7-df06-4587-b818-7d6c0b8dc906",
+    "url_slug": "medical-health-care-courses/phlebotomy-refresher-course",
+    "canonical_key": null,
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "b9808302-0b50-4c16-b542-6514a89b25f6",
+    "url_slug": "emt-vs-aemt-idaho",
+    "canonical_key": null,
+    "silo": "EMS — AEMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "df71773f-ba5c-491d-867d-1065fc1a222c",
+    "url_slug": "emt-online-v-hybrid-v-in-person-classes",
+    "canonical_key": "emt_training",
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "e68e52ce-f2e1-46da-a917-e5544563481f",
+    "url_slug": "cpr-aha-courses/bls-cpr-healthcare-providers",
+    "canonical_key": "cpr_training",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "c3470f28-fc7f-48f1-8fef-bb1f3437baca",
+    "url_slug": "cpr-aha-courses/cpr-first-aid-general-public",
+    "canonical_key": "cpr_training",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "f5e81921-3147-408b-bc23-7a29f0806139",
+    "url_slug": "nremt-test-prep-idaho",
+    "canonical_key": "nremt_test_prep",
+    "silo": "NREMT Test Prep & Career Resources",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "2b993d0c-3ed5-4d25-986c-ecfbaa8f076a",
+    "url_slug": "cpr-and-aha-courses/instructor-courses",
+    "canonical_key": "cpr_instructor_certification",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "4cc93b9f-ba0e-4c91-a688-5f00f3e99710",
+    "url_slug": "why-you-should-get-emt-certified",
+    "canonical_key": null,
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "8b4510c8-f37c-4c17-b11a-80841a8a7850",
+    "url_slug": "state-licensing-with-nremt",
+    "canonical_key": null,
+    "silo": "EMS — AEMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "292d578e-89cd-44d7-9b62-2b33df31c4f7",
+    "url_slug": "on-site-cpr-training-idaho",
+    "canonical_key": null,
+    "silo": "Treasure Valley Local Service Hubs",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "4fff3129-35de-4dbe-a378-ac81132f2871",
+    "url_slug": "fire-ems-courses/emt-accelerated-recertification-course",
+    "canonical_key": "emt_course",
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "9396fcae-4fcc-4543-939c-b0a9bab54ad9",
+    "url_slug": "bls-cpr-certification-boise",
+    "canonical_key": "bls_cpr_certification",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "14855e66-95ad-4846-b516-97e48ff5a062",
+    "url_slug": "why-you-should-take-a-cpr-course",
+    "canonical_key": "cpr_training",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "3a6d9bfa-868a-437e-aefc-eb1d0a810152",
+    "url_slug": "medical-health-care-courses/basic-intravenous-therapy-course",
+    "canonical_key": "emt_career",
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "3e721dd1-031d-4980-bc24-f531014ab463",
+    "url_slug": "phlebotomy-technician-course-idaho",
+    "canonical_key": "phlebotomy_technician_course",
+    "silo": "Phlebotomy",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "9c26da3e-be6a-4c24-8a39-4bd2036092c5",
+    "url_slug": "cpr-and-aha-courses/stop-the-bleed",
+    "canonical_key": "stop_the_bleed_training",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "f664c534-dbd1-4019-8343-dabd53e47e80",
+    "url_slug": "fire-ems-courses/emt-online-self-paced",
+    "canonical_key": null,
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "8892209d-ab47-480a-8a77-0bde73dc57dc",
+    "url_slug": "emt-careers-idaho",
+    "canonical_key": null,
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "a14d922a-fb44-4043-8fde-30d9acb84b1f",
+    "url_slug": "pediatric-advanced-life-support-pals",
+    "canonical_key": null,
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "723dcfc1-10c4-4dfd-bc9e-3fec4cffb0ee",
+    "url_slug": "medical-assistant-careers-idaho",
+    "canonical_key": null,
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "b2f95c98-1409-4036-8216-b1c438599def",
+    "url_slug": "pharmacy-technician-course",
+    "canonical_key": null,
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "938a5f2c-be34-4f24-bd01-de6a231d07ad",
+    "url_slug": "emt-salary-idaho",
+    "canonical_key": null,
+    "silo": "NREMT Test Prep & Career Resources",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "9de57b35-d6c6-4f38-8971-d330f809563f",
+    "url_slug": "emt-training-nampa",
+    "canonical_key": null,
+    "silo": "Treasure Valley Local Service Hubs",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "20d9bc2a-2dcb-469f-8fe7-1e97e4ec4e35",
+    "url_slug": "online-emt-course",
+    "canonical_key": null,
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "4d1f7e24-1b88-421b-8f65-d65ce08522dc",
+    "url_slug": "fire-ems-courses/aemt-online",
+    "canonical_key": null,
+    "silo": "EMS — AEMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "e64c51bf-be40-4a75-8834-698acb89bf9e",
+    "url_slug": "cpr-classes-boise",
+    "canonical_key": null,
+    "silo": "Treasure Valley Local Service Hubs",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "9ecb163d-70d5-4df0-adfd-faf465bd0373",
+    "url_slug": "cpr-and-aha-courses/specialty-courses",
+    "canonical_key": "phtls_course",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "24a66be4-2f93-4d73-94d9-6a3c4588edd2",
+    "url_slug": "medical-assistant-program-boise",
+    "canonical_key": null,
+    "silo": "Treasure Valley Local Service Hubs",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "70f49c21-33e0-4f5f-9e9d-8bfb49e1f37b",
+    "url_slug": "emt-course-cost-idaho",
+    "canonical_key": "emt_course",
+    "silo": "EMS — EMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "5bf1b15d-8796-49b3-a84d-7709e1ca97f8",
+    "url_slug": "nremt-practice-questions",
+    "canonical_key": "nremt_test_prep",
+    "silo": "NREMT Test Prep & Career Resources",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "28e7c62a-9568-4bfe-a96a-075ea0bdb34b",
+    "url_slug": "aemt-course-cost-idaho",
+    "canonical_key": null,
+    "silo": "EMS — AEMT Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "8f274b15-e1b4-4fc9-9752-7237e617574b",
+    "url_slug": "wilderness-first-aid-course-idaho",
+    "canonical_key": null,
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "a13166b2-e16e-42a6-ad9b-01eda462d879",
+    "url_slug": "emt-training-boise",
+    "canonical_key": null,
+    "silo": "Treasure Valley Local Service Hubs",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "e989f026-966f-444e-a11b-acabf83c9843",
+    "url_slug": "cpr-classes-nampa",
+    "canonical_key": null,
+    "silo": "Treasure Valley Local Service Hubs",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "c48b5d9c-119f-48f7-afe0-1389672ebb59",
+    "url_slug": "pharmacy-technician-course-cost-idaho",
+    "canonical_key": "pharmacy_technician_program",
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "66520a62-9d87-4b52-8bee-76f9592e0739",
+    "url_slug": "public-safety-interview-course",
+    "canonical_key": null,
+    "silo": "NREMT Test Prep & Career Resources",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "ed5417b8-46d0-41e3-a922-7e502bd7bc93",
+    "url_slug": "phlebotomy-training-boise",
+    "canonical_key": null,
+    "silo": "Treasure Valley Local Service Hubs",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "bfa5bf32-e21f-4e0e-a583-2693fac5bc53",
+    "url_slug": "cpr-course-cost-idaho",
+    "canonical_key": "cpr_first_aid_training",
+    "silo": "CPR & AHA Certifications",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "0c2fe0c0-ae8b-47f2-a5b2-7b5c941301ac",
+    "url_slug": "medical-assistant-course-cost-idaho",
+    "canonical_key": "medical_assistant_program",
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "c03b36e6-fc58-4304-9cd5-026963238db7",
+    "url_slug": "phlebotomy-technician-course-cost-idaho",
+    "canonical_key": "phlebotomy_technician_course",
+    "silo": "Medical & Healthcare Courses",
+    "status": "not_started",
+    "source": "michael"
+  }
+]

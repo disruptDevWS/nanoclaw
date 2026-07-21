@@ -40,3 +40,9 @@ agents-sdk-docs
 
 # Scratch — never committed; durable working docs go in docs/plans/
 tmp/
+
+# Client/generated artifacts and debris — never commit
+audits/
+reports/
+playwright-audit/
+supabase/.temp/

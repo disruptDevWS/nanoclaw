@@ -1,0 +1,618 @@
+[
+  {
+    "id": "d08baa66-1d51-462a-acf7-2a7965b1f387",
+    "url_slug": "emt-course-boise",
+    "canonical_key": "emt_basic_course",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "b2dcfa45-a827-4f6e-8c4e-d7f6526937c5",
+    "url_slug": "aemt-course/oregon",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "a58c2e06-9da2-44ae-bcb5-930addb0ff35",
+    "url_slug": "aemt-course-online/oregon",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "2a348dee-5a2d-45c8-b369-a1ecaedb4c9b",
+    "url_slug": "emt-training-california",
+    "canonical_key": "emt_basic_course",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "d49b9fa9-1656-42a0-ab0e-d2ef060edceb",
+    "url_slug": "campus",
+    "canonical_key": "emt_basic_course",
+    "silo": "Enrollment Support and Trust",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "c775fcb5-ee35-4c7e-b9a3-af48ca526160",
+    "url_slug": "emt-career-outcomes",
+    "canonical_key": "emt_career_info",
+    "silo": "NREMT Test Prep and Career Support",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "cbc5d04c-0723-4b27-8b93-fdd0b6ae7231",
+    "url_slug": "about-us/testimonials",
+    "canonical_key": "branded_idaho_medical_academy",
+    "silo": "Enrollment Support and Trust",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "c4a94402-3770-4c9b-a4ba-918398afd940",
+    "url_slug": "emt-continuing-education",
+    "canonical_key": "emt_continuing_education",
+    "silo": "EMT Continuing Education",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "389ac230-1025-486f-a3e4-ec7b4cc43b00",
+    "url_slug": "emt-training-montana",
+    "canonical_key": "emt_basic_course",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "44bc0257-bba0-4718-b3e1-fe461ccf123a",
+    "url_slug": "about-us/instructors",
+    "canonical_key": null,
+    "silo": "Enrollment Support and Trust",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "0dd0aea7-9c9b-483c-b379-e14710f84b8a",
+    "url_slug": "emt-continuing-education-online",
+    "canonical_key": "emt_continuing_education",
+    "silo": "EMT Continuing Education",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "69a372df-f347-466c-ae75-f5158a0f3097",
+    "url_slug": "emt-course-in-person",
+    "canonical_key": "emt_basic_course",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "db490317-facf-4b0c-b7ee-a6505051c561",
+    "url_slug": "why-become-an-emt",
+    "canonical_key": "emt_career_info",
+    "silo": "NREMT Test Prep and Career Support",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "4d7846c8-5964-42a9-a248-d875d04383d6",
+    "url_slug": "emt-training-oregon",
+    "canonical_key": "emt_basic_course",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "e033bb73-e1f2-461a-92e2-779694453367",
+    "url_slug": "aemt-certification-requirements",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "1f06e1f8-8198-4be6-93a2-d0e3a9a69dda",
+    "url_slug": "q-a",
+    "canonical_key": null,
+    "silo": "Enrollment Support and Trust",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "194162de-e6bb-4bd1-b16e-8cf6ff39c18f",
+    "url_slug": "nremt-test-prep",
+    "canonical_key": "nremt_test_prep",
+    "silo": "NREMT Test Prep and Career Support",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "e8e90fa3-c777-45cc-a79a-741ddfd30148",
+    "url_slug": "aemt-course/utah",
+    "canonical_key": "aemt_course",
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "13cb1c94-da34-4e2f-995a-b7ad93bd9e51",
+    "url_slug": "emt-recertification/california",
+    "canonical_key": "emt_continuing_education",
+    "silo": "EMT Continuing Education",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "a4d7b919-3f95-4173-a26e-0182754f9d19",
+    "url_slug": "emt-training-utah",
+    "canonical_key": "emt_basic_course",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "d26de0a4-3c81-4320-ace4-4c70d2de769d",
+    "url_slug": "payment-plan-options",
+    "canonical_key": "emt_scholarships",
+    "silo": "Enrollment Support and Trust",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "b4bb1edc-c489-4552-a13a-238744e982d9",
+    "url_slug": "online-emt-course/arizona",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "not_started",
+    "source": "cluster_strategy"
+  },
+  {
+    "id": "d83000d4-8c3e-45bf-a1cf-e9d01fba5f26",
+    "url_slug": "aemt-course-online",
+    "canonical_key": "aemt_course",
+    "silo": "AEMT Course",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "350009cc-e36f-4f00-bb6b-b555e86f20bd",
+    "url_slug": "employers",
+    "canonical_key": "branded_competitor_ems_orgs",
+    "silo": "Enrollment Support and Trust",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "03a3a0ba-d382-45f4-9341-830bdd14e47b",
+    "url_slug": "become-an-emt",
+    "canonical_key": "emt_certification",
+    "silo": "NREMT Test Prep and Career Support",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "33418a79-8e47-4e58-9c85-6b4ddfb1a905",
+    "url_slug": "aemt-course-online/utah",
+    "canonical_key": "aemt_course",
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "82051c2e-e556-4f88-808c-4c5248b32338",
+    "url_slug": "emt-recertification/oregon",
+    "canonical_key": null,
+    "silo": "EMT Continuing Education",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "5ef4cd3e-ef20-402a-a40a-20a98c0dac52",
+    "url_slug": "emt-online-vs-in-person",
+    "canonical_key": null,
+    "silo": "Online EMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "db024624-aaf7-4637-a541-ee79d72a82d3",
+    "url_slug": "emt-recertification-requirements",
+    "canonical_key": null,
+    "silo": "EMT Continuing Education",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "537e0d5e-9fdd-4e40-b29c-5353bd1a4515",
+    "url_slug": "aemt-course/arizona",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "c4cac2c5-4e26-40ea-9ba2-3c5f0a79c044",
+    "url_slug": "emt-training-idaho",
+    "canonical_key": "emt_basic_course",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "a2278f5f-5510-4dab-be8e-4104e59ab2be",
+    "url_slug": "how-to-become-an-emt-in-idaho",
+    "canonical_key": "emt_career_info",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "f703cf83-c375-40a1-b79a-1bd4ed860abf",
+    "url_slug": "nremt-exam-locations",
+    "canonical_key": "nremt_test_prep",
+    "silo": "NREMT Test Prep and Career Support",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "e5c73269-50ed-4eaa-aab4-666a64ee8bc3",
+    "url_slug": "emt-recertification/arizona",
+    "canonical_key": null,
+    "silo": "EMT Continuing Education",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "48069311-10e9-4329-b7bc-0a5f3de2b60e",
+    "url_slug": "upcoming-advanced-emt-classes",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "192da7ea-22a6-47a7-a5e5-527cf93fa5cb",
+    "url_slug": "online-emt-course/washington",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "not_started",
+    "source": "cluster_strategy"
+  },
+  {
+    "id": "58780394-7902-4a09-8c1e-8aa30fb228c6",
+    "url_slug": "about-us",
+    "canonical_key": "branded_idaho_medical_academy",
+    "silo": "Enrollment Support and Trust",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "8a4b2269-231a-4b03-a6fb-a9967ecd2cb9",
+    "url_slug": "online-emt-course (national), all geo cluster pages, emt-online-vs-in-person",
+    "canonical_key": null,
+    "silo": "Online EMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "1ab661b5-f8dd-4dcf-8977-76c3252094f1",
+    "url_slug": "online-emt-course/cost, payment-plan-options, each geo cluster page with enrollment CTA",
+    "canonical_key": null,
+    "silo": "Online EMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "aa7bce38-a786-4d42-9ade-44dcbe3938ec",
+    "url_slug": "aemt-vs-emt, state cluster pages (licensing requirements, state acceptance)",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "fdbd74b7-cc60-490c-8588-daeec211f108",
+    "url_slug": "aemt-course-online (enrollment CTA), upcoming-advanced-emt-classes",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "a7686b72-e8d0-4a40-aa6b-55c916eb4425",
+    "url_slug": "aemt-course/washington",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "2ea2eeff-faca-47c6-b403-b175cabbb50f",
+    "url_slug": "nremt-test-prep (enrollment CTA), emt-continuing-education (enrollment CTA)",
+    "canonical_key": null,
+    "silo": "NREMT Test Prep & Continuing Education",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "d51cab74-75c5-414f-80f8-1950e6caf02f",
+    "url_slug": "aemt-course-online/arizona",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "bfef2361-867c-4c03-826a-6a571e217f51",
+    "url_slug": "emt-recertification/washington",
+    "canonical_key": null,
+    "silo": "EMT Continuing Education",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "71d6e93c-5917-49f2-afba-5a1502a1ee19",
+    "url_slug": "aemt-course-online/montana",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "f3d15090-5de5-4448-9ed5-738c1221516b",
+    "url_slug": "emt-recertification/[state] pages, emt-continuing-education",
+    "canonical_key": null,
+    "silo": "NREMT Test Prep & Continuing Education",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "8d72b6eb-e547-4a8d-829c-92a3706b24e7",
+    "url_slug": "aemt-course/california",
+    "canonical_key": "aemt_course",
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "327f1cbf-9738-4ce9-8327-41fae61822f3",
+    "url_slug": "nremt-exam-guide",
+    "canonical_key": null,
+    "silo": "NREMT Test Prep and Career Support",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "3738deae-0e20-4303-8c5d-dd3db4fee861",
+    "url_slug": "about-us, about-us/instructors",
+    "canonical_key": null,
+    "silo": "Trust, Entity & About",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "17496a96-a271-467c-92e1-45be687fae3b",
+    "url_slug": "what-is-aemt",
+    "canonical_key": "aemt_course",
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "461c1490-0f1d-418a-b7c9-fc20c3be6bbd",
+    "url_slug": "—",
+    "canonical_key": null,
+    "silo": "Online EMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "f894710d-9d20-41e9-9f4c-8600b62dc21f",
+    "url_slug": "emt-continuing-education, all emt-recertification/[state] pages, nremt-exam-guide",
+    "canonical_key": null,
+    "silo": "NREMT Test Prep & Continuing Education",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "193974e6-f33b-4ae8-8322-211ff35181d1",
+    "url_slug": "about-us/testimonials, about-us/instructors",
+    "canonical_key": null,
+    "silo": "Trust, Entity & About",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "ca07cf37-9474-4228-8f8f-92d7baaccbe5",
+    "url_slug": "online-emt-course/utah",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "not_started",
+    "source": "cluster_strategy"
+  },
+  {
+    "id": "a44812f9-a0cd-4d42-b249-581e442e4a01",
+    "url_slug": "nremt-exam-guide, nremt-test-prep",
+    "canonical_key": null,
+    "silo": "NREMT Test Prep & Continuing Education",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "c644d8ac-e7ab-4302-95f1-d5bd647f2eca",
+    "url_slug": "emt-b-online-course",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "dfcc1033-4f57-4b6f-8831-b69f030b6ff0",
+    "url_slug": "emt-course-cost",
+    "canonical_key": null,
+    "silo": "Online EMT Course — National Hub",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "30fd022a-487a-48d1-ad53-5cdf9d88cc9f",
+    "url_slug": "online-emt-course/oregon",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "not_started",
+    "source": "cluster_strategy"
+  },
+  {
+    "id": "9bae7f33-14be-44b7-898b-a3ee9f882c41",
+    "url_slug": "online-emt-course/idaho",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "not_started",
+    "source": "cluster_strategy"
+  },
+  {
+    "id": "780bc548-aca1-4165-8d89-7e4e635ccb5c",
+    "url_slug": "how-online-emt-training-works",
+    "canonical_key": null,
+    "silo": "Online EMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "47c0eef4-44c4-47cb-acb8-587c8ab2c881",
+    "url_slug": "aemt-vs-emt",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "71824ccd-94bf-499a-9227-7b638d3cf0c0",
+    "url_slug": "emt-recertification/utah",
+    "canonical_key": null,
+    "silo": "EMT Continuing Education",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "adb6424c-8554-4882-9dd7-e18d74e4672a",
+    "url_slug": "online-emt-course",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "395b802e-3b56-43f7-a2a6-e1b5745a29b0",
+    "url_slug": "aemt-course-online/california",
+    "canonical_key": "aemt_course",
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "381f7446-96d5-4362-80a7-5bb4ef49e1e2",
+    "url_slug": "emt-training-washington",
+    "canonical_key": "emt_basic_course",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "fa6c7ad9-79e2-49ed-82ad-a858be35b910",
+    "url_slug": "emt-training-arizona",
+    "canonical_key": "emt_basic_course",
+    "silo": "State and Regional EMT Training",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "1207ad89-d0d1-4696-b294-e40b834f31af",
+    "url_slug": "emt-recertification/montana",
+    "canonical_key": null,
+    "silo": "EMT Continuing Education",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "d9c3ed7f-dc7d-43dc-b34c-c6a1a8396057",
+    "url_slug": "online-emt-course/california",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "not_started",
+    "source": "cluster_strategy"
+  },
+  {
+    "id": "061a35bd-ab12-44c0-8078-77ac950fac37",
+    "url_slug": "online-emt-course/montana",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "not_started",
+    "source": "cluster_strategy"
+  },
+  {
+    "id": "c84854b3-37fd-4534-816f-d5acb8197c38",
+    "url_slug": "contact",
+    "canonical_key": null,
+    "silo": "Enrollment Support and Trust",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "7756dc58-a5fb-44a2-9d44-01fb420d74bd",
+    "url_slug": "aemt-course-online/washington",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "ddfeb3aa-e0fe-49a6-8d60-aacf98f8b4d3",
+    "url_slug": "emt-online-vs-in-person, online-emt-course/cost, all geo cluster pages (state licensing requirements, skills testing logistics)",
+    "canonical_key": null,
+    "silo": "Online EMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "b07e469c-7502-41a4-b6e1-c784c954d1d4",
+    "url_slug": "aemt-course-online (what is AEMT, scope of practice), aemt-vs-emt",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "deprecated",
+    "source": "michael"
+  },
+  {
+    "id": "0881e2ed-4d49-415d-baeb-ca5c505df60d",
+    "url_slug": "online-emt-course/cost",
+    "canonical_key": "emt_basic_course",
+    "silo": "Online EMT Course",
+    "status": "in_progress",
+    "source": "cluster_strategy"
+  },
+  {
+    "id": "c830c601-4ce1-4506-a60b-2d4c570c4b86",
+    "url_slug": "aemt-course/montana",
+    "canonical_key": null,
+    "silo": "AEMT Course",
+    "status": "not_started",
+    "source": "michael"
+  },
+  {
+    "id": "23e57117-6cd8-46da-933e-724225e28e5d",
+    "url_slug": "emt-recertification/idaho",
+    "canonical_key": null,
+    "silo": "EMT Continuing Education",
+    "status": "not_started",
+    "source": "michael"
+  }
+]

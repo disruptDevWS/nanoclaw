@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-04-21T02:47:54.682Z",
+  "audit_id": "08409ae8-28ab-4a34-b92c-2c92f73e5af7",
+  "keyword_count": 1100,
+  "distinct_canonical_keys": 76,
+  "baseline_canonical_keys": 66,
+  "survived_keys": 63,
+  "deprecated_keys": [
+    "emt_advanced_certification",
+    "pharmacy_technician",
+    "pharmacy_technician_training"
+  ],
+  "new_keys": [
+    "ambulance_overview",
+    "clinical_skills_training",
+    "cpr_course_cost",
+    "ems_assessment_mnemonics",
+    "ems_equipment_supplies",
+    "ems_licensure",
+    "emt_course_cost",
+    "fire_academy",
+    "general_health_wellness",
+    "healthcare_career_stability",
+    "infection_control_healthcare",
+    "mountain_biking_injury_prevention",
+    "ski_injury_first_aid"
+  ],
+  "cluster_count": 64,
+  "baseline_cluster_count": 62,
+  "classification_methods": {
+    "sonnet_arbitration_assigned": 852,
+    "null": 100,
+    "sonnet_arbitration_size_gated": 43,
+    "vector_auto_assign": 89,
+    "sonnet_arbitration_new_topic": 13,
+    "sonnet_arbitration_merged": 3
+  },
+  "committed_page": {
+    "id": "be699e53-3c10-4774-8504-acf16962d3b5",
+    "url_slug": "how-to-become-an-emt-in-idaho",
+    "canonical_key": "emt_career_info",
+    "silo": "EMS — EMT Courses",
+    "status": "in_progress",
+    "source": "michael"
+  },
+  "performance_snapshots": 32,
+  "baseline_performance_snapshots": 32,
+  "cluster_strategy_count": 0,
+  "execution_pages_total": 86,
+  "execution_pages_with_key": 47,
+  "backfill_rate": "54.7%",
+  "pam_readiness": {
+    "healthy": 47,
+    "degraded": 0,
+    "fallback": 0,
+    "fallback_pages": []
+  },
+  "halts": [
+    "HALT: Backfill rate 54.7% < 60%"
+  ],
+  "outcome": "HALT"
+}
