@@ -822,6 +822,12 @@ async function main() {
       entry.outcome = 'scouted';
       entry.addressable = prospect.scout_scope_json?.gap_summary?.addressable_revenue_monthly ?? null;
 
+      // Stamp the seed vertical so outreach can emit utm_campaign=scout_{vertical}
+      // (migration 049). The scout pipeline creates the prospect row without it.
+      await sb.from('prospects')
+        .update({ vertical: c.seed.vertical.key, updated_at: new Date().toISOString() })
+        .eq('id', prospect.id);
+
       // Contact discovery — never overwrite manually-entered contacts.
       if (!prospect.contact_email) {
         const contact = await discoverContact(c);

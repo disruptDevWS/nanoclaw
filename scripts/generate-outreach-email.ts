@@ -58,9 +58,9 @@ const SHARE_LINK_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 //     outreach_variant ('pitch' | 'courtesy_note') as a PLACEHOLDER; when a
 //     genome/breeding population lands, pass its id here and nothing else
 //     changes ("plumb for later", Matt-confirmed 2026-07-21).
-//   utm_campaign = scout_{vertical} — vertical is NOT stored on `prospects`
-//     (only on discovery candidates), so v1 emits base `scout`. Pass a real
-//     vertical here once it's carried onto the prospect row.
+//   utm_campaign = scout_{vertical} — from prospects.vertical (migration 049;
+//     cron-prospector stamps it, dashboard form sets it, backfilled from
+//     candidates). Falls back to base `scout` when the column is null.
 //   utm_term = {market} — derived from target_geos[0] when present.
 
 function slugify(value: string): string {
@@ -130,6 +130,7 @@ interface ProspectRow {
   share_token: string | null;
   share_expires_at: string | null;
   target_geos: Array<{ state: string; metros: string[] }> | null;
+  vertical: string | null;
 }
 
 // ── Data loading (disk first, DB fallback) ───────────────────
@@ -326,7 +327,7 @@ async function main() {
   const { data: prospect, error } = await sb
     .from('prospects')
     .select(
-      'id, name, domain, status, contact_email, contact_name, prospect_narrative, scout_scope_json, gmail_draft_id, share_token, share_expires_at, target_geos',
+      'id, name, domain, status, contact_email, contact_name, prospect_narrative, scout_scope_json, gmail_draft_id, share_token, share_expires_at, target_geos, vertical',
     )
     .eq('domain', domain)
     .maybeSingle();
@@ -389,7 +390,7 @@ async function main() {
   // step 4 below, so build the URL after the variant is known.
   const shareUrl = buildShareUrl(`${dashboardUrl}/share/scout/${shareToken}`, {
     variantId: variant,
-    vertical: null, // not on prospects yet — emits base `scout` campaign
+    vertical: row.vertical, // scout_{vertical} when set (migration 049), else base `scout`
     market: marketSlug(row.target_geos),
   });
 
