@@ -1653,3 +1653,16 @@ Fix (pipeline @ this commit):
 - `variant_count` now survives every pass (dedup functions record it, embedding dedup and the display collapse accumulate it) so "volumes not summed" stays honest in the share table.
 
 Re-scouted same day (fresh DataForSEO pull — raw responses are not persisted, so recompute-in-place was not an option): criterionplumbers.com, spokaneplumber.com, indianarooterman.com, accuairheat.com, volcanichvac.com; outreach drafts regenerated with `--force`. Configs for the cron-scouted four were recovered verbatim from the Prospector digest emails (the cron service's disk is ephemeral — the digest is currently the only durable home of generated prospect-configs; worth persisting them to a `prospects` column eventually).
+
+### 2026-07-21 — File lifecycle: tmp/ ignored, docs/plans/ committed, scratch/ frozen — after two plans were silently lost
+
+**The trigger:** `tmp/fable-session-plan.md` and `tmp/forge-hardening-plan.md` were never committed and were deleted from disk during routine cleanup — both are permanently unrecoverable (desktop, session transcripts, and claude.ai history all searched 2026-07-21). The hardening plan held two open CRITICALs and the technical-audit scope rationale; only MEMORY summaries survive.
+
+**The conventions (enforced via .gitignore + home CLAUDE.md "File Placement & Hygiene"):**
+- `tmp/` is gitignored in all repos — true scratch only, deletable anytime, never committed.
+- Durable working docs (plans, specs, design handoffs) live in `docs/plans/` and are **committed before any cleanup** — "commit before you clean." Deleting from the working tree after committing is fine; git history preserves them.
+- `scratch/` is committed **despite its name** — it holds the pre/post-change snapshot evidence for the April 2026 IMA/SMA promotions that this log's entries reference. It is a frozen archive, not an active scratch space; new scratch goes in `tmp/`. Do not "clean it up."
+- `audits/`, `reports/`, `playwright-audit/`, `supabase/.temp/` are gitignored — generated client artifacts, never committed.
+- `*Zone.Identifier` (Windows-download metadata) is globally gitignored via `~/.config/git/ignore` and deleted on sight.
+
+**Why not keep plans in tmp/ untracked:** untracked files have exactly one copy on a WSL disk with no recycle bin. The convention existed ("tmp/ is scratch") but the plans weren't scratch — the miscategorization is what killed them. docs/plans/ makes the durable/disposable line a directory boundary instead of a judgment call at deletion time.
