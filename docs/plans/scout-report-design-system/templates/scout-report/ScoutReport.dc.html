@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Scout Report (client-facing)" description="Branded, plain-language search-visibility report sent to a prospect. Letter-size, print/PDF ready. Edit the copy and numbers per client." -->
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="letter" orientation="portrait" margin="0" hint-size="816px,1056px">
+
+<!-- ============ MASTHEAD ============ -->
+<div style="background:#1D1D1D;color:#F5F2EB;padding:46px 56px 42px;position:relative">
+<div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(#3A5A8F,rgba(58,90,143,0.12))"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:44px">
+<img src="assets/wordmark-dark-blue.png" alt="Forge Growth" style="height:30px;width:auto">
+<span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.26em;text-transform:uppercase;color:rgba(245,242,235,0.42)">Scout Report</span>
+</div>
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+<span style="height:1px;width:34px;background:#3A5A8F"></span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.28em;text-transform:uppercase;color:#8AA4CE">Search Visibility Snapshot</span>
+</div>
+<h1 style="font-family:'Oswald',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:0.005em;line-height:0.9;font-size:46px;margin:0">Where Bryan Young Plumbing<br><span style="color:#8AA4CE">Stands Online</span></h1>
+<div style="display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:26px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.05em;color:rgba(245,242,235,0.55)">
+<span>byplumbing.com</span><span style="color:rgba(245,242,235,0.22)">·</span><span>Bend, Oregon</span><span style="color:rgba(245,242,235,0.22)">·</span><span>Prepared Jul 15, 2026</span><span style="color:rgba(245,242,235,0.22)">·</span><span>by Forge Growth</span>
+</div>
+</div>
+
+<!-- ============ INTRO + STAT BAR ============ -->
+<div style="background:#F5F2EB;padding:44px 56px 30px">
+<p style="font-family:'Inter',sans-serif;font-weight:300;font-size:17px;line-height:1.6;color:#2A2A2A;max-width:600px;margin:0">This is a snapshot of how your business shows up in local search right now: where you're already winning, and where real demand is slipping past you. It is built from live ranking data, not guesswork.</p>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(29,29,29,0.12);border:1px solid rgba(29,29,29,0.12);margin-top:34px">
+<div style="background:#F5F2EB;padding:22px 16px;text-align:center">
+<div style="font-family:'Oswald',sans-serif;font-weight:700;font-size:42px;line-height:1;color:#3A5A8F">#1</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:#585858;margin-top:12px;line-height:1.4">Ranking for<br>your business name</div>
+</div>
+<div style="background:#F5F2EB;padding:22px 16px;text-align:center">
+<div style="font-family:'Oswald',sans-serif;font-weight:700;font-size:42px;line-height:1;color:#3A5A8F">5<span style="font-size:24px;color:#8A8A8A"> of </span>6</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:#585858;margin-top:12px;line-height:1.4">Core services<br>invisible in search</div>
+</div>
+<div style="background:#F5F2EB;padding:22px 16px;text-align:center">
+<div style="font-family:'Oswald',sans-serif;font-weight:700;font-size:42px;line-height:1;color:#3A5A8F">~1,000</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:#585858;margin-top:12px;line-height:1.4">Monthly searches,<br>top query cluster</div>
+</div>
+<div style="background:#F5F2EB;padding:22px 16px;text-align:center">
+<div style="font-family:'Oswald',sans-serif;font-weight:700;font-size:42px;line-height:1;color:#3A5A8F">$7.9K</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:#585858;margin-top:12px;line-height:1.4">Est. addressable<br>revenue / month</div>
+</div>
+</div>
+</div>
+
+<!-- ============ WHERE YOU'RE WINNING ============ -->
+<div style="background:#F5F2EB;padding:16px 56px 50px">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+<span style="width:9px;height:9px;background:#2E7D5B"></span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.26em;text-transform:uppercase;color:#2E7D5B">Where You're Winning</span>
+</div>
+<h2 style="font-family:'Oswald',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.01em;line-height:0.98;font-size:31px;margin:0 0 20px;color:#1D1D1D;max-width:560px">You own your name, and you're in the conversation</h2>
+<p style="font-family:'Inter',sans-serif;font-weight:400;font-size:14.5px;line-height:1.75;color:#585858;max-width:620px;margin:0 0 14px">When someone types "Bryan Young Plumbing" into Google, your site comes up first. That matters more than it sounds. It means Google knows who you are, trusts your domain, and has connected your business to Bend plumbing. That foundation is real, and it is something to build from.</p>
+<p style="font-family:'Inter',sans-serif;font-weight:400;font-size:14.5px;line-height:1.75;color:#585858;max-width:620px;margin:0 0 26px">You also have measurable visibility on high-volume searches like "plumbers in bend or" and "plumber bend oregon." You're not on page one yet, but you're in the running. Google is already associating your site with the right queries in the right city.</p>
+<div style="background:#fff;border:1px solid #D9D6CF;border-left:3px solid #2E7D5B">
+<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;font-family:'JetBrains Mono',monospace">
+<div style="padding:11px 18px;font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:#8A8A8A;border-bottom:1px solid #ECE7DC">Query</div>
+<div style="padding:11px 18px;font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:#8A8A8A;border-bottom:1px solid #ECE7DC;text-align:right">Position</div>
+<div style="padding:11px 18px;font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:#8A8A8A;border-bottom:1px solid #ECE7DC;text-align:right">Volume/mo</div>
+<div style="padding:12px 18px;font-size:13px;color:#1D1D1D;border-bottom:1px solid #F5F2EB">bryan young plumbing</div>
+<div style="padding:12px 18px;font-size:13px;text-align:right;border-bottom:1px solid #F5F2EB"><span style="background:rgba(46,125,91,0.12);color:#2E7D5B;padding:2px 8px;font-weight:600">#1</span></div>
+<div style="padding:12px 18px;font-size:13px;color:#585858;text-align:right;border-bottom:1px solid #F5F2EB">10</div>
+<div style="padding:12px 18px;font-size:13px;color:#1D1D1D;border-bottom:1px solid #F5F2EB">plumbers in bend or</div>
+<div style="padding:12px 18px;font-size:13px;color:#585858;text-align:right;border-bottom:1px solid #F5F2EB">#12</div>
+<div style="padding:12px 18px;font-size:13px;color:#585858;text-align:right;border-bottom:1px solid #F5F2EB">1,000</div>
+<div style="padding:12px 18px;font-size:13px;color:#1D1D1D">plumber bend oregon</div>
+<div style="padding:12px 18px;font-size:13px;color:#585858;text-align:right">#14</div>
+<div style="padding:12px 18px;font-size:13px;color:#585858;text-align:right">1,000</div>
+</div>
+</div>
+</div>
+
+<!-- ============ WHERE DEMAND IS ESCAPING YOU ============ -->
+<div style="background:#1D1D1D;color:#F5F2EB;padding:50px 56px">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+<span style="width:9px;height:9px;background:#C4553F"></span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.26em;text-transform:uppercase;color:#D88A79">Where Demand Is Escaping You</span>
+</div>
+<h2 style="font-family:'Oswald',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.01em;line-height:0.98;font-size:31px;margin:0 0 20px;max-width:600px">Invisible for five of the six services you sell</h2>
+<p style="font-family:'Inter',sans-serif;font-weight:300;font-size:14.5px;line-height:1.75;color:rgba(245,242,235,0.72);max-width:620px;margin:0 0 22px">You offer six distinct services. In Bend search results you're effectively invisible for five of them. Each has people searching for it every month, and for every one of those topics your competitors show up. You don't.</p>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px">
+<span style="font-family:'Inter',sans-serif;font-size:12.5px;color:rgba(245,242,235,0.85);border:1px solid rgba(196,85,63,0.5);background:rgba(196,85,63,0.1);padding:6px 12px">Drain Cleaning</span>
+<span style="font-family:'Inter',sans-serif;font-size:12.5px;color:rgba(245,242,235,0.85);border:1px solid rgba(196,85,63,0.5);background:rgba(196,85,63,0.1);padding:6px 12px">Water Heater Repair</span>
+<span style="font-family:'Inter',sans-serif;font-size:12.5px;color:rgba(245,242,235,0.85);border:1px solid rgba(196,85,63,0.5);background:rgba(196,85,63,0.1);padding:6px 12px">Toilet Repair</span>
+<span style="font-family:'Inter',sans-serif;font-size:12.5px;color:rgba(245,242,235,0.85);border:1px solid rgba(196,85,63,0.5);background:rgba(196,85,63,0.1);padding:6px 12px">Garbage Disposal</span>
+<span style="font-family:'Inter',sans-serif;font-size:12.5px;color:rgba(245,242,235,0.85);border:1px solid rgba(196,85,63,0.5);background:rgba(196,85,63,0.1);padding:6px 12px">Commercial Plumbing</span>
+</div>
+<p style="font-family:'Inter',sans-serif;font-weight:300;font-size:14.5px;line-height:1.75;color:rgba(245,242,235,0.72);max-width:620px;margin:0 0 28px">The highest-volume opportunity is also the most straightforward. Four searches for "plumber in bend" and its variations pull roughly 1,000 searches each per month. Your site ranks for all four, but on page two or deeper. Most people never scroll past page one, so those jobs are going to competitors right now.</p>
+<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(58,90,143,0.4);border-left:3px solid #3A5A8F;padding:26px 28px;display:flex;gap:26px;align-items:center;flex-wrap:wrap">
+<div>
+<div style="font-family:'Oswald',sans-serif;font-weight:700;font-size:52px;line-height:0.9;color:#8AA4CE">$7,900<span style="font-size:20px;color:rgba(245,242,235,0.5)">/mo</span></div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.16em;text-transform:uppercase;color:rgba(245,242,235,0.5);margin-top:10px">Estimated addressable revenue</div>
+</div>
+<p style="font-family:'Inter',sans-serif;font-weight:300;font-size:13px;line-height:1.65;color:rgba(245,242,235,0.7);margin:0;flex:1;min-width:240px">This is what the keywords you already rank for could return if they reached page one. It is a conservative floor: it excludes the map pack, long-tail searches, and repeat business.</p>
+</div>
+<p style="font-family:'Inter',sans-serif;font-weight:300;font-size:14.5px;line-height:1.75;color:rgba(245,242,235,0.72);max-width:620px;margin:26px 0 0">Two service topics carry their own urgency. "Best drain cleaning" gets 480 searches a month and "best garbage disposal" gets 390. Neither returns your site. When someone in Bend has a clogged drain or a broken disposal and goes looking for help, you are not in the results they see.</p>
+</div>
+
+<!-- ============ WHAT A FULL ANALYSIS WOULD REVEAL ============ -->
+<div style="background:#F5F2EB;padding:50px 56px">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+<span style="height:1px;width:34px;background:#3A5A8F"></span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.26em;text-transform:uppercase;color:#3A5A8F">What a Full Analysis Would Reveal</span>
+</div>
+<h2 style="font-family:'Oswald',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.01em;line-height:0.98;font-size:31px;margin:0 0 26px;color:#1D1D1D;max-width:560px">This snapshot points the way. A full review builds the plan.</h2>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(29,29,29,0.1);border:1px solid rgba(29,29,29,0.1)">
+<div style="background:#F5F2EB;padding:24px 22px;border-left:2px solid #3A5A8F">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3A5A8F;margin-bottom:12px">01</div>
+<p style="font-family:'Inter',sans-serif;font-weight:400;font-size:13.5px;line-height:1.6;color:#2A2A2A;margin:0">Whether a technical issue on your site is actively suppressing your rankings.</p>
+</div>
+<div style="background:#F5F2EB;padding:24px 22px;border-left:2px solid #3A5A8F">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3A5A8F;margin-bottom:12px">02</div>
+<p style="font-family:'Inter',sans-serif;font-weight:400;font-size:13.5px;line-height:1.6;color:#2A2A2A;margin:0">How your top local competitors are structured, and where their pages are outperforming yours.</p>
+</div>
+<div style="background:#F5F2EB;padding:24px 22px;border-left:2px solid #3A5A8F">
+<div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3A5A8F;margin-bottom:12px">03</div>
+<p style="font-family:'Inter',sans-serif;font-weight:400;font-size:13.5px;line-height:1.6;color:#2A2A2A;margin:0">Which service pages would generate the fastest return if they were built first.</p>
+</div>
+</div>
+<p style="font-family:'Inter',sans-serif;font-weight:400;font-size:14.5px;line-height:1.75;color:#585858;max-width:620px;margin:22px 0 0">The data already points to a clear starting direction. A full review sharpens it into a prioritized build plan.</p>
+</div>
+
+<!-- ============ WHAT FORGE GROWTH DOES ============ -->
+<div style="background:#1D1D1D;color:#F5F2EB;padding:52px 56px;position:relative">
+<div style="position:absolute;top:0;left:0;right:0;height:2px;background:#3A5A8F"></div>
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+<span style="height:1px;width:34px;background:#8AA4CE"></span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.26em;text-transform:uppercase;color:#8AA4CE">What Forge Growth Does</span>
+</div>
+<h2 style="font-family:'Oswald',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:0.01em;line-height:0.94;font-size:34px;margin:0 0 22px;max-width:600px">One operator, accountable for your entire search presence</h2>
+<p style="font-family:'Inter',sans-serif;font-weight:300;font-size:15px;line-height:1.7;color:rgba(245,242,235,0.78);max-width:640px;margin:0 0 16px">Forge Growth is a solo search marketing consultancy offering SEO, website, and paid media services. Instead of running siloed campaign tactics, I build systems-level search marketing infrastructure, with revenue delta as the core metric. In plain terms: I personally own a company's entire search presence across organic, paid, local, and AI, operating as one expert accountable for the whole result.</p>
+<p style="font-family:'Inter',sans-serif;font-weight:500;font-size:13px;line-height:1.6;color:#F5F2EB;margin:26px 0 14px">Why it matters. Every piece fails on its own:</p>
+<div style="display:grid;gap:1px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.08);max-width:640px">
+<div style="background:#1D1D1D;padding:14px 18px;display:flex;gap:14px"><span style="font-family:'JetBrains Mono',monospace;color:#8AA4CE;font-size:12px;padding-top:2px">01</span><p style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;line-height:1.6;color:rgba(245,242,235,0.78);margin:0">Build a site or page that isn't optimized for organic search or AI-generated answers, and it's invisible.</p></div>
+<div style="background:#1D1D1D;padding:14px 18px;display:flex;gap:14px"><span style="font-family:'JetBrains Mono',monospace;color:#8AA4CE;font-size:12px;padding-top:2px">02</span><p style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;line-height:1.6;color:rgba(245,242,235,0.78);margin:0">Run ads to a low-quality landing page, or target the wrong queries and audience, and you waste spend.</p></div>
+<div style="background:#1D1D1D;padding:14px 18px;display:flex;gap:14px"><span style="font-family:'JetBrains Mono',monospace;color:#8AA4CE;font-size:12px;padding-top:2px">03</span><p style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;line-height:1.6;color:rgba(245,242,235,0.78);margin:0">Rank content at the wrong intent, or content that doesn't support the buyer journey, and it's vanity.</p></div>
+<div style="background:#1D1D1D;padding:14px 18px;display:flex;gap:14px"><span style="font-family:'JetBrains Mono',monospace;color:#8AA4CE;font-size:12px;padding-top:2px">04</span><p style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;line-height:1.6;color:rgba(245,242,235,0.78);margin:0">Neglect the business profile of a local service company, and you miss the highest-intent traffic.</p></div>
+</div>
+<p style="font-family:'Inter',sans-serif;font-weight:400;font-size:14.5px;line-height:1.7;color:#F5F2EB;max-width:640px;margin:20px 0 0">I know how the pieces of search marketing work together, and how to optimize them as a whole.</p>
+
+<div style="margin-top:36px;padding-top:32px;border-top:1px solid rgba(255,255,255,0.1);display:grid;grid-template-columns:1fr 1fr;gap:40px">
+<div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:#8AA4CE;margin-bottom:12px">What Sets Me Apart</div>
+<p style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;line-height:1.7;color:rgba(245,242,235,0.75);margin:0">I've done every job in this field myself: specialist, manager, director, and executive, across web development, SEO, and paid media. I know how they interoperate, so I build cohesive search marketing systems rather than commoditized services. Agencies sell services. I sell customized strategies built to hit targeted outcomes, then execute them, and I stay transparent about the work I do and the results I achieve.</p>
+</div>
+<div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:#8AA4CE;margin-bottom:12px">Who This Is For</div>
+<p style="font-family:'Inter',sans-serif;font-weight:300;font-size:13.5px;line-height:1.7;color:rgba(245,242,235,0.75);margin:0">Multi-market or multi-service businesses that need someone to identify gaps and opportunities, build an outcome-focused strategy, and then execute it. The best-fit client wants one person to take ownership of their search marketing and drive targeted business and revenue outcomes, and is tired of disjointed agency tactics.</p>
+</div>
+</div>
+</div>
+
+<!-- ============ CTA ============ -->
+<div style="background:#F5F2EB;padding:48px 56px 44px;text-align:center">
+<div style="display:inline-flex;align-items:center;gap:12px;margin-bottom:22px">
+<img src="assets/forge-logo-icon-blue.png" alt="" style="width:40px;height:40px">
+<div style="text-align:left">
+<div style="font-family:'Oswald',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.02em;font-size:15px;color:#1D1D1D">Matt Edens</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#585858;margin-top:2px">Founder &amp; Operator · Boise, ID</div>
+</div>
+</div>
+<h2 style="font-family:'Oswald',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:0.01em;line-height:0.95;font-size:32px;margin:0 auto 12px;color:#1D1D1D;max-width:460px">Want the full picture?</h2>
+<p style="font-family:'Inter',sans-serif;font-weight:300;font-size:15px;line-height:1.6;color:#585858;max-width:460px;margin:0 auto 26px">Let's talk through what a complete analysis would surface and where the fastest returns are. No pitch, just a straight read on your search presence.</p>
+<a href="https://calendar.app.google/AXxRKHuyMjvhtrNs7" style="display:inline-flex;align-items:center;gap:10px;background:#3A5A8F;color:#F5F2EB;font-family:'Oswald',sans-serif;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;font-size:14px;padding:14px 30px;text-decoration:none">Book a Strategy Call →</a>
+</div>
+
+<!-- ============ RUNNING FOOTER (repeats per printed page) ============ -->
+<div slot="footer" style="border-top:1px solid rgba(245,242,235,0.15);background:#1D1D1D;display:flex;align-items:center;justify-content:space-between;padding:12px 56px;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.1em;color:rgba(245,242,235,0.5)">
+<span>Forge Growth · Search Marketing Owned by One Accountable Expert</span>
+<span>byplumbing.com · Confidential</span>
+</div>
+
+</x-import>
+</x-dc>
+</body>
+</html>

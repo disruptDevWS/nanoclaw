@@ -37,3 +37,6 @@ agents-sdk-docs
 # Windows ADS junk + editor backups
 *Zone.Identifier
 *.bak
+
+# Scratch — never committed; durable working docs go in docs/plans/
+tmp/
