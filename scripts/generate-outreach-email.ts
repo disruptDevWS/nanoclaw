@@ -47,6 +47,53 @@ const DEFAULT_SENDER = 'matt@forgegrowth.ai';
 const DEFAULT_DASHBOARD_URL = 'https://app.forgegrowth.ai';
 const SHARE_LINK_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
+// ── Outreach attribution (FORGE_OS_OUTREACH_TRACKING_SPEC §3) ─────────────
+//
+// The share URL is the single measurable join between an email variant and
+// Scout engagement (spec Principle 2). The token stays in the path for
+// server attribution; UTM params carry campaign + variant so GA4 and the
+// server dual-write can both key off them.
+//
+//   utm_content = variant_id  — REQUIRED. Today this is the coarse
+//     outreach_variant ('pitch' | 'courtesy_note') as a PLACEHOLDER; when a
+//     genome/breeding population lands, pass its id here and nothing else
+//     changes ("plumb for later", Matt-confirmed 2026-07-21).
+//   utm_campaign = scout_{vertical} — vertical is NOT stored on `prospects`
+//     (only on discovery candidates), so v1 emits base `scout`. Pass a real
+//     vertical here once it's carried onto the prospect row.
+//   utm_term = {market} — derived from target_geos[0] when present.
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/** First metro + state → `bend_or`; null when no usable geo. */
+function marketSlug(targetGeos: ProspectRow['target_geos']): string | null {
+  const geo = targetGeos?.[0];
+  const metro = geo?.metros?.[0];
+  const state = geo?.state;
+  if (!metro || !state) return null;
+  return `${slugify(metro)}_${slugify(state)}`;
+}
+
+function buildShareUrl(
+  baseUrl: string,
+  opts: { variantId: string; vertical?: string | null; market?: string | null },
+): string {
+  const params = new URLSearchParams({
+    utm_source: 'outreach',
+    utm_medium: 'email',
+    utm_campaign: opts.vertical ? `scout_${slugify(opts.vertical)}` : 'scout',
+    utm_content: opts.variantId, // variant_id — the fitness-function join key
+  });
+  if (opts.market) params.set('utm_term', opts.market);
+  return `${baseUrl}?${params.toString()}`;
+}
+
 // ── Types ────────────────────────────────────────────────────
 
 interface OutreachScope {
@@ -82,6 +129,7 @@ interface ProspectRow {
   gmail_draft_id: string | null;
   share_token: string | null;
   share_expires_at: string | null;
+  target_geos: Array<{ state: string; metros: string[] }> | null;
 }
 
 // ── Data loading (disk first, DB fallback) ───────────────────
@@ -278,7 +326,7 @@ async function main() {
   const { data: prospect, error } = await sb
     .from('prospects')
     .select(
-      'id, name, domain, status, contact_email, contact_name, prospect_narrative, scout_scope_json, gmail_draft_id, share_token, share_expires_at',
+      'id, name, domain, status, contact_email, contact_name, prospect_narrative, scout_scope_json, gmail_draft_id, share_token, share_expires_at, target_geos',
     )
     .eq('domain', domain)
     .maybeSingle();
@@ -336,7 +384,14 @@ async function main() {
     console.log(`  ${tokenExpired ? 'Expired share token replaced' : 'Share token minted'} (expires in 14 days)`);
   }
   const dashboardUrl = (env.DASHBOARD_URL || process.env.DASHBOARD_URL || DEFAULT_DASHBOARD_URL).replace(/\/+$/, '');
-  const shareUrl = `${dashboardUrl}/share/scout/${shareToken}`;
+  // variant_id is the fitness-function join key. Placeholder = outreach_variant
+  // until a genome population exists (see buildShareUrl notes). It is picked in
+  // step 4 below, so build the URL after the variant is known.
+  const shareUrl = buildShareUrl(`${dashboardUrl}/share/scout/${shareToken}`, {
+    variantId: variant,
+    vertical: null, // not on prospects yet — emits base `scout` campaign
+    market: marketSlug(row.target_geos),
+  });
 
   // 6. Generate copy
   console.log(`  Generating ${variant} email for ${row.name || domain}...`);

@@ -842,7 +842,26 @@ Written by Phase 6d (LocalPresence). One row per directory.
 
 **Dashboard reads**: `useProspects()`, `useProspect()`, `useProspectStatus()` (2s poll while running)
 **Dashboard writes**: `useMarkOutreachSent()` — `outreach_status='sent'` + `share_expires_at=now()+14d` (super_admin RLS)
-**Pipeline writes**: Scout updates status, scout_run_at, scout_output_path, brand_favicon_url, scout_markdown, scout_scope_json, prospect_narrative, prospect_bridge_line; generate-outreach-email.ts updates outreach_* + gmail_draft_id, and mints/replaces share_token + share_expires_at when missing or expired (the drafted email embeds the share URL)
+**Pipeline writes**: Scout updates status, scout_run_at, scout_output_path, brand_favicon_url, scout_markdown, scout_scope_json, prospect_narrative, prospect_bridge_line; generate-outreach-email.ts updates outreach_* + gmail_draft_id, and mints/replaces share_token + share_expires_at when missing or expired (the drafted email embeds the share URL). **Since the outreach-tracking work (2026-07-21) the embedded share URL carries UTM attribution** (`utm_source=outreach&utm_medium=email&utm_campaign=scout[_{vertical}]&utm_content={variant_id}[&utm_term={market}]`); the token stays in the path, the params carry the variant↔engagement join (spec §3). `variant_id` is `outreach_variant` as a placeholder; `vertical` is not on `prospects` yet so campaign is base `scout`; `market` derives from `target_geos[0]`.
+
+---
+
+### `scout_engagement_events` (migration 048, 2026-07-21)
+
+Token-keyed engagement log for the Scout share funnel — the ad-blocker-resistant system of record the outreach fitness function reads (GA4 is parallel enrichment). See `FORGE_OS_OUTREACH_TRACKING_SPEC` (docs/plans/) §7.
+
+| Column | Writer | Reader |
+|--------|--------|--------|
+| `id`, `created_at` | default | — |
+| `prospect_id` | Edge fn (scout-engagement, service role) | Dashboard/analysis (super_admin) | FK → prospects, ON DELETE CASCADE; resolved from token |
+| `scout_token` | Edge fn | analysis | uuid, the share token at click time |
+| `event` | Edge fn | analysis | `scout_view` \| `scroll_50/75` \| `section_view` \| `engaged_30s/90s` \| `cta_click` \| `book_redirect` (+ dataLayer-only `scroll_25/100`, `mailto_click`). Text, not enum; allowlisted in the edge fn |
+| `section_name` | Edge fn | analysis | set when `event=section_view` (`revenue_tile` \| `gap_table` \| `positioning` \| `cta`) |
+| `variant_id`, `campaign`, `market` | Edge fn | analysis | echoed from the share-link UTM params — the fitness join keys |
+| `meta` | Edge fn | analysis | jsonb overflow (percent, seconds, cta_location, `client_ts`) |
+| `occurred_at` | Edge fn | analysis | server receipt time (source of truth); client ts kept in `meta.client_ts` |
+
+RLS: `super_admin_full_access` (mirrors prospects). Service role bypasses for edge-fn writes; anon has no policy. **Writer**: the `scout-engagement` edge fn, POSTed to by the Scout share page (`src/lib/scoutTracking.ts`) — a "small fetch in the app" dual-write, since the SPA has no GTM container yet.
 
 ---
 
@@ -994,6 +1013,7 @@ Server-side view computing position changes from `ranking_snapshots`.
 | `scout-config` | `generate_share_token` | (Supabase-only) | `{prospect_id}` | `{token, share_url, expires_at, domain, name}` — also sets `share_expires_at = now()+14d` |
 | `scout-config` | `get_share_report` | (Supabase-only, **no auth**) | `{token}` | `{prospect, scope, narrative, bridge_line, booking_available}`; 410 `{error:'expired'}` past `share_expires_at`; logs first/last_viewed_at + view_count on hit |
 | `scout-config` | `log_booking_intent` | (Supabase-only, **no auth**) | `{token}` | `{redirect: BOOKING_URL}` (secret; Google Calendar link); stamps `booking_intent_at` (first hit); 410 when expired |
+| `scout-engagement` | (single purpose) | (Supabase-only, **no auth**, `--no-verify-jwt`) | `{scout_token, event, section_name?, variant_id?, campaign?, market?, occurred_at?, meta?}` | `{ok:true}`; 400 unknown/missing event; 404 bad token; 410 expired. Service role resolves token→prospect and inserts one `scout_engagement_events` row. Migration 048 / 2026-07-21 (outreach tracking §7). Called by the Scout share page dual-write |
 | `pipeline-controls` | `recanonicalize` | `/recanonicalize` | `{domain, email}` | `{ok}` |
 | `pipeline-controls` | `track_rankings` | `/track-rankings` | `{domain, email, force: true}` | `{ok}` |
 | `pipeline-controls` | `track_gsc` | `/track-gsc` | `{domain, email}` | `{ok}` |

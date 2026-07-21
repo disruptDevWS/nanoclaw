@@ -4,6 +4,19 @@ Non-obvious choices that would look wrong without context. Check here before "fi
 
 ---
 
+**2026-07-21: Outreach/Scout tracking — Supabase is the ledger, GA4 is enrichment; app-driven dual-write, not GTM-driven**
+
+Implemented `FORGE_OS_OUTREACH_TRACKING_SPEC` (docs/plans/). Decisions that would otherwise look wrong:
+
+- **The Scout share page (a Vite SPA with no GTM container) drives its own engagement POSTs** to the `scout-engagement` edge fn (`src/lib/scoutTracking.ts` — scroll depth, IntersectionObserver section views, dwell timers). The spec §7 allows "a GTM Custom HTML tag *or* a small fetch in the app"; we chose the fetch because it's ad-blocker-resistant and works before any GTM container exists. `window.dataLayer` pushes happen too, so a Scout GTM/GA4 container can be dropped in later with zero app changes. Do not "move this into GTM" — the app fetch is the intended primary path.
+- **`utm_content = variant_id` is populated with the coarse `outreach_variant` (`pitch`/`courtesy_note`) as a placeholder.** The spec's fitness function joins email variant ↔ engagement on `variant_id`, but no genome/gamification population exists yet. Matt confirmed "placeholder now, plumb for later": all plumbing keys off `variant_id`, so swapping in a real genome id is a one-line change in `buildShareUrl`. This is deliberate, not a stub someone forgot.
+- **`utm_campaign` is base `scout`, not `scout_{vertical}`, because `prospects` has no `vertical` column** (it lives only on discovery candidates). `buildShareUrl` takes an optional `vertical` (currently null → `scout`). Add a real vertical to the prospect row to light up per-vertical campaigns.
+- **No true "Booked" event.** `BOOKING_URL` is Google Calendar appointment scheduling, which emits no webhook and can't carry token metadata. So `scout-booked` (spec §7) was NOT built; `book_redirect` / `booking_intent_at` (already server-logged) is the terminal signal. Building `scout-booked` requires switching to Cal.com/Calendly first. This is why the "Booked" row of the funnel has no automated source.
+- **No email open-pixels** (spec §5/§10): opens are not tracked at all — the click (arrival at `/share/scout/:token`, already server-logged) is the first measurable signal. MPP/spam/brand reasons.
+- **`occurred_at` is server receipt time, not the client timestamp.** The client's `occurred_at` is preserved in `meta.client_ts`. A token-keyed ledger shouldn't trust client clocks for its source-of-truth column.
+
+---
+
 **2026-06-10: Citation SERP verification — title scoring instead of blind first-result**
 
 The citation scan (`dataforseo-business.ts`) searches `"Business Name" "City, State" site:directory.com` via DataForSEO SERP API. Previously took `organic[0]` as the listing URL with no verification. This produced wrong-business results (e.g. a doctor's office on Manta instead of IMA's actual listing) because the SERP `site:` query doesn't guarantee the first result is the right business.
