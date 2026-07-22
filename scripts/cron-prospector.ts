@@ -106,12 +106,16 @@ interface DigestEntry {
   score: number;
   rank: number;
   query: string;
-  outcome: string; // rejected reason | scouted | drafted | error detail
+  outcome: string; // rejected reason | scouted | drafted | needs_review | killed | error detail
   configJson?: string;
   subject?: string;
   variant?: string;
   addressable?: number | null;
   contactEmail?: string | null;
+  /** Claim-verifier disposition (clean | weakened | needs_review | killed). */
+  disposition?: string;
+  /** Non-ABSENT claim → verdict lines for the digest's flagged section. */
+  flaggedClaims?: string[];
 }
 
 // ── Small utils ──────────────────────────────────────────────
@@ -497,13 +501,16 @@ function renderDigest(
   entries: DigestEntry[],
   stats: { queries: number; found: number; qualified: number; dfsSpend: number },
 ): { subject: string; body: string } {
-  const scouted = entries.filter((e) => e.outcome === 'drafted' || e.outcome === 'scouted');
+  const flagged = entries.filter((e) => e.outcome === 'needs_review' || e.outcome === 'killed');
+  const scouted = entries.filter(
+    (e) => e.outcome === 'drafted' || e.outcome === 'scouted' || e.outcome === 'needs_review' || e.outcome === 'killed',
+  );
   const drafted = entries.filter((e) => e.outcome === 'drafted');
   const lines: string[] = [];
   lines.push(`Prospector digest — ${date}`);
   lines.push('');
   lines.push(
-    `${stats.queries} queries → ${stats.found} new candidates → ${stats.qualified} qualified → ${scouted.length} scouted → ${drafted.length} drafts in Gmail. DataForSEO spend: $${stats.dfsSpend.toFixed(2)}.`,
+    `${stats.queries} queries → ${stats.found} new candidates → ${stats.qualified} qualified → ${scouted.length} scouted → ${drafted.length} drafts in Gmail${flagged.length > 0 ? `, ${flagged.length} flagged by the claim verifier` : ''}. DataForSEO spend: $${stats.dfsSpend.toFixed(2)}.`,
   );
   lines.push('');
 
@@ -517,6 +524,23 @@ function renderDigest(
         `  Variant: ${e.variant ?? '?'}${e.addressable != null ? ` — addressable ~$${e.addressable.toLocaleString()}/mo` : ''}`,
       );
       lines.push(`  To: ${e.contactEmail || '(no email found — fill in manually)'}`);
+      if (e.disposition) {
+        lines.push(`  Claims verified: ${e.disposition}${e.flaggedClaims?.length ? ` (${e.flaggedClaims.length} adjusted)` : ''}`);
+      }
+    }
+    lines.push('');
+  }
+
+  if (flagged.length > 0) {
+    lines.push('=== FLAGGED BY CLAIM VERIFIER (no Gmail draft created) ===');
+    for (const e of flagged) {
+      lines.push('');
+      lines.push(`• ${e.name} (${e.domain}) — ${e.outcome === 'killed' ? 'KILLED: core hook refuted' : 'needs review'}`);
+      if (e.subject) lines.push(`  Subject: ${e.subject}`);
+      for (const claim of e.flaggedClaims ?? []) lines.push(`  - ${claim}`);
+      lines.push(
+        `  Resolve: npx tsx scripts/generate-outreach-email.ts --domain ${e.domain} --force  (or --approve-flagged to draft as-is)`,
+      );
     }
     lines.push('');
   }
@@ -532,7 +556,9 @@ function renderDigest(
     lines.push('');
   }
 
-  const other = entries.filter((e) => e.outcome !== 'drafted' && e.outcome !== 'scouted');
+  const other = entries.filter(
+    (e) => e.outcome !== 'drafted' && e.outcome !== 'scouted' && e.outcome !== 'needs_review' && e.outcome !== 'killed',
+  );
   if (other.length > 0) {
     lines.push('=== OTHER CANDIDATES (not scouted today) ===');
     for (const e of other.sort((a, b) => b.score - a.score)) {
@@ -858,12 +884,25 @@ async function main() {
       if (outreach.exitCode === 0) {
         const { data: after } = await sb
           .from('prospects')
-          .select('outreach_subject, outreach_variant, outreach_status')
+          .select('outreach_subject, outreach_variant, outreach_status, outreach_verification_json')
           .eq('id', prospect.id)
           .maybeSingle();
         entry.subject = after?.outreach_subject ?? undefined;
         entry.variant = after?.outreach_variant ?? undefined;
-        entry.outcome = after?.outreach_status === 'drafted' ? 'drafted' : 'scouted';
+        const status = after?.outreach_status;
+        entry.outcome = status === 'drafted' ? 'drafted'
+          : status === 'needs_review' || status === 'killed' ? status
+          : 'scouted';
+        const vj = after?.outreach_verification_json as {
+          disposition?: string;
+          claims?: Array<{ asserted_text?: string; verdict?: string; reason?: string | null }>;
+        } | null;
+        if (vj) {
+          entry.disposition = vj.disposition;
+          entry.flaggedClaims = (vj.claims ?? [])
+            .filter((cl) => cl.verdict !== 'ABSENT')
+            .map((cl) => `${cl.verdict}: "${(cl.asserted_text ?? '').slice(0, 80)}"${cl.reason ? ` — ${cl.reason}` : ''}`);
+        }
       } else {
         console.warn(`  ⚠ outreach failed: ${outreach.output.slice(-300)}`);
       }

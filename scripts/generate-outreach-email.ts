@@ -15,11 +15,20 @@
  *   pitch          — addressable_revenue_monthly >= $2,500/mo (or unknown)
  *   courtesy_note  — below threshold: honest "probably not worth an agency"
  *
+ * Pre-send claim verification (Bucket B — FORGE_OS_OUTREACH_VERIFIER_SPEC §3):
+ * every draft's site-structure absence claims are verified against the live
+ * site BEFORE the Gmail step. clean/weakened → vetted body drafted;
+ * needs_review/killed → NO Gmail draft, prospect flagged to the digest.
+ * Verdict log: audits/{domain}/outreach/{date}/verification.json + jsonb
+ * mirror in prospects.outreach_verification_json.
+ *
  * Usage:
- *   npx tsx scripts/generate-outreach-email.ts --domain example.com [--force]
+ *   npx tsx scripts/generate-outreach-email.ts --domain example.com [--force] [--approve-flagged]
  *
  * --force regenerates copy and updates the existing Gmail draft in place
  * (gmail_draft_id); without it, a prospect that already has a draft is skipped.
+ * --approve-flagged materializes a needs_review/killed draft's stored copy to
+ * Gmail as-is — Matt's explicit override, the only flagged→drafted path.
  */
 
 import * as fs from 'node:fs';
@@ -34,9 +43,11 @@ import {
   GmailApiError,
   GMAIL_COMPOSE_SCOPE,
 } from './gmail-drafts.js';
+import { verifyDraft } from '../src/agents/outreach-verify/index.js';
 
 // Register the phase max tokens
 PHASE_MAX_TOKENS['outreach_email'] = 2048;
+PHASE_MAX_TOKENS['outreach_claim_extract'] = 2048;
 
 // Mirrors the dashboard fit threshold (prospectFit.ts / DECISIONS.md 2026-07-06).
 const FIT_THRESHOLD_MONTHLY = 2500;
@@ -115,6 +126,7 @@ interface OutreachScope {
     value_label: string;
     basis?: string;
   } | null;
+  service_coverage?: Record<string, unknown> | null;
 }
 
 interface ProspectRow {
@@ -126,6 +138,9 @@ interface ProspectRow {
   contact_name: string | null;
   prospect_narrative: string | null;
   scout_scope_json: OutreachScope | null;
+  outreach_subject: string | null;
+  outreach_body: string | null;
+  outreach_status: string;
   gmail_draft_id: string | null;
   share_token: string | null;
   share_expires_at: string | null;
@@ -146,9 +161,10 @@ function findLatestDatedDir(base: string): string | null {
 function loadScoutData(
   domain: string,
   prospect: ProspectRow,
-): { scope: OutreachScope; narrative: string } {
+): { scope: OutreachScope; narrative: string; scopeSource: 'disk' | 'db' } {
   let scope: OutreachScope | null = null;
   let narrative = '';
+  let scopeSource: 'disk' | 'db' = 'disk';
 
   const scoutDir = findLatestDatedDir(path.join(AUDITS_BASE, domain, 'scout'));
   if (scoutDir) {
@@ -166,6 +182,7 @@ function loadScoutData(
   if (!scope && prospect.scout_scope_json) {
     console.log('  scope.json not on disk — using prospects.scout_scope_json');
     scope = prospect.scout_scope_json;
+    scopeSource = 'db';
   }
   if (!narrative && prospect.prospect_narrative) {
     narrative = prospect.prospect_narrative;
@@ -182,7 +199,7 @@ function loadScoutData(
     );
   }
 
-  return { scope, narrative };
+  return { scope, narrative, scopeSource };
 }
 
 // ── Prompt + generation ──────────────────────────────────────
@@ -300,14 +317,66 @@ async function generateEmail(
   return { subject, body };
 }
 
+// ── Gmail materialization (shared by the normal path and --approve-flagged) ──
+
+async function materializeGmailDraft(
+  sb: ReturnType<typeof createSb>,
+  row: ProspectRow,
+  sender: string,
+  subject: string,
+  body: string,
+): Promise<void> {
+  const token = await getDelegatedUserAccessToken(sender, [GMAIL_COMPOSE_SCOPE]);
+  const content = {
+    to: row.contact_email ?? undefined,
+    from: sender,
+    subject,
+    body,
+  };
+  if (!row.contact_email) {
+    console.log('  No contact_email on prospect — draft will have an empty To: field.');
+  }
+
+  let draftId: string;
+  if (row.gmail_draft_id) {
+    try {
+      draftId = await updateDraft(token, row.gmail_draft_id, content);
+      console.log(`  Updated existing Gmail draft ${draftId}`);
+    } catch (err) {
+      if (err instanceof GmailApiError && err.status === 404) {
+        draftId = await createDraft(token, content);
+        console.log(`  Previous draft was deleted in Gmail — created new draft ${draftId}`);
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    draftId = await createDraft(token, content);
+    console.log(`  Created Gmail draft ${draftId}`);
+  }
+
+  const { error: draftUpdateError } = await sb
+    .from('prospects')
+    .update({ gmail_draft_id: draftId, outreach_status: 'drafted', updated_at: new Date().toISOString() })
+    .eq('id', row.id);
+  if (draftUpdateError) {
+    console.warn(`  ⚠ Draft created (${draftId}) but DB status update failed: ${draftUpdateError.message}`);
+  } else {
+    console.log(`  Done — outreach_status=drafted. Review it in ${sender}'s Drafts folder.`);
+  }
+}
+
 // ── Main ─────────────────────────────────────────────────────
 
 async function main() {
   const flags = parseFlags(process.argv.slice(2));
   const domain = flags.domain;
   const force = flags.force === 'true';
+  const approveFlagged = flags['approve-flagged'] === 'true';
   if (!domain) {
-    console.error('Usage: npx tsx scripts/generate-outreach-email.ts --domain <domain> [--force]');
+    console.error(
+      'Usage: npx tsx scripts/generate-outreach-email.ts --domain <domain> [--force] [--approve-flagged]',
+    );
     process.exit(1);
   }
 
@@ -327,7 +396,7 @@ async function main() {
   const { data: prospect, error } = await sb
     .from('prospects')
     .select(
-      'id, name, domain, status, contact_email, contact_name, prospect_narrative, scout_scope_json, gmail_draft_id, share_token, share_expires_at, target_geos, vertical',
+      'id, name, domain, status, contact_email, contact_name, prospect_narrative, scout_scope_json, outreach_subject, outreach_body, outreach_status, gmail_draft_id, share_token, share_expires_at, target_geos, vertical',
     )
     .eq('domain', domain)
     .maybeSingle();
@@ -342,6 +411,25 @@ async function main() {
     );
   }
 
+  // Human override for a verifier-flagged draft: materialize the stored copy
+  // as-is. This is Matt's explicit judgment call (spec §0) — the only path
+  // from needs_review/killed to a Gmail draft, and it is never automatic.
+  if (approveFlagged) {
+    if (row.outreach_status !== 'needs_review' && row.outreach_status !== 'killed') {
+      throw new Error(
+        `--approve-flagged requires outreach_status needs_review or killed (found '${row.outreach_status}').`,
+      );
+    }
+    if (!row.outreach_subject || !row.outreach_body) {
+      throw new Error(`--approve-flagged: no stored outreach copy for ${domain}.`);
+    }
+    console.log(
+      `  --approve-flagged: creating Gmail draft from the stored copy (human override of '${row.outreach_status}').`,
+    );
+    await materializeGmailDraft(sb, row, sender, row.outreach_subject, row.outreach_body);
+    return;
+  }
+
   // 2. Idempotency gate
   if (row.gmail_draft_id && !force) {
     console.log(
@@ -351,7 +439,7 @@ async function main() {
   }
 
   // 3. Load scout data
-  const { scope, narrative } = loadScoutData(domain, row);
+  const { scope, narrative, scopeSource } = loadScoutData(domain, row);
 
   // 4. Fit check (warn, never block)
   const { variant, addressable } = pickVariant(scope);
@@ -405,65 +493,74 @@ async function main() {
     shareUrl,
   );
 
-  // 6. Persist copy first — the DB row is the durable output; Gmail is a
-  //    materialization that can fail and be retried with --force.
+  // 6a. Pre-send claim verification (Bucket B — FORGE_OS_OUTREACH_VERIFIER_SPEC §3).
+  //     Runs BEFORE anything persists or reaches Gmail: the Gmail draft is
+  //     created from the vetted body only, never create-then-edit.
+  console.log('  Verifying draft claims against the live site...');
+  const verification = await verifyDraft({
+    domain,
+    prospectId: row.id,
+    subject,
+    body,
+    variant,
+    services: scope.services ?? [],
+    locales: scope.locales ?? [],
+    coverageTopics: Object.keys(scope.service_coverage ?? {}),
+    scopeSource,
+    callModel: (p) => callClaude(p, { model: 'sonnet', phase: 'outreach_claim_extract' }),
+    log: (m) => console.log(`    ${m}`),
+  });
+  console.log(`  Verification disposition: ${verification.disposition}`);
+
+  // Verdict log: disk-first artifact + jsonb mirror (Railway disk is
+  // ephemeral in the cron path — same durability pattern as scout_scope_json).
+  const verifyDir = path.join(AUDITS_BASE, domain, 'outreach', new Date().toISOString().slice(0, 10));
+  fs.mkdirSync(verifyDir, { recursive: true });
+  const artifactPath = path.join(verifyDir, 'verification.json');
+  fs.writeFileSync(artifactPath, JSON.stringify(verification, null, 2));
+  console.log(`  Verdict log: ${artifactPath}`);
+
+  // killed keeps the original body in the DB so Matt can see what was
+  // generated and why it died; clean/weakened persist the vetted body.
+  const vettedBody = verification.body_after ?? body;
+  const statusForDisposition =
+    verification.disposition === 'needs_review'
+      ? 'needs_review'
+      : verification.disposition === 'killed'
+        ? 'killed'
+        : 'generated';
+
+  // 6b. Persist copy — the DB row is the durable output; Gmail is a
+  //     materialization that can fail and be retried with --force.
   const nowIso = new Date().toISOString();
   const { error: updateError } = await sb
     .from('prospects')
     .update({
       outreach_subject: subject,
-      outreach_body: body,
+      outreach_body: vettedBody,
       outreach_variant: variant,
-      outreach_status: 'generated',
+      outreach_status: statusForDisposition,
       outreach_generated_at: nowIso,
+      outreach_verification_json: verification,
       updated_at: nowIso,
     })
     .eq('id', row.id);
   if (updateError) throw new Error(`Failed to persist outreach copy: ${updateError.message}`);
-  console.log(`  Copy persisted (variant=${variant}, subject="${subject}")`);
+  console.log(`  Copy persisted (variant=${variant}, status=${statusForDisposition}, subject="${subject}")`);
 
-  // 7. Gmail step (non-fatal)
+  // 7. Gmail step (non-fatal) — gated: a flagged or killed draft must not
+  //    exist in Gmail. --approve-flagged is the only override, and it's human.
+  if (verification.disposition !== 'clean' && verification.disposition !== 'weakened') {
+    console.log(
+      `  No Gmail draft created (disposition=${verification.disposition}). ` +
+        `Review the verdict log, then re-run with --force after fixes or --approve-flagged to draft as-is.`,
+    );
+    return;
+  }
   try {
-    const token = await getDelegatedUserAccessToken(sender, [GMAIL_COMPOSE_SCOPE]);
-    const content = {
-      to: row.contact_email ?? undefined,
-      from: sender,
-      subject,
-      body,
-    };
-    if (!row.contact_email) {
-      console.log('  No contact_email on prospect — draft will have an empty To: field.');
-    }
-
-    let draftId: string;
-    if (row.gmail_draft_id) {
-      try {
-        draftId = await updateDraft(token, row.gmail_draft_id, content);
-        console.log(`  Updated existing Gmail draft ${draftId}`);
-      } catch (err) {
-        if (err instanceof GmailApiError && err.status === 404) {
-          draftId = await createDraft(token, content);
-          console.log(`  Previous draft was deleted in Gmail — created new draft ${draftId}`);
-        } else {
-          throw err;
-        }
-      }
-    } else {
-      draftId = await createDraft(token, content);
-      console.log(`  Created Gmail draft ${draftId}`);
-    }
-
-    const { error: draftUpdateError } = await sb
-      .from('prospects')
-      .update({ gmail_draft_id: draftId, outreach_status: 'drafted', updated_at: new Date().toISOString() })
-      .eq('id', row.id);
-    if (draftUpdateError) {
-      console.warn(`  ⚠ Draft created (${draftId}) but DB status update failed: ${draftUpdateError.message}`);
-    } else {
-      console.log(`  Done — outreach_status=drafted. Review it in ${sender}'s Drafts folder.`);
-    }
+    await materializeGmailDraft(sb, row, sender, subject, vettedBody);
   } catch (err: any) {
-    console.warn(`  ⚠ Gmail draft step failed (copy is saved, outreach_status=generated):`);
+    console.warn(`  ⚠ Gmail draft step failed (copy is saved, outreach_status=${statusForDisposition}):`);
     console.warn(`    ${err.message}`);
     console.warn(`  Re-run with --force to retry the Gmail step after fixing the cause.`);
   }

@@ -833,7 +833,8 @@ Written by Phase 6d (LocalPresence). One row per directory.
 | `contact_email`, `contact_name` | Manual (SQL/dashboard, dashboard UI TBD) | Pipeline (generate-outreach-email.ts) | Migration 043 (2026-07-07). Nullable — draft generates with empty To: when absent |
 | `outreach_subject`, `outreach_body` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | Generated cold-email copy. Source of truth; the Gmail draft is a materialization |
 | `outreach_variant` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | `pitch` \| `courtesy_note` (below $2,500/mo fit threshold) |
-| `outreach_status` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | `none` \| `generated` (copy in DB, Gmail step failed/pending) \| `drafted` (Gmail draft exists). Text, not enum |
+| `outreach_status` | Pipeline (generate-outreach-email.ts) | Dashboard (future), cron-prospector digest | `none` \| `generated` (copy in DB, verified clean/weakened, Gmail step failed/pending) \| `needs_review` (claim verifier flagged — **no Gmail draft**; resolve via `--force` or `--approve-flagged`) \| `killed` (core hook refuted — routed back, no draft) \| `drafted` (Gmail draft exists) \| `sent`. Text, not enum. Migration 050 (2026-07-22) |
+| `outreach_verification_json` | Pipeline (generate-outreach-email.ts) | cron-prospector digest, future corpus reader | Migration 050 (2026-07-22). Latest claim-verifier verdict log (Bucket B), verbatim mirror of `audits/{domain}/outreach/{date}/verification.json` — durability for the cron path (ephemeral disk), same pattern as `scout_scope_json`. Deliberately a column, not a table (spec §1.5: earn the table after thresholds validate) |
 | `gmail_draft_id` | Pipeline (generate-outreach-email.ts) | Pipeline | Gmail API draft id; idempotency anchor for update-in-place on `--force` |
 | `outreach_generated_at` | Pipeline (generate-outreach-email.ts) | Dashboard (future) | |
 | `share_expires_at` | Edge fn (generate_share_token), Pipeline (generate-outreach-email.ts token mint), Dashboard (Mark-sent) | Edge fn (get_share_report, log_booking_intent), Dashboard | Migration 047 (2026-07-13). 14-day capability window; past it get_share_report/log_booking_intent serve 410. Mark-sent restarts the clock from the send |
@@ -1063,6 +1064,7 @@ These files live on the pipeline server disk and are NOT in Supabase. They feed 
 |------|-------|----------|
 | `audits/{domain}/scout/{date}/scope.json` | Scout | Topics, locales, services, gap_summary (with cpc_inferred on opportunities), max_topic_cpc |
 | `audits/{domain}/scout/{date}/prospect-narrative.md` | Scout | Plain-language outreach document |
+| `audits/{domain}/outreach/{date}/verification.json` | Outreach verifier | Verdict log (Bucket B): per-claim `{type, service, city, asserted_text, phrasing, verdict, action, evidence_url}`, inventory quality, coherence gate, disposition, body before/after. Disk-first; mirrored to `prospects.outreach_verification_json` (Railway disk is ephemeral in the cron path) |
 | `audits/{domain}/auditor/{date}/AUDIT_REPORT.md` | Dwight | Full technical audit |
 | `audits/{domain}/auditor/{date}/internal_all.csv` | Dwight | Crawl data (all internal URLs) |
 | `audits/{domain}/auditor/{date}/*.csv` | Dwight | Supplementary crawl exports |
