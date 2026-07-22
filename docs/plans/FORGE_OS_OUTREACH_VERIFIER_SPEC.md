@@ -2,7 +2,7 @@
 
 > **Scope**: A pre-send verification layer for cold-outreach drafts. Confirms every falsifiable claim in a draft against real evidence before it reaches Matt's review queue, so review collapses to judgment instead of error-catching.
 > **Owner**: Matt Edens / Forge Growth
-> **Version**: v1.1 — 2026-07-22 (v1 + §3 PRESENT-verdict disposition rule, §5 deferred-surface note)
+> **Version**: v1.2 — 2026-07-22 (v1.1 + PRESENT-verdict soften-not-rewrite fix, grounded extraction, placement, coherence gate; §5 kill-signal confound framing)
 > **Consumers**: outreach generator (`generate-outreach-email.ts`), a new verification stage, the Daily Prospector digest, the outreach fitness function.
 > **Companion doc**: `FORGE_OS_OUTREACH_TRACKING_SPEC.md` (the measurement side).
 
@@ -62,18 +62,22 @@ Rank positions ("position 21 for electrician butte mt," "40th," "page 8"), searc
 
 **Trigger**: runs on the 3/day that become drafts, not the candidate pool — cost stays bounded to the qualified subset (Scout is already ~$2/run; a fetch pass is near-free).
 
-**Input**: the draft + its structured claim list, filtered to absence/site-structure claims, each normalized to `{claim_id, type: 'page_absent'|'title_mismatch', service, city, asserted_text}`.
+**Placement**: inside `generate-outreach-email.ts`, **before** the Gmail step — verify the generated body, then create the draft from the vetted text. Never create-then-edit: an unvetted draft must not exist in Gmail even transiently (the morning digest could surface it before verification runs), and vet-first avoids a draft-update round trip.
+
+**Input**: the draft + its structured claim list, filtered to absence/site-structure claims, each normalized to `{claim_id, type: 'page_absent'|'title_mismatch', service, city, asserted_text, target_phrase?}` (`target_phrase` required for `title_mismatch` — the match check needs to know which phrase the title is supposed to contain).
+
+**Extraction grounding**: claims are prose-only today, so extraction is itself an LLM step — and its recall gaps become false-clean dispositions, which manufacture false confidence. Constrain it: ground on the run's `scope.json` (`services` / `locales` / `service_coverage`) and ask "which of these known services/locales does the draft assert absence for?" rather than open-ended NER. In-run the file is on the volume; if verification ever runs out-of-band (e.g. re-verify at Mark-Sent), fall back to `prospects.scout_scope_json` — cron-scouted prospect configs are ephemeral (digest-only), same DB-fallback pattern Pam and `/scout-report` already use.
 
 **Procedure per claim**:
 1. Resolve the prospect site's page inventory: fetch `robots.txt` → `sitemap.xml`, plus a fetch of the homepage to read nav links; collect `{url, title, h1, nav_label}` per page.
 2. Match `{service, city}` against the inventory (canonical/stemmed match — reuse `canonicalKeywordKey()` so "commercial refrigeration" ≈ "commercial refrigeration services," and city variants collapse).
 3. If a plausible page exists → verdict `PRESENT`. Disposition depends on claim phrasing:
    - **Pure page-absence claims** ("no dedicated page for X," "no page targeting Y") are falsified outright by an existing page → **cut**.
-   - **Ambiguous presence phrasings** ("no real search presence," "zero presence in {city}," "nothing there") can still be *true* when the page exists but doesn't rank — cutting them discards a valid hook. `PRESENT` here → **rewrite to precise ranking language** (Bucket A phrasing: "you're not on page 1 for X"), never a silent cut of a possibly-true claim. The rewrite stays subtract-and-soften: reuse the claim's own data, add nothing new.
+   - **Ambiguous presence phrasings** ("no real search presence," "zero presence in {city}," "nothing there") can still be *true* when the page exists but doesn't rank. But the truthful correction is a *ranking* statement — Bucket A evidence the Bucket B verifier does not hold. Auto-upgrading would either re-query the SERP (Bucket A, deferred) or reassert the stored Scout position unchecked (the exact staleness risk Bucket A exists to catch) — reintroducing LLM-generated factual claims into the stage whose purpose is removing them. Bucket-B-legal actions only: **soften to remove the absolute** ("limited presence") or **flag to manual review**. Ranking rewrites wait for Bucket A. This keeps v1 provably site-evidence-only.
 4. If no page and the fetch was clean → verdict `ABSENT` (claim survives).
 5. If the site is unreachable, bot-blocked, JS-only nav with an empty fetch, or the match is ambiguous → **escalate to render** (headless) once; if still unresolved → verdict `UNRESOLVABLE` → **flag for manual review**, never auto-pass.
 
-**Output**: per-claim `{claim_id, verdict, evidence_url, matched_page?, occurred_at}` + a draft-level disposition: `clean` (all claims PRESENT-cut or ABSENT-confirmed), `needs_review` (any UNRESOLVABLE), `weakened` (claims cut, remaining draft still coherent) or `killed` (core hook was false — route back, don't send an empty pitch).
+**Output**: per-claim `{claim_id, verdict, evidence_url, matched_page?, occurred_at}` + a draft-level disposition: `clean` (all claims PRESENT-cut or ABSENT-confirmed), `needs_review` (any UNRESOLVABLE), `weakened` (claims cut, remaining draft still coherent) or `killed` (core hook was false — route back, don't send an empty pitch). `weakened` carries an explicit **coherence gate**: coherence is checked, not assumed — if cutting a claim leaves a stub (a gutted courtesy note, a pitch with no hook), route to `needs_review` instead of shipping it.
 
 **Verdict is advisory-to-remove**: the verifier removes/softens refuted claims and flags what it can't clear. It never fabricates replacement claims and never rewrites Matt's voice — it subtracts and flags only.
 
@@ -90,7 +94,7 @@ Bucket B is the exception that survives this logic: it improves the **quality of
 ## 5. Corpus notes (flags surfaced during taxonomy work)
 
 - **Over-confident absence phrasing.** "Right now there is nothing there," "no real search presence behind them," "you have zero presence" state Bucket B's exact failure vector at maximum exposure. These are the first lines the verifier should gate.
-- **Deferred surface: the prospect narrative / share page.** The email's one link renders `prospect-narrative.md` on the share page — a longer document generated by the same ungated LLM process from the same absence-inference-prone data, and where the draft's claims actually originate. v1 scopes verification to the **email draft body only**; the narrative surface is explicitly deferred to the move-left-into-generation work (§1.5) after the kill gate clears. Deferred means acknowledged, not ignored: the plan should name it, not scope-creep into it.
+- **Deferred surface: the prospect narrative / share page — a limitation, not a solve.** The email's one link renders `prospect-narrative.md` on the share page — the more detailed, higher-exposure surface, generated by the same ungated process from the same absence-inference-prone data. v1 scopes verification to the **email draft body only**, which means it mainly protects the prospects who *don't* click; clickers still hit the refutable claim in the report. That clicker population is exactly the signal §4 hands to the kill decision, so unverified share-page claims are a **confound in the kill-gate data**: a click-no-book could mean the offer failed or that the narrative got refuted on the page, and the two are indistinguishable. v1 stays email-only regardless — it's bounded, earns the verdict corpus, and protects non-clickers — but email verification makes the *email* defensible, not the *send*. The narrative-phase move-left work (§1.5) is where the exposure and the signal contamination actually concentrate; the v1 verdict corpus is what de-risks it. Sequencing holds; the framing must not overclaim.
 - **Variant granularity gap** (separate thread, don't lose). The fitness join currently rides `utm_content` as `courtesy_note` / `pitch` — two archetypes, not specific variant IDs. Tracking-spec §3 wants `utm_content = variant_id`. Until that lands, the fitness function can't distinguish variants within an archetype. Not a verifier concern, but the same measurability gap.
 
 ---
@@ -102,4 +106,5 @@ Bucket B is the exception that survives this logic: it improves the **quality of
 - Treating ranking-absence as page-absence (the invalid inference — the whole reason Bucket B exists).
 - Silently passing or silently killing a prospect on an unresolvable claim (flag → manual queue).
 - Letting the verifier write new claims or restyle Matt's voice (subtract-and-flag only).
+- Auto-upgrading an ambiguous-presence claim into a ranking statement (asserting Bucket A facts from Bucket B evidence — soften or flag instead; ranking rewrites wait for Bucket A).
 - Building Buckets A/C or move-left generation before the motion clears its kill gate.
