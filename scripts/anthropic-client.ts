@@ -7,6 +7,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { appendFileSync } from 'node:fs';
 
 // ── Model mapping ─────────────────────────────────────────────
 
@@ -108,6 +109,28 @@ async function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Opt-in per-call token-usage logger (inert unless SCOUT_COST_LOG is set).
+// Appends one JSONL line per API response for offline cost analysis.
+function recordUsage(model: string, phase: string, usage: any): void {
+  const path = process.env.SCOUT_COST_LOG;
+  if (!path || !usage) return;
+  try {
+    const line = JSON.stringify({
+      domain: process.env.SCOUT_COST_DOMAIN ?? null,
+      model,
+      phase,
+      input_tokens: usage.input_tokens ?? 0,
+      output_tokens: usage.output_tokens ?? 0,
+      cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+      cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+      server_tool_use: usage.server_tool_use ?? null,
+    }) + '\n';
+    appendFileSync(path, line);
+  } catch {
+    // Never let cost logging break a pipeline run.
+  }
+}
+
 // ── Core call function ────────────────────────────────────────
 
 export interface CallClaudeOptions {
@@ -173,6 +196,8 @@ export async function callClaude(
         ? await client.messages.stream(params, { timeout: timeoutMs }).finalMessage()
         : await client.messages.create(params, { timeout: timeoutMs });
 
+      recordUsage(model, phase, response.usage);
+
       // Server-side tool use may pause at the API's iteration limit; append the
       // assistant turn and re-send (no extra user message) to resume.
       let continuations = 0;
@@ -182,6 +207,7 @@ export async function callClaude(
         response = useStreaming
           ? await client.messages.stream(params, { timeout: timeoutMs }).finalMessage()
           : await client.messages.create(params, { timeout: timeoutMs });
+        recordUsage(model, phase, response.usage);
       }
 
       // Extract text from response

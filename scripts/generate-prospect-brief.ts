@@ -15,6 +15,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { callClaude, PHASE_MAX_TOKENS } from './anthropic-client.js';
+import { loadEnv } from './analysis-shared.js';
 
 // Register the phase max tokens
 PHASE_MAX_TOKENS['prospect_brief'] = 4096;
@@ -577,6 +578,14 @@ ${topics.map((t) => `    <div class="topic-item">
 async function main(): Promise<void> {
   const { domain } = parseArgs();
   console.log(`\n=== Prospect Intelligence Brief: ${domain} ===`);
+
+  // Load .env and propagate the Anthropic key into process.env so callClaude
+  // can authenticate. This script runs as a standalone process (spawned by
+  // run-pipeline.sh / cron), which does not inherit an exported key — its
+  // siblings (pipeline-generate, generate-outreach-email) self-load .env too.
+  const env = loadEnv();
+  if (env.ANTHROPIC_API_KEY) process.env.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY;
+  if (env.ANTHROPIC_KEY) process.env.ANTHROPIC_KEY = env.ANTHROPIC_KEY;
 
   // Load Scout data
   console.log('\n--- Loading Scout data ---');
