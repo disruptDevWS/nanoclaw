@@ -21,6 +21,9 @@ groups/global/*
 # Secrets
 *.keys.json
 .env
+# Backups/variants (.env.bak-*, .env.local, ...) — same secrets, previously committable
+.env.*
+!.env.example
 
 # Screaming Frog configs (contain API keys)
 configs/*.seospiderconfig
