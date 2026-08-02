@@ -1679,3 +1679,122 @@ Re-scouted same day (fresh DataForSEO pull — raw responses are not persisted, 
 - `*Zone.Identifier` (Windows-download metadata) is globally gitignored via `~/.config/git/ignore` and deleted on sight.
 
 **Why not keep plans in tmp/ untracked:** untracked files have exactly one copy on a WSL disk with no recycle bin. The convention existed ("tmp/ is scratch") but the plans weren't scratch — the miscategorization is what killed them. docs/plans/ makes the durable/disposable line a directory boundary instead of a judgment call at deletion time.
+
+---
+
+**2026-08-02: Claude Code configuration migration — this repo gets a CLAUDE.md**
+
+Until now this repo had no `CLAUDE.md`. Its entire operating contract — deployment
+table, Railpack builder rule, service-account auth, the session-start doc protocol,
+the migration protocol, the ESM convention — lived in a file at the home directory
+root, in no git repository. One copy, on a WSL disk, unversioned. Two planning
+documents had already been lost to that exact pattern.
+
+That file loaded into every session in every repo, because the home directory is
+also the workspace root and CLAUDE.md discovery walks up the directory tree. So a
+session in an unrelated client repo was carrying this pipeline's Railway
+deployment table and builder rules, all of it false in that context.
+
+Split: universal working preferences to `~/.claude/CLAUDE.md` (user scope, loads
+everywhere), this repo's contract to `forge-os-pipeline/CLAUDE.md` (loads here).
+The home-root file is deleted. All 23 original directives were verified present in
+one of the two destinations before deletion.
+
+**Why not keep a workspace-root file as well:** the home directory IS the workspace
+root, so a file there and a file at user scope load for an identical set of
+sessions. Two always-on files with the same membership, one set of directives split
+across them, plus the precedence ambiguity the docs warn about when two loaded files
+conflict. Nothing is gained.
+
+**SQL/migration and TypeScript conventions live in this repo's CLAUDE.md** rather
+than in path-scoped rules, for now. The plan had them becoming `.claude/rules/*.md`
+with `paths:` frontmatter, but a rule whose glob stops matching fails *silently* —
+it just stops loading, with no error. That indirection is not worth taking on while
+the split is still bedding in. Revisit after real migration and TypeScript work has
+run against the new layout.
+
+---
+
+**2026-08-02: `.claude/agents/` deleted — `configs/agents/` is the live set**
+
+`.claude/agents/{Jim,Dwight,Pam,Michael}.md` were committed, valid, and never once
+invoked: zero Agent-tool calls naming them across 81 Claude Code transcripts, while
+the role names appear 295–575 times each because the real implementations are
+`configs/agents/` and run as pipeline phase generators.
+
+Git showed four months of divergence — `.claude/agents/` last touched 2026-03-08,
+`configs/agents/` last touched 2026-07-10 — and nothing in `scripts/`, `configs/` or
+`src/` referenced `.claude/agents/` at all.
+
+The cost was never tokens (measured at 216 per session). The cost is that four
+committed files *looked* like the live definition of the role agents and were four
+months stale. The failure mode is editing the wrong one. `configs/agents/` is
+untouched and remains authoritative.
+
+A stale platform-specific instruction in one of the mirrors prompted a check of the
+live set; the live set was clean, so nothing had been running against it.
+
+---
+
+**2026-08-02: the DATA_CONTRACT PreToolUse hook had never worked**
+
+`data-contract-check.py` moved from user scope into `.claude/hooks/` here, so it
+fires only in the repo whose data contract it describes rather than on every file
+edit in every repo.
+
+The move forced an end-to-end test, which found the hook had never functioned. It
+emitted:
+
+    {"additionalContext": "..."}
+
+but for `PreToolUse`, `additionalContext` must be nested inside `hookSpecificOutput`
+alongside `hookEventName`. A bare top-level key is not valid and is silently
+discarded. Since 2026-04-28 the hook had run on every edit, correctly parsed
+DATA_CONTRACT.md, produced several KB of relevant context, and had all of it thrown
+away.
+
+**The general lesson: an advisory hook that stops working produces no error.** It
+looks identical to a hook that is simply not matching. Any hook whose only output is
+injected context needs an explicit end-to-end test — confirm the *content arrives*,
+not merely that the script exits 0.
+
+Also removed: the `PostToolUse` `npx tsc --noEmit` that ran on every single
+`Edit|Write` with a 30s timeout. A full type-check per file edit, redundant with a
+user-scope `Stop` hook that already runs tsc once per turn. That Stop hook is now the
+single type-check mechanism.
+
+---
+
+**2026-08-02: destructive-action guards need two layers, because hooks fail open**
+
+A guard was added for a business-critical third-party system on a client host. The
+design is worth recording because the reasoning generalises.
+
+A `PreToolUse` hook alone is not sufficient. Per the hooks contract, exit 0 with a
+deny decision blocks and exit 2 blocks, but **any other exit code is a non-blocking
+error and the tool call proceeds**. A hook that crashes before reaching its logic —
+missing interpreter, syntax error, unreadable path — therefore *fails open*. That is
+the wrong failure direction for a safety control.
+
+So: `permissions.deny` rules are the floor, enforced by the client with no
+interpreter involved and therefore unable to fail open. The hook is the second
+layer, covering what glob patterns cannot express. If the hook is ever broken, the
+rules still hold.
+
+Three empirical findings from building it:
+
+1. **Anchor deny patterns on the protected identifier, not on the command verb.**
+   Verb-anchored rules are prefix-matched and never reach inside a quoted remote
+   payload, so `ssh host "<verb> ..."` slips straight past. Identifier-anchored
+   substring patterns *do* match inside the payload.
+2. **Verify the identifier against the real system.** The obvious pattern, built
+   from the vendor's documented default naming, would have matched nothing at all on
+   the only installation it exists to protect, because that install uses a custom
+   prefix. A safety control that silently protects nothing is the worst outcome and
+   it passes review.
+3. **Test the block path, not just the pass path**, and use benign carrier commands
+   to do it. Model refusal can pre-empt the permission layer and hand back a false
+   pass that masks a real gap.
+
+The guard is exempt from deletion for low usage but not from a quarterly fire test —
+zero fires is only success if you have confirmed it still fires when it should.
