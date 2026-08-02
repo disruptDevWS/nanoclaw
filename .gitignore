@@ -49,3 +49,7 @@ audits/
 reports/
 playwright-audit/
 supabase/.temp/
+
+# Python bytecode
+__pycache__/
+*.pyc
