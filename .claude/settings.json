@@ -1,14 +1,14 @@
 {
   "hooks": {
-    "PostToolUse": [
+    "PreToolUse": [
       {
         "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "npx tsc --noEmit 2>&1 | head -20",
-            "statusMessage": "Checking TypeScript types...",
-            "timeout": 30
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/data-contract-check.py\"",
+            "statusMessage": "Checking DATA_CONTRACT...",
+            "timeout": 15
           }
         ]
       }
